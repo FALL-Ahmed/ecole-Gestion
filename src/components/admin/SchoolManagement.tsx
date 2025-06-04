@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Users, Award, Calendar, User, ArrowRightIcon } from "lucide-react";
+import { Plus, Users, Award, Calendar, User, ArrowRightIcon, SaveIcon, ClipboardListIcon } from "lucide-react";
+import { toast } from "sonner";
 
 export default function SchoolManagement() {
   const [activeTab, setActiveTab] = useState("classes");
@@ -19,7 +20,7 @@ export default function SchoolManagement() {
   const [coeffError, setCoeffError] = useState("");
   const [openAnnee, setOpenAnnee] = useState<string | null>(null);
   const [loadingTrimestres, setLoadingTrimestres] = useState(false);
-  
+  const [coeffData, setCoeffData] = useState<{ [matiereId: string]: number }>({});
   // States pour les formulaires
   const [classeNom, setClasseNom] = useState("");
   const [classeNiveau, setClasseNiveau] = useState("Primaire");
@@ -373,24 +374,35 @@ function getCoefficientsByClasse(classeId) {
               <ul className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-2">
                 {(() => {
                   // Prend la première classe de l'année
-                  const firstClasse = groupClassesByNiveauAndAnnee(classes)[niveau]?.[annee]?.[0];
-                  if (!firstClasse) return <span className="text-xs text-gray-400 italic">Aucune matière</span>;
-                  const coefs = coefficients.filter(c => c.classe?.id == firstClasse.id);
-                  if (coefs.length === 0) return <span className="text-xs text-gray-400 italic">Aucun coefficient</span>;
-                  return coefs.map(c => (
-                    <li
-                      key={c.matiere.id}
-                      className="flex flex-col items-start gap-2 px-4 py-3 rounded-2xl bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-700 shadow transition-all duration-300 hover:bg-blue-50 dark:hover:bg-blue-800 hover:shadow-lg"
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <Award className="h-5 w-5 text-indigo-500 dark:text-indigo-300" />
-                        <span className="font-semibold text-blue-900 dark:text-blue-100 text-base">{c.matiere.nom}</span>
-                      </div>
-                      <span className="px-3 py-1 rounded-full bg-yellow-200 dark:bg-yellow-700 text-yellow-900 dark:text-yellow-100 text-xs font-bold shadow">
-                        Coefficient&nbsp;{c.coefficient}
-                      </span>
-                    </li>
-                  ));
+                  const classesForNiveauAnnee = groupClassesByNiveauAndAnnee(classes)[niveau]?.[annee] ?? [];
+if (classesForNiveauAnnee.length === 0) return <span className="text-xs text-gray-400 italic">Aucune matière</span>;
+
+// On filtre tous les coefficients pour les classes de ce groupe
+const coefs = coefficients.filter(c =>
+  classesForNiveauAnnee.some(classe => classe.id === c.classe?.id)
+);
+if (coefs.length === 0) return <span className="text-xs text-gray-400 italic">Aucun coefficient</span>;
+
+                  // Éviter les doublons de matières (on garde la première occurrence par matiere_id)
+const matieresUniques = Array.from(
+  new Map(coefs.map(item => [item.matiere.id, item])).values()
+);
+
+return matieresUniques.map(c => (
+  <li
+    key={c.matiere.id}
+    className="flex flex-col items-start gap-2 px-4 py-3 rounded-2xl bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-700 shadow transition-all duration-300 hover:bg-blue-50 dark:hover:bg-blue-800 hover:shadow-lg"
+  >
+    <div className="flex items-center gap-2 mb-1">
+      <Award className="h-5 w-5 text-indigo-500 dark:text-indigo-300" />
+      <span className="font-semibold text-blue-900 dark:text-blue-100 text-base">{c.matiere.nom}</span>
+    </div>
+    <span className="px-3 py-1 rounded-full bg-yellow-200 dark:bg-yellow-700 text-yellow-900 dark:text-yellow-100 text-xs font-bold shadow">
+      Coefficient&nbsp;{c.coefficient}
+    </span>
+  </li>
+));
+
                 })()}
               </ul>
             )}
@@ -704,309 +716,517 @@ function getCoefficientsByClasse(classeId) {
 
       {/* Dialog Ajouter Classe */}
       <Dialog open={isAddClasseOpen} onOpenChange={setIsAddClasseOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Ajouter une nouvelle classe</DialogTitle>
-          </DialogHeader>
-          {/* Formulaire d'ajout de classe */}
-          <form onSubmit={(e) => {
-            e.preventDefault();
-            fetch("http://localhost:3000/api/classes", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ nom: classeNom, niveau: classeNiveau }),
-            })
-              .then(res => res.json())
-              .then(newClasse => {
-                setClasses([...classes, newClasse]);
-                setClasseNom("");
-                setClasseNiveau("Primaire");
-                setIsAddClasseOpen(false);
-                setSuccessMsg("Classe ajoutée avec succès !");
-                setTimeout(() => setSuccessMsg(""), 3000); // Masquer après 3 secondes
-              });
-          }}>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="classeNom" className="text-right">
-                  Nom de la classe
-                </label>
-                <input
-                  id="classeNom"
-                  value={classeNom}
-                  onChange={(e) => setClasseNom(e.target.value)}
-                  className="col-span-3 border rounded px-2 py-1"
-                  required
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="classeNiveau" className="text-right">
-                  Niveau
-                </label>
-                <select
-                  id="classeNiveau"
-                  value={classeNiveau}
-                  onChange={(e) => setClasseNiveau(e.target.value)}
-                  className="col-span-3 border rounded px-2 py-1"
-                  required
-                >
-                  <option value="Primaire">Primaire</option>
-                  <option value="Collège">Collège</option>
-                  <option value="Lycée">Lycée</option>
-                  <option value="Supérieur">Supérieur</option>
-                  <option value="Autre">Autre</option>
-                </select>
-              </div>
+  <DialogContent className="rounded-2xl shadow-2xl border-2 border-blue-300 dark:border-blue-900 w-full max-w-lg bg-white dark:bg-gray-900">
+    <DialogHeader>
+      
+      <DialogTitle className="text-center text-2xl font-bold text-gray-800 dark:text-white">
+        Nouvelle Classe
+      </DialogTitle>
+      <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+        Remplissez les informations requises pour créer une nouvelle classe
+      </p>
+    </DialogHeader>
+
+    <form
+      onSubmit={async (e) => {
+  e.preventDefault();
+
+  // Créer la nouvelle classe
+  const res = await fetch("http://localhost:3000/api/classes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nom: classeNom, niveau: classeNiveau }),
+  });
+  const newClasse = await res.json();
+
+  // Vérifie que c'est collège ou lycée (avec accents)
+  const isCollegeOuLycee = (niveau) => {
+    return niveau.toLowerCase() === "collège" || niveau.toLowerCase() === "lycée";
+  };
+
+  let message = "Classe ajoutée avec succès !";
+
+  if (isCollegeOuLycee(classeNiveau)) {
+    // Extraire le chiffre du nom de classe (ex: "3AS2" → "3")
+    const prefixChiffre = classeNom.match(/^\d+/)?.[0];
+
+    if (prefixChiffre) {
+      // Chercher une classe existante avec ce même chiffre, différente de la nouvelle
+      const classeReference = classes.find(
+        (cl) => cl.nom.startsWith(prefixChiffre) && cl.nom !== classeNom
+      );
+
+      if (classeReference) {
+        // Copier les coefficients depuis classeReference vers newClasse
+        await fetch("http://localhost:3000/api/coefficientclasse/clone", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fromClasseId: classeReference.id, toClasseId: newClasse.id }),
+        });
+
+        message = "Classe ajoutée et coefficients affectés automatiquement.";
+      }
+    }
+  } else {
+    console.log("Pas de coefficients à affecter pour une classe primaire");
+  }
+
+  // Mettre à jour le state
+  setClasses([...classes, newClasse]);
+  setClasseNom("");
+  setClasseNiveau("Primaire");
+  setIsAddClasseOpen(false);
+
+  toast.success(message);
+}}
+
+
+      className="space-y-6 mt-4"
+    >
+      <fieldset className="border border-blue-200 dark:border-blue-800 rounded-xl p-6 space-y-5 bg-gray-50 dark:bg-gray-800/50">
+        <legend className="text-lg font-medium text-blue-700 dark:text-blue-300 px-2">
+          <span className="flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            Informations de la classe
+          </span>
+        </legend>
+
+        {/* Nom de la classe */}
+        <div className="space-y-3">
+          <label htmlFor="classeNom" className="block text-sm font-medium text-gray-700 dark:text-gray-200 flex items-center gap-1">
+            Nom de la classe <span className="text-red-500">*</span>
+          </label>
+          <div className="relative">
+            <input
+              id="classeNom"
+              value={classeNom}
+              onChange={(e) => setClasseNom(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white transition-all duration-200 pl-11"
+              placeholder="Ex: 3AS1, 4ème B, CP2..."
+              required
+            />
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="h-5 w-5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+              </svg>
             </div>
-            <div className="flex justify-end">
-              <Button type="submit">Ajouter</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </div>
+
+        {/* Niveau (boutons cliquables) */}
+        <div className="space-y-3">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 flex items-center gap-1">
+            Niveau scolaire <span className="text-red-500">*</span>
+          </label>
+          <div className="grid grid-cols-3 gap-3">
+            {["Primaire", "Collège", "Lycée"].map((niveau) => (
+              <button
+                key={niveau}
+                type="button"
+                onClick={() => setClasseNiveau(niveau)}
+                className={`px-4 py-3 rounded-xl font-medium border transition-all duration-200 flex items-center justify-center gap-2 ${
+                  classeNiveau === niveau
+                    ? "bg-blue-600 text-white border-blue-600 shadow-md"
+                    : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-700"
+                }`}
+              >
+                {niveau === "Primaire" && (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                )}
+                {niveau === "Collège" && (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                )}
+                {niveau === "Lycée" && (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                )}
+                {niveau}
+              </button>
+            ))}
+          </div>
+        </div>
+      </fieldset>
+
+      <div className="flex justify-between items-center pt-2">
+        <button
+          type="button"
+          onClick={() => setIsAddClasseOpen(false)}
+          className="px-5 py-2.5 rounded-lg text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white font-medium flex items-center gap-2 transition-colors duration-200"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          Annuler
+        </button>
+        <Button
+          type="submit"
+          className="px-6 py-3 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-bold shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
+        >
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+          </svg>
+          Créer la classe
+        </Button>
+      </div>
+    </form>
+  </DialogContent>
+</Dialog>
 
       {/* Dialog Ajouter Coefficient */}
-      <Dialog open={isAddCoeffOpen} onOpenChange={setIsAddCoeffOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Ajouter un coefficient</DialogTitle>
-          </DialogHeader>
-          {/* Formulaire d'ajout de coefficient */}
-          <form onSubmit={(e) => {
-            e.preventDefault();
-            // Validation simple
-            if (!coeffClasse || !coeffMatiere || coefficient <= 0) {
-              setCoeffError("Veuillez sélectionner une classe, une matière et un coefficient valide.");
-              return;
-            }
-            setCoeffError(""); // Réinitialiser l'erreur
+     <Dialog open={isAddCoeffOpen} onOpenChange={setIsAddCoeffOpen}>
+  <DialogContent className="rounded-lg shadow-xl border-2 border-blue-300 dark:border-blue-900 w-full max-w-2xl bg-white dark:bg-gray-900">
+    <DialogHeader>
+      <div className="flex items-center justify-center mb-2">
+        <DialogTitle className="text-center text-2xl font-bold text-blue-700 dark:text-blue-300">
+          Gestion des Coefficients
+        </DialogTitle>
+      </div>
+      <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+        Attribuez les coefficients par matière pour une classe
+      </p>
+    </DialogHeader>
 
-            fetch("http://localhost:3000/api/coefficientclasse", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                classeId: coeffClasse,
-                matiereId: coeffMatiere,
-                coefficient: parseInt(coefficient as any), // Convertir en nombre
-              }),
-            })
-              .then(res => {
-                if (!res.ok) {
-                  // Gérer les erreurs de l'API
-                  return res.json().then(err => { throw new Error(err.message || 'Erreur lors de l\'ajout du coefficient'); });
-                }
-                return res.json();
-              })
-              .then(newCoeff => {
-                // Mettre à jour l'état des coefficients
-                setCoefficients([...coefficients, newCoeff]);
-                setCoeffClasse("");
-                setCoeffMatiere("");
-                setCoefficient(1);
-                setIsAddCoeffOpen(false);
-                setSuccessMsg("Coefficient ajouté avec succès !");
-                setTimeout(() => setSuccessMsg(""), 3000); // Masquer après 3 secondes
-                refreshCoefficients(); // Rafraîchir la liste complète
-              })
-              .catch(error => {
-                console.error("Erreur:", error);
-                setCoeffError(error.message || "Une erreur est survenue lors de l'ajout.");
-              });
-          }}>
-            <div className="grid gap-4 py-4">
-              {coeffError && <div className="text-red-500 text-sm">{coeffError}</div>}
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="coeffClasse" className="text-right">
-                  Classe
-                </label>
-                <select
-                  id="coeffClasse"
-                  value={coeffClasse}
-                  onChange={(e) => setCoeffClasse(e.target.value)}
-                  className="col-span-3 border rounded px-2 py-1"
-                  required
-                >
-                  <option value="">Sélectionner une classe</option>
-                  {classes.map(classe => (
-                    <option key={classe.id} value={classe.id}>
-                      {classe.nom}
-                    </option>
-                  ))}
-                </select>
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault();
+
+        setCoeffError(""); // reset erreur avant validation
+
+        if (!coeffClasse || Object.keys(coeffData).length === 0) {
+  setCoeffError("Veuillez sélectionner une classe et au moins une matière avec son coefficient.");
+  return;
+}
+
+// Vérification supplémentaire
+const classeId = Number(coeffClasse);
+if (isNaN(classeId)) {
+  setCoeffError("L'identifiant de la classe est invalide.");
+  return;
+}
+        // Création du payload avec parsing sécurisé des ids et coefficients
+        const payload = Object.entries(coeffData).map(([matiere_id, coefficient]) => ({
+          classe_id: Number(coeffClasse),
+          matiere_id: Number(matiere_id),
+          coefficient: Number(coefficient),
+        }));
+
+        try {
+          const response = await fetch("http://localhost:3000/api/coefficientclasse", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (!response.ok) {
+            throw new Error("Erreur lors de l'envoi des coefficients.");
+          }
+
+          await response.json();
+
+          // Reset formulaire et affichage message succès
+          setIsAddCoeffOpen(false);
+          setCoeffClasse("");
+          setCoeffData({});
+          refreshCoefficients();
+          setSuccessMsg("Coefficients enregistrés avec succès !");
+          setTimeout(() => setSuccessMsg(""), 3000);
+        } catch (error) {
+          console.error(error);
+          setCoeffError(error.message || "Erreur inconnue.");
+        }
+      }}
+      className="space-y-6 mt-4"
+    >
+      {/* Section Classe */}
+      <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+        <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-200 mb-3 flex items-center">
+          Sélection de la classe
+        </h3>
+        
+        <select
+          value={coeffClasse}
+          onChange={(e) => setCoeffClasse(e.target.value)}
+          className="w-full rounded-lg border-2 border-blue-300 dark:border-blue-700 px-4 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          required
+        >
+          <option value="">-- Choisir une classe --</option>
+          {classes.map((classe) => (
+            <option key={classe.id} value={classe.id}>{classe.nom}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Section Matières */}
+      <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+        <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-200 mb-3 flex items-center">
+          <ClipboardListIcon className="h-5 w-5 mr-2" />
+          Attribution des coefficients
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Cliquez sur une matière pour l'ajouter, puis renseignez le coefficient
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {matieres.map((matiere) => {
+            const isSelected = coeffData[matiere.id] !== undefined;
+
+            return (
+              <div
+                key={matiere.id}
+                className={`border-2 p-3 rounded-xl transition-all duration-200 ease-in-out flex items-center justify-between
+                  ${
+                    isSelected
+                      ? "border-blue-500 bg-blue-100 dark:bg-blue-800 shadow-md"
+                      : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-blue-400"
+                  }`}
+                onClick={() => {
+                  if (isSelected) {
+                    const updated = { ...coeffData };
+                    delete updated[matiere.id];
+                    setCoeffData(updated);
+                  } else {
+                    setCoeffData({ ...coeffData, [matiere.id]: 1 });
+                  }
+                }}
+              >
+                <div className="flex items-center">
+                  <div className={`w-3 h-3 rounded-full mr-3 ${isSelected ? 'bg-blue-600' : 'bg-gray-400'}`} />
+                  <span className="font-medium text-gray-900 dark:text-gray-100">{matiere.nom}</span>
+                </div>
+                {isSelected && (
+                  <div className="flex items-center">
+                    <span className="text-sm text-gray-600 dark:text-gray-400 mr-2">Coeff:</span>
+                    <input
+                      type="number"
+                      value={coeffData[matiere.id]}
+                      onChange={(e) =>
+                        setCoeffData({ ...coeffData, [matiere.id]: parseInt(e.target.value) || 1 })
+                      }
+                      className="w-16 border border-blue-300 dark:border-blue-700 rounded-md px-2 py-1 text-center text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      min="1"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                )}
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="coeffMatiere" className="text-right">
-                  Matière
-                </label>
-                <select
-                  id="coeffMatiere"
-                  value={coeffMatiere}
-                  onChange={(e) => setCoeffMatiere(e.target.value)}
-                  className="col-span-3 border rounded px-2 py-1"
-                  required
-                >
-                  <option value="">Sélectionner une matière</option>
-                  {matieres.map(matiere => (
-                    <option key={matiere.id} value={matiere.id}>
-                      {matiere.nom}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="coefficient" className="text-right">
-                  Coefficient
-                </label>
-                <input
-                  id="coefficient"
-                  type="number"
-                  value={coefficient}
-                  onChange={(e) => setCoefficient(parseInt(e.target.value))}
-                  className="col-span-3 border rounded px-2 py-1"
-                  min="1"
-                  required
-                />
-              </div>
-            </div>
-            <div className="flex justify-end">
-              <Button type="submit">Ajouter</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
+        <Button
+          type="button"
+          onClick={() => setIsAddCoeffOpen(false)}
+          className="text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 px-4 py-2 rounded-lg"
+        >
+          Annuler
+        </Button>
+        <Button
+          type="submit"
+          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg shadow-md transition flex items-center"
+        >
+          <SaveIcon className="h-5 w-5 mr-2" />
+          Enregistrer
+        </Button>
+      </div>
+    </form>
+  </DialogContent>
+</Dialog>
+
+
 
       {/* Dialog Affecter Professeur */}
       <Dialog open={isAffectProfOpen} onOpenChange={setIsAffectProfOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Affecter un professeur à une matière et une classe</DialogTitle>
-          </DialogHeader>
-          {/* Formulaire d'affectation */}
-          <form onSubmit={(e) => {
-            e.preventDefault();
-            // Validation simple
-            if (!affectProf || !affectMatiere || affectClasses.length === 0 || !affectAnnee) {
-              alert("Veuillez sélectionner un professeur, une matière, au moins une classe et une année scolaire.");
-              return;
-            }
+  <DialogContent className="rounded-lg shadow-xl border-2 border-blue-300 dark:border-blue-800 max-w-md bg-white dark:bg-gray-900">
+    <DialogHeader>
+      <DialogTitle className="text-xl font-semibold text-blue-700 dark:text-blue-300 text-center">
+        Affectation Professeur
+      </DialogTitle>
+      <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
+        Attribuer un professeur à une matière et une ou plusieurs classes
+      </p>
+    </DialogHeader>
 
-            // Créer une affectation pour chaque classe sélectionnée
-            const affectationPromises = affectClasses.map(classeId => {
-              return fetch("http://localhost:3000/api/affectations", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  professeurId: affectProf,
-                  matiereId: affectMatiere,
-                  classeId: classeId,
-                  anneeScolaireId: affectAnnee,
-                }),
-              }).then(res => res.json());
-            });
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!affectProf || !affectMatiere || affectClasses.length === 0 || !affectAnnee) {
+          toast.error("Veuillez compléter tous les champs requis");
+          return;
+        }
 
-            Promise.all(affectationPromises)
-              .then(newAffectations => {
-                setAffectations([...affectations, ...newAffectations]);
-                setAffectProf("");
-                setAffectMatiere("");
-                setAffectClasses([]);
-                setAffectAnnee("");
-                setIsAffectProfOpen(false);
-                setSuccessMsg("Affectation(s) ajoutée(s) avec succès !");
-                setTimeout(() => setSuccessMsg(""), 3000); // Masquer après 3 secondes
-              })
-              .catch(error => {
-                console.error("Erreur:", error);
-                alert("Une erreur est survenue lors de l'affectation.");
-              });
-          }}>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="affectProf" className="text-right">
-                  Professeur
-                </label>
-                <select
-                  id="affectProf"
-                  value={affectProf}
-                  onChange={(e) => setAffectProf(e.target.value)}
-                  className="col-span-3 border rounded px-2 py-1"
-                  required
-                >
-                  <option value="">Sélectionner un professeur</option>
-                  {profs.map(prof => (
-                    <option key={prof.id} value={prof.id}>
-                      {prof.nom} {prof.prenom}
-                    </option>
-                  ))}
-                </select>
+        const affectationPromises = affectClasses.map(classeId => {
+          return fetch("http://localhost:3000/api/affectations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              professeur_id: affectProf,
+              matiere_id: affectMatiere,
+              classe_id: classeId,
+              annee_id: affectAnnee,
+            }),
+          }).then(res => res.json());
+        });
+
+        Promise.all(affectationPromises)
+          .then(newAffectations => {
+            setAffectations([...affectations, ...newAffectations]);
+            setAffectProf("");
+            setAffectMatiere("");
+            setAffectClasses([]);
+            setAffectAnnee("");
+            setIsAffectProfOpen(false);
+            toast.success("Affectation(s) enregistrée(s) avec succès !");
+          })
+          .catch(error => {
+            console.error("Erreur:", error);
+            toast.error("Erreur lors de l'affectation");
+          });
+      }}
+      className="space-y-4 p-4"
+    >
+      {/* Professeur */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Professeur <span className="text-red-500">*</span>
+        </label>
+        <select
+          value={affectProf}
+          onChange={(e) => setAffectProf(e.target.value)}
+          className="w-full rounded-lg border border-blue-300 dark:border-blue-700 px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
+          required
+        >
+          <option value="">Sélectionner un professeur</option>
+          {profs.map(prof => (
+            <option key={prof.id} value={prof.id}>
+              {prof.nom} {prof.prenom}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Matière */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Matière <span className="text-red-500">*</span>
+        </label>
+        <select
+          value={affectMatiere}
+          onChange={(e) => setAffectMatiere(e.target.value)}
+          className="w-full rounded-lg border border-blue-300 dark:border-blue-700 px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
+          required
+        >
+          <option value="">Sélectionner une matière</option>
+          {matieres.map(matiere => (
+            <option key={matiere.id} value={matiere.id}>
+              {matiere.nom}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Classes */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Classes <span className="text-red-500">*</span>
+        </label>
+        <div className="border border-blue-300 dark:border-blue-700 rounded-lg bg-white dark:bg-gray-800 p-2 max-h-48 overflow-y-auto shadow-inner">
+          {classes.map(classe => (
+            <div 
+              key={classe.id}
+              className={`flex items-center p-2 rounded-md mb-1 cursor-pointer transition-colors duration-150 ${
+                affectClasses.includes(classe.id) 
+                  ? 'bg-blue-100 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-700' 
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 border border-transparent'
+              }`}
+              onClick={() => {
+                if (affectClasses.includes(classe.id)) {
+                  setAffectClasses(affectClasses.filter(id => id !== classe.id));
+                } else {
+                  setAffectClasses([...affectClasses, classe.id]);
+                }
+              }}
+            >
+              <div className={`flex items-center justify-center h-5 w-5 rounded border ${
+                affectClasses.includes(classe.id)
+                  ? 'bg-blue-600 border-blue-600 dark:bg-blue-500 dark:border-blue-500'
+                  : 'border-gray-300 dark:border-gray-500'
+              }`}>
+                {affectClasses.includes(classe.id) && (
+                  <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="affectMatiere" className="text-right">
-                  Matière
-                </label>
-                <select
-                  id="affectMatiere"
-                  value={affectMatiere}
-                  onChange={(e) => setAffectMatiere(e.target.value)}
-                  className="col-span-3 border rounded px-2 py-1"
-                  required
-                >
-                  <option value="">Sélectionner une matière</option>
-                  {matieres.map(matiere => (
-                    <option key={matiere.id} value={matiere.id}>
-                      {matiere.nom}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="affectClasses" className="text-right">
-                  Classes (Ctrl+clic pour multiple)
-                </label>
-                <select
-                  id="affectClasses"
-                  multiple
-                  value={affectClasses}
-                  onChange={(e) => {
-                    const options = Array.from(e.target.selectedOptions);
-                    setAffectClasses(options.map(option => option.value));
-                  }}
-                  className="col-span-3 border rounded px-2 py-1 h-24"
-                  required
-                >
-                  {classes.map(classe => (
-                    <option key={classe.id} value={classe.id}>
-                      {classe.nom}
-                    </option>
-                  ))}
-                </select>
-              </div>
-               <div className="grid grid-cols-4 items-center gap-4">
-                <label htmlFor="affectAnnee" className="text-right">
-                  Année Scolaire
-                </label>
-                <select
-                  id="affectAnnee"
-                  value={affectAnnee}
-                  onChange={(e) => setAffectAnnee(e.target.value)}
-                  className="col-span-3 border rounded px-2 py-1"
-                  required
-                >
-                  <option value="">Sélectionner une année</option>
-                  {annees.map(annee => (
-                    <option key={annee.id} value={annee.id}>
-                      {annee.libelle}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <span className="ml-3 text-gray-900 dark:text-gray-100">
+                {classe.nom}
+              </span>
             </div>
-            <div className="flex justify-end">
-              <Button type="submit">Affecter</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+          ))}
+        </div>
+        {affectClasses.length > 0 ? (
+          <p className="text-xs text-blue-600 dark:text-blue-400">
+            {affectClasses.length} classe(s) sélectionnée(s)
+          </p>
+        ) : (
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Aucune classe sélectionnée
+          </p>
+        )}
+      </div>
+
+      {/* Année scolaire */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Année Scolaire <span className="text-red-500">*</span>
+        </label>
+        <select
+          value={affectAnnee}
+          onChange={(e) => setAffectAnnee(e.target.value)}
+          className="w-full rounded-lg border border-blue-300 dark:border-blue-700 px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
+          required
+        >
+          <option value="">Sélectionner une année</option>
+          {annees.map(annee => (
+            <option key={annee.id} value={annee.id}>
+              {annee.libelle}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Boutons */}
+      <div className="flex justify-end gap-2 pt-4">
+        <Button
+          type="button"
+          onClick={() => setIsAffectProfOpen(false)}
+          className="px-4 py-2 rounded-lg text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"
+          variant="outline"
+        >
+          Annuler
+        </Button>
+        <Button
+          type="submit"
+          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-200 flex items-center gap-1"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          Valider l'affectation
+        </Button>
+      </div>
+    </form>
+  </DialogContent>
+</Dialog>
+
 
        {/* Dialog Ajouter Année Scolaire */}
       {/* === FORMULAIRE MULTI-ÉTAPES === */}

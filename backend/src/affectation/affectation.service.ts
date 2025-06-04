@@ -12,7 +12,16 @@ export class AffectationService {
   constructor(
     @InjectRepository(Affectation)
     private affectationRepository: Repository<Affectation>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+    @InjectRepository(Matiere)
+    private matiereRepository: Repository<Matiere>,
+    @InjectRepository(Classe)
+    private classeRepository: Repository<Classe>,
+    @InjectRepository(anneescolaire)
+    private anneeRepository: Repository<anneescolaire>,
   ) {}
+  
 
   async findAll(): Promise<Affectation[]> {
     return this.affectationRepository.find({
@@ -40,21 +49,23 @@ export class AffectationService {
     });
   }
 
-  async create(data: { professeur_id: number; matiere_id: number; classe_id: number; annee_id: number }): Promise<Affectation> {
-    const { professeur_id, matiere_id, classe_id, annee_id } = data;
+  async create(data: {
+    professeur_id: number;
+    matiere_id: number;
+    classe_id: number;
+    annee_id: number;
+  }): Promise<Affectation> {
+    const professeur = await this.userRepository.findOneBy({ id: data.professeur_id });
+    if (!professeur) throw new NotFoundException('Professeur introuvable');
 
-    // Create partial entities for relations
-    const professeur = new User();
-    professeur.id = professeur_id;
+    const matiere = await this.matiereRepository.findOneBy({ id: data.matiere_id });
+    if (!matiere) throw new NotFoundException('Matière introuvable');
 
-    const matiere = new Matiere();
-    matiere.id = matiere_id;
+    const classe = await this.classeRepository.findOneBy({ id: data.classe_id });
+    if (!classe) throw new NotFoundException('Classe introuvable');
 
-    const classe = new Classe();
-    classe.id = classe_id;
-
-    const anneeScolaire = new anneescolaire();
-    anneeScolaire.id = annee_id;
+    const anneeScolaire = await this.anneeRepository.findOneBy({ id: data.annee_id });
+    if (!anneeScolaire) throw new NotFoundException('Année scolaire introuvable');
 
     const newAffectation = this.affectationRepository.create({
       professeur,
@@ -62,8 +73,10 @@ export class AffectationService {
       classe,
       annee_scolaire: anneeScolaire,
     });
+
     return this.affectationRepository.save(newAffectation);
   }
+
 
   async delete(id: number): Promise<void> {
     const result = await this.affectationRepository.delete(id);

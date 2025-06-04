@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
-import { Save, Loader2, BookOpen, CalendarDays, Users } from 'lucide-react';
+import { Save, Loader2, BookOpen, CalendarDays, Users, Bookmark, School, ClipboardList } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 // --- Définition des Types ---
@@ -367,78 +367,114 @@ export function GradeInput() {
       <div className="space-y-10">
         <h1 className="text-2xl font-bold mb-6">Portail de Saisie des Notes</h1>
 
-        {/* Section Informations de l'Évaluation */}
-        <Card className="shadow-lg border border-gray-200 animate-fade-in-down">
-          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100 rounded-t-xl p-6 shadow-sm">
-            <CardTitle className="flex items-center text-2xl font-extrabold text-blue-800">
-              Critères de l'Évaluation
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Champs de sélection */}
-            {[
-              { label: 'Classe', value: selectedClassId, onChange: setSelectedClassId, items: classes, placeholder: 'Sélectionner une classe' },
-              { label: 'Année scolaire', value: selectedAnneeId, onChange: setSelectedAnneeId, items: anneesScolaires, placeholder: 'Sélectionner une année' },
-              { label: 'Type d\'évaluation', value: selectedEvalTypeId, onChange: setSelectedEvalTypeId, items: evaluationTypes, placeholder: 'Sélectionner un type' },
-            ].map((field, index) => (
-              <div key={index} className="space-y-2">
-                <label className="text-sm font-semibold text-gray-700">{field.label}</label>
-                <Select
-                  onValueChange={val => {
-                    // S'assurer que la valeur est un nombre ou null
-                    const numVal = val ? Number(val) : null;
-                    field.onChange(numVal);
-                  }}
-                  value={field.value !== null ? String(field.value) : ''} // Gérer le null pour l'affichage
-                  disabled={field.items.length === 0 && field.label !== 'Type d\'évaluation'} // Désactiver si pas de données
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={field.placeholder} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {field.items.length > 0 ? (
-                      field.items.map(item => (
-                        <SelectItem key={item.id} value={String(item.id)}>
-                          {item.nom || item.libelle}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="disabled" disabled>
-                        Aucun(e) {field.label.toLowerCase()} disponible
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            ))}
+        {/* Section Informations de l'Évaluation - Version améliorée */}
+<Card className="w-full border border-blue-100 shadow-lg rounded-xl overflow-hidden">
+  <CardHeader className="bg-blue-600 text-white p-6">
+    <div className="flex items-center space-x-3">
+      <ClipboardList className="h-6 w-6" />
+      <CardTitle className="text-xl font-semibold">Critères de l'Évaluation</CardTitle>
+    </div>
+  </CardHeader>
+  <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    {/* Champs de sélection avec icônes */}
+    {[
+      { 
+        label: 'Classe', 
+        icon: <School className="h-4 w-4 mr-2 text-blue-600" />,
+        value: selectedClassId, 
+        onChange: setSelectedClassId, 
+        items: classes, 
+        placeholder: 'Sélectionner une classe' 
+      },
+      { 
+        label: 'Année scolaire', 
+        icon: <CalendarDays className="h-4 w-4 mr-2 text-blue-600" />,
+        value: selectedAnneeId, 
+        onChange: setSelectedAnneeId, 
+        items: anneesScolaires, 
+        placeholder: 'Sélectionner une année' 
+      },
+      { 
+        label: 'Type d\'évaluation', 
+        icon: <Bookmark className="h-4 w-4 mr-2 text-blue-600" />,
+        value: selectedEvalTypeId, 
+        onChange: setSelectedEvalTypeId, 
+        items: evaluationTypes, 
+        placeholder: 'Sélectionner un type' 
+      },
+    ].map((field, index) => (
+      <div key={index} className="space-y-2">
+        <label className="text-sm font-medium text-gray-700 flex items-center">
+          {field.icon}
+          {field.label}
+        </label>
+        <Select
+          onValueChange={val => {
+            const numVal = val ? Number(val) : null;
+            field.onChange(numVal);
+          }}
+          value={field.value !== null ? String(field.value) : ''}
+          disabled={field.items.length === 0 && field.label !== 'Type d\'évaluation'}
+        >
+          <SelectTrigger className="w-full border-blue-200 focus:ring-blue-500">
+            <SelectValue placeholder={field.placeholder} />
+          </SelectTrigger>
+          <SelectContent>
+            {field.items.length > 0 ? (
+              field.items.map(item => (
+                <SelectItem key={item.id} value={String(item.id)}>
+                  {item.nom || item.libelle}
+                </SelectItem>
+              ))
+            ) : (
+              <SelectItem value="disabled" disabled>
+                Aucun(e) {field.label.toLowerCase()} disponible
+              </SelectItem>
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+    ))}
 
-            {/* Affichage de la matière (non modifiable) */}
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">Matière</label>
-              <div className="flex items-center h-10 px-3 py-2 rounded-md border bg-gray-100 text-gray-800">
-                <BookOpen className="h-4 w-4 mr-2 text-blue-500" />
-                {currentMatiere ? currentMatiere.nom : 'Aucune matière trouvée'}
-              </div>
-              {!currentMatiere && selectedClassId !== null && selectedAnneeId !== null && (
-                <p className="text-xs text-red-500">
-                  Combinaison classe/année non affectée à une matière.
-                </p>
-              )}
-            </div>
+    {/* Affichage de la matière avec état */}
+    <div className="space-y-2">
+      <label className="text-sm font-medium text-gray-700 flex items-center">
+        <BookOpen className="h-4 w-4 mr-2 text-blue-600" />
+        Matière
+      </label>
+      <div className={`flex items-center h-10 px-3 py-2 rounded-md border ${currentMatiere ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
+        {currentMatiere ? (
+          <>
+            <BookOpen className="h-4 w-4 mr-2 text-blue-600" />
+            <span className="font-medium">{currentMatiere.nom}</span>
+          </>
+        ) : (
+          'Aucune matière trouvée'
+        )}
+      </div>
+      {!currentMatiere && selectedClassId !== null && selectedAnneeId !== null && (
+        <p className="text-xs text-red-500 mt-1">
+          Combinaison classe/année non affectée à une matière
+        </p>
+      )}
+    </div>
 
-            {/* Champ Date */}
-            <div className="space-y-2">
-              <label htmlFor="date-input" className="text-sm font-semibold text-gray-700">Date de l'évaluation</label>
-              <Input
-                id="date-input"
-                type="date"
-                value={date}
-                onChange={e => setDate(e.target.value)}
-                className="w-full"
-              />
-            </div>
-          </CardContent>
-        </Card>
+    {/* Champ Date amélioré */}
+    <div className="space-y-2">
+      <label htmlFor="date-input" className="text-sm font-medium text-gray-700 flex items-center">
+        <CalendarDays className="h-4 w-4 mr-2 text-blue-600" />
+        Date de l'évaluation
+      </label>
+      <Input
+        id="date-input"
+        type="date"
+        value={date}
+        onChange={e => setDate(e.target.value)}
+        className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
+      />
+    </div>
+  </CardContent>
+</Card>
 
         {/* Section Saisie des Notes */}
         {isFormComplete ? (
