@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -16,174 +16,184 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
-import { Save, Loader2, BookOpen, CalendarDays, Users, Bookmark, School, ClipboardList } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
+import { Save, Loader2, BookOpen, CalendarDays, Users, Bookmark, School, ClipboardList, User } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext'; // Assuming AuthContext is correctly implemented
 
 // --- Définition des Types ---
 
 // Types de base pour les entités utilisées dans les Selects
-type Classe = { id: number; nom: string };
-type Matiere = { id: number; nom: string };
-type Eleve = { id: number; nom: string; prenom: string }; // Ajout du prénom
-type EvaluationType = { id: number; nom: string };
-type AnneeScolaire = { id: number; libelle: string };
+type AnneeScolaire = { id: number; libelle: string; dateDebut?: string; dateFin?: string; };
+type Classe = { id: number; nom: string; niveau?: string; annee_scolaire_id?: number };
+type Matiere = { id: number; nom: string; code?: string; };
 
-// Type de la réponse brute de l'API /api/affectations, basé sur votre JSON
-type AffectationApiResponse = {
+// Type Utilisateur révisé pour inclure tous les champs pertinents
+type Utilisateur = {
   id: number;
-  professeur: { id: number; nom: string; prenom: string; email: string; }; // Simplifié, ajoutez d'autres champs si besoin
-  matiere: { id: number; nom: string; code: string } | null; // Matière peut être null selon votre BDD
-  classe: { id: number; nom: string; niveau: string };
-  annee_scolaire: { id: number; libelle: string; dateDebut: string; dateFin: string };
+  nom: string;
+  prenom: string;
+  email: string;
+  role: 'professeur' | 'eleve' | 'admin' | string;
+  motDePasse?: string;
+  genre?: string;
+  adresse?: string;
+  tuteurNom?: string;
+  tuteurTelephone?: string;
+  photoUrl?: string | null;
+  actif?: boolean;
 };
 
-// Type d'Affectation pour le state interne du composant, simplifié et aplati pour faciliter la recherche
+// Type de la réponse brute de l'API /api/affectations, incluant les objets imbriqués complets
+type AffectationApiResponse = {
+  id: number;
+  professeur: Utilisateur;
+  matiere: Matiere;
+  classe: Classe;
+  annee_scolaire: AnneeScolaire;
+};
+
+// Type d'Affectation pour le state interne du composant, aplati pour faciliter les filtres
 type ProcessedAffectation = {
   id: number; // ID de l'affectation elle-même
   professeurId: number;
-  matiereId: number; // ID de la matière
-  matiere: { id: number; nom: string }; // Objet matière pour affichage
-  classeId: number; // ID de la classe
-  classe: { id: number; nom: string }; // Objet classe pour affichage
-  anneeScolaireId: number; // ID de l'année scolaire
-  anneeScolaire: { id: number; libelle: string }; // Objet année scolaire pour affichage
+  professeurNomComplet: string; // Pour l'affichage dans le select
+  matiereId: number;
+  matiereNom: string;
+  classeId: number;
+  classeNom: string;
+  anneeScolaireId: number;
+  anneeScolaireLibelle: string;
 };
 
-// Type de la réponse brute de l'API /api/inscriptions
+type Eleve = { id: number; nom: string; prenom: string; };
+
+type EvaluationType = { id: number; nom: string; };
+
+// --- NOUVEAU TYPE DE LA RÉPONSE API POUR /api/inscriptions ---
+// Ce type attend les objets complets 'utilisateur', 'classe', 'annee_scolaire' imbriqués
+// car votre backend les retourne grâce à `relations` dans InscriptionService.
 type InscriptionApiResponse = {
   id: number;
-  utilisateur: {
-    id: number;
-    nom: string;
-    prenom: string;
-    email: string;
-  };
-  classe: {
-    id: number;
-    nom: string;
-    niveau: string;
-  };
-  annee_scolaire: {
-    id: number;
-    libelle: string;
-  };
   date_inscription: string;
   actif: boolean;
+  utilisateur: Utilisateur;       // L'objet Utilisateur complet est ici
+  classe: Classe;                 // L'objet Classe complet est ici
+  annee_scolaire: AnneeScolaire; // L'objet AnneeScolaire complet est ici
 };
 
+// Type pour une entrée de note dans l'état
+type NoteEntry = { eleveId: number; nom: string; prenom: string; note: string };
 
 export function GradeInput() {
-  const { user } = useAuth();
-  // Données initiales chargées
-  const [classes, setClasses] = useState<Classe[]>([]);
-  const [matieres, setMatieres] = useState<Matiere[]>([]);
-  const [anneesScolaires, setAnneesScolaires] = useState<AnneeScolaire[]>([]);
-  const [affectations, setAffectations] = useState<ProcessedAffectation[]>([]); // Affectations traitées
+  const { user } = useAuth(); // If user role affects what they can see/do, you might use this.
 
-  // États du formulaire
-  const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
+  // --- États des données initiales chargées depuis l'API ---
+  const [anneesScolaires, setAnneesScolaires] = useState<AnneeScolaire[]>([]);
+  const [allClasses, setAllClasses] = useState<Classe[]>([]);
+  const [allMatieres, setAllMatieres] = useState<Matiere[]>([]);
+  // allUsers contiendra TOUS les utilisateurs (élèves, profs, admins)
+  const [allUsers, setAllUsers] = useState<Utilisateur[]>([]);
+  const [processedAffectations, setProcessedAffectations] = useState<ProcessedAffectation[]>([]);
+
+  // --- États des sélections du formulaire ---
   const [selectedAnneeId, setSelectedAnneeId] = useState<number | null>(null);
+  const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
+  const [selectedProfesseurId, setSelectedProfesseurId] = useState<number | null>(null); // Corrected type to number
   const [selectedEvalTypeId, setSelectedEvalTypeId] = useState<number | null>(null);
   const [date, setDate] = useState<string>('');
-  const [currentMatiere, setCurrentMatiere] = useState<Matiere | null>(null); // Matière déterminée par la sélection
 
-  // États des notes et élèves
+  // --- État de la matière déterminée automatiquement ---
+  const [currentMatiere, setCurrentMatiere] = useState<Matiere | null>(null);
+
+  // --- États des élèves et des notes ---
   const [eleves, setEleves] = useState<Eleve[]>([]);
-  const [notes, setNotes] = useState<{ eleveId: number; nom: string; prenom: string; note: string }[]>([]);
+  const [notes, setNotes] = useState<NoteEntry[]>([]);
 
-  // États de chargement
+  // --- États de chargement ---
   const [loadingInitialData, setLoadingInitialData] = useState<boolean>(true);
   const [loadingEleves, setLoadingEleves] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
-  // Types d'évaluation fixes (peuvent être chargés depuis une API si dynamiques)
-  const evaluationTypes: EvaluationType[] = [
+  // --- Types d'évaluation fixes (peuvent être chargés depuis une API si dynamiques) ---
+  const evaluationTypes: EvaluationType[] = useMemo(() => [
     { id: 1, nom: 'Devoir 1' },
     { id: 2, nom: 'Devoir 2' },
     { id: 3, nom: 'Composition' },
-  ];
+  ], []);
 
-  // --- useEffect 1: Chargement initial des affectations et des années scolaires ---
+  // --- CHARGEMENT INITIAL DES DONNÉES (Affectations, Classes, Années, Utilisateurs) ---
   useEffect(() => {
-    const fetchInitialData = async () => {
-      if (!user?.id) {
-        toast({
-          title: 'Erreur d\'authentification',
-          description: 'ID utilisateur non disponible. Veuillez vous reconnecter.',
-          variant: 'destructive',
-        });
-        setLoadingInitialData(false);
-        return;
-      }
-
+    const fetchAllBaseData = async () => {
       setLoadingInitialData(true);
       try {
-        // 1. Fetch affectations
-        const affectationsRes = await fetch(`http://localhost:3000/api/affectations?professeurId=${user.id}`);
-        if (!affectationsRes.ok) {
-          throw new Error(`Échec du chargement des affectations: ${affectationsRes.status}`);
-        }
-        const rawAffectations: AffectationApiResponse[] = await affectationsRes.json();
-        console.log('API Response (rawAffectations):', rawAffectations); // DEBOGAGE 1
+        console.log('Chargement des données initiales...');
 
-        // 2. Traiter, valider et enrichir les affectations pour le state
-        const processedAffectations: ProcessedAffectation[] = rawAffectations.map(rawAff => {
-          // Validation stricte des objets imbriqués et de leurs IDs
-          const isValidMatiere = rawAff.matiere && typeof rawAff.matiere === 'object' &&
-                                 typeof rawAff.matiere.id === 'number' && !isNaN(rawAff.matiere.id) &&
-                                 typeof rawAff.matiere.nom === 'string';
+        const [affectationsRes, allClassesRes, anneesRes, utilisateursRes] = await Promise.all([
+          fetch('http://localhost:3000/api/affectations?include=professeur,matiere,classe,annee_scolaire'),
+          fetch('http://localhost:3000/api/classes'),
+          fetch('http://localhost:3000/api/annees-academiques'),
+          fetch('http://localhost:3000/api/users'), // <--- Appel pour TOUS les utilisateurs (élèves et profs)
+        ]);
 
-          const isValidClasse = rawAff.classe && typeof rawAff.classe === 'object' &&
-                                typeof rawAff.classe.id === 'number' && !isNaN(rawAff.classe.id) &&
-                                typeof rawAff.classe.nom === 'string';
-
-          const isValidAnneeScolaire = rawAff.annee_scolaire && typeof rawAff.annee_scolaire === 'object' &&
-                                       typeof rawAff.annee_scolaire.id === 'number' && !isNaN(rawAff.annee_scolaire.id) &&
-                                       typeof rawAff.annee_scolaire.libelle === 'string';
-
-          if (!isValidMatiere || !isValidClasse || !isValidAnneeScolaire) {
-            console.warn('Affectation invalide ignorée en raison de données manquantes ou malformées:', rawAff);
-            return null; // Ignore l'affectation invalide
+        const checkResponse = async (res: Response, name: string) => {
+          if (!res.ok) {
+            const errorText = await res.text();
+            console.error(`Échec du chargement des ${name}: ${res.status} - ${errorText}`);
+            throw new Error(`Erreur lors du chargement des ${name}.`);
           }
+        };
 
+        await Promise.all([
+          checkResponse(affectationsRes, 'affectations'),
+          checkResponse(allClassesRes, 'classes'),
+          checkResponse(anneesRes, 'années académiques'),
+          checkResponse(utilisateursRes, 'utilisateurs'),
+        ]);
+
+        const [rawAffectations, rawAllClasses, rawAnnees, rawUtilisateurs]:
+          [AffectationApiResponse[], Classe[], AnneeScolaire[], Utilisateur[]] = await Promise.all([
+            affectationsRes.json(),
+            allClassesRes.json(),
+            anneesRes.json(),
+            utilisateursRes.json(),
+          ]);
+
+        console.log('Données brutes (Affectations):', rawAffectations);
+        console.log('Données brutes (Classes):', rawAllClasses);
+        console.log('Données brutes (Années Académiques):', rawAnnees);
+        console.log('Données brutes (Utilisateurs):', rawUtilisateurs);
+
+        const processed = rawAffectations.map(aff => {
+          // Ensure all necessary nested objects exist before processing
+          if (!aff.professeur || !aff.matiere || !aff.classe || !aff.annee_scolaire) {
+            console.warn('Affectation invalide (données manquantes), ignorée:', aff);
+            return null;
+          }
           return {
-            id: rawAff.id,
-            professeurId: rawAff.professeur.id,
-            matiereId: rawAff.matiere.id,
-            matiere: { id: rawAff.matiere.id, nom: rawAff.matiere.nom },
-            classeId: rawAff.classe.id,
-            classe: { id: rawAff.classe.id, nom: rawAff.classe.nom },
-            anneeScolaireId: rawAff.annee_scolaire.id,
-            anneeScolaire: { id: rawAff.annee_scolaire.id, libelle: rawAff.annee_scolaire.libelle },
+            id: aff.id,
+            professeurId: aff.professeur.id,
+            professeurNomComplet: `${aff.professeur.nom} ${aff.professeur.prenom}`,
+            matiereId: aff.matiere.id,
+            matiereNom: aff.matiere.nom,
+            classeId: aff.classe.id,
+            classeNom: aff.classe.nom,
+            anneeScolaireId: aff.annee_scolaire.id,
+            anneeScolaireLibelle: aff.annee_scolaire.libelle,
           };
-        }).filter(Boolean) as ProcessedAffectation[]; // Supprime les éléments `null`
+        }).filter(Boolean) as ProcessedAffectation[]; // Filter out any null entries
 
-        setAffectations(processedAffectations);
-        localStorage.setItem('affectations', JSON.stringify(processedAffectations));
-        console.log('Processed Affectations for state:', processedAffectations); // DEBOGAGE 2
+        setProcessedAffectations(processed);
+        setAllClasses(rawAllClasses);
+        setAnneesScolaires(rawAnnees);
+        setAllUsers(rawUtilisateurs); // <--- Stocke TOUS les utilisateurs
+        // Extract unique matières from affectations
+        const uniqueMatieres = Array.from(new Map(rawAffectations.map(aff => [aff.matiere.id, aff.matiere])).values());
+        setAllMatieres(uniqueMatieres);
 
-        // 3. Extraire les listes uniques de classes, matières et années scolaires
-        const uniqueClasses: Classe[] = [];
-        const uniqueMatieres: Matiere[] = [];
-        const uniqueAnneesScolaires: AnneeScolaire[] = [];
-
-        processedAffectations.forEach(aff => {
-          if (!uniqueClasses.some(c => c.id === aff.classe.id)) {
-            uniqueClasses.push(aff.classe);
-          }
-          if (!uniqueMatieres.some(m => m.id === aff.matiere.id)) {
-            uniqueMatieres.push(aff.matiere);
-          }
-          if (!uniqueAnneesScolaires.some(a => a.id === aff.anneeScolaire.id)) {
-            uniqueAnneesScolaires.push(aff.anneeScolaire);
-          }
-        });
-
-        setClasses(uniqueClasses);
-        setMatieres(uniqueMatieres);
-        setAnneesScolaires(uniqueAnneesScolaires); // Peupler les années scolaires depuis les affectations
-        console.log('Unique Classes:', uniqueClasses); // DEBOGAGE 3
-        console.log('Unique Matieres:', uniqueMatieres); // DEBOGAGE 4
-        console.log('Unique Annees Scolaires (from Affectations):', uniqueAnneesScolaires); // DEBOGAGE 5
+        console.log('Affectations traitées pour le state:', processed);
+        console.log('Toutes les classes:', rawAllClasses);
+        console.log('Toutes les années scolaires:', rawAnnees);
+        console.log('Tous les utilisateurs (élèves et profs):', rawUtilisateurs);
+        console.log('Toutes les matières:', uniqueMatieres);
 
       } catch (error) {
         console.error('Erreur globale lors du chargement des données initiales:', error);
@@ -197,62 +207,112 @@ export function GradeInput() {
       }
     };
 
-    fetchInitialData();
-  }, [user, toast]); // Dépend de user et toast
+    fetchAllBaseData();
+  }, [toast]); // Dependencies: toast (from use-toast hook)
 
-  // --- useEffect 2: Déterminer la matière courante basée sur les sélections ---
+  // --- FILTRES CASCADANTS ET MISE À JOUR DU FORMULAIRE ---
+
+  // 1. Filtrer les classes disponibles en fonction de l'année scolaire sélectionnée
+  const classesForSelectedAnnee = useMemo(() => {
+    if (selectedAnneeId === null) {
+      return [];
+    }
+    const uniqueClassIds = new Set(
+      processedAffectations
+        .filter(aff => aff.anneeScolaireId === selectedAnneeId)
+        .map(aff => aff.classeId)
+    );
+    return allClasses.filter(cls => uniqueClassIds.has(cls.id));
+  }, [selectedAnneeId, processedAffectations, allClasses]);
+
+  // 2. Filtrer les professeurs disponibles en fonction de la classe et de l'année scolaire sélectionnées
+  const professeursForSelectedClassAndAnnee = useMemo(() => {
+    if (selectedAnneeId === null || selectedClassId === null) {
+      return [];
+    }
+    const uniqueProfIds = new Set(
+      processedAffectations
+        .filter(aff => aff.anneeScolaireId === selectedAnneeId && aff.classeId === selectedClassId)
+        .map(aff => aff.professeurId)
+    );
+    // Filtrer les profs de allUsers qui correspondent aux IDs trouvés
+    // Ensure the user role is 'professeur'
+    return allUsers.filter(user => uniqueProfIds.has(user.id) && user.role === 'professeur');
+  }, [selectedAnneeId, selectedClassId, processedAffectations, allUsers]); // <--- Utilise allUsers pour filtrer les profs
+
+  // 3. Déterminer automatiquement la matière en fonction de l'année, de la classe et du professeur sélectionnés
   useEffect(() => {
-    console.log('--- Debug: Selected values changed for currentMatiere ---'); // DEBOGAGE 6
-    console.log('selectedClassId:', selectedClassId);
+    console.log('--- Debug: Détermination de la matière courante ---');
     console.log('selectedAnneeId:', selectedAnneeId);
-    console.log('Current Affectations in state:', affectations); // DEBOGAGE 7
+    console.log('selectedClassId:', selectedClassId);
+    console.log('selectedProfesseurId:', selectedProfesseurId);
 
-    if (selectedClassId === null || selectedAnneeId === null) {
+    if (selectedAnneeId === null || selectedClassId === null || selectedProfesseurId === null) {
       setCurrentMatiere(null);
+      setEleves([]); // Reset students when criteria change
+      setNotes([]);   // Reset notes
       return;
     }
 
-    const foundAffectation = affectations.find(
-      aff => aff.classeId === selectedClassId && aff.anneeScolaireId === selectedAnneeId
+    const foundAffectation = processedAffectations.find(
+      aff =>
+        aff.anneeScolaireId === selectedAnneeId &&
+        aff.classeId === selectedClassId &&
+        aff.professeurId === selectedProfesseurId
     );
 
-    console.log('Found Affectation for current selections:', foundAffectation); // DEBOGAGE 8
+    console.log('Affectation trouvée pour les sélections actuelles:', foundAffectation);
 
     if (foundAffectation) {
-      setCurrentMatiere(foundAffectation.matiere);
-      // Optionnel: Réinitialiser les élèves si une nouvelle affectation est trouvée
-      setEleves([]);
-      setNotes([]);
+      const matiereDetails = allMatieres.find(m => m.id === foundAffectation.matiereId);
+      if (matiereDetails) {
+        setCurrentMatiere(matiereDetails);
+      } else {
+        console.warn('Détails de la matière introuvables pour l\'ID:', foundAffectation.matiereId);
+        setCurrentMatiere(null);
+      }
     } else {
       setCurrentMatiere(null);
-      setEleves([]); // Clear students if no matching affectation
-      setNotes([]);
-
-      // Afficher le toast uniquement si les sélections ont été faites et que le tableau `affectations` n'est pas vide,
-      // évitant ainsi le message au chargement initial ou quand rien n'est sélectionné.
-      if (selectedClassId !== null && selectedAnneeId !== null && affectations.length > 0) {
+      // Only show toast if affectations data has been loaded and no match is found
+      if (processedAffectations.length > 0) {
         toast({
           title: 'Aucune affectation trouvée',
-          description: 'Vous n\'êtes pas affecté à une matière pour cette classe et année scolaire.',
-          variant: 'default' // Utilisez 'default' ou 'info' pour un message moins intrusif
+          description: 'La combinaison Année, Classe et Professeur sélectionnée n\'est pas affectée à une matière.',
+          variant: 'default',
         });
       }
     }
-  }, [selectedClassId, selectedAnneeId, affectations]); // Dépend de `affectations`
+    setEleves([]); // Always clear students and notes when these selections change
+    setNotes([]);
+  }, [selectedAnneeId, selectedClassId, selectedProfesseurId, processedAffectations, allMatieres, toast]);
 
-  // --- useEffect 3: Chargement des élèves basé sur la classe et l'année sélectionnées ---
+  // --- Réinitialisation des sélections dépendantes ---
   useEffect(() => {
-    // Ne charger les élèves que si la classe et l'année sont sélectionnées, et que les données initiales sont chargées
-    if (selectedClassId === null || selectedAnneeId === null || loadingInitialData) {
+    setSelectedClassId(null);
+    setSelectedProfesseurId(null);
+  }, [selectedAnneeId]);
+
+  useEffect(() => {
+    setSelectedProfesseurId(null);
+  }, [selectedClassId]);
+
+
+  // --- CHARGEMENT DES ÉLÈVES (basé sur la classe et l'année sélectionnées) ---
+  useEffect(() => {
+    if (selectedClassId === null || selectedAnneeId === null) {
       setEleves([]);
       setNotes([]);
       return;
     }
 
     setLoadingEleves(true);
-    fetch(
-      `http://localhost:3000/api/inscriptions?classeId=${selectedClassId}&anneeScolaireId=${selectedAnneeId}`
-    )
+    console.log(`Chargement des élèves pour Classe ID: ${selectedClassId}, Année Scolaire ID: ${selectedAnneeId}`);
+
+    // Adjust the API call to potentially include relations if not already handled by default backend behavior
+    // If your backend handles the 'include' automatically based on your service logic,
+    // then the current URL is fine. If not, you might need something like:
+    // `http://localhost:3000/api/inscriptions?classeId=${selectedClassId}&anneeScolaireId=${selectedAnneeId}&include=utilisateur`
+    fetch(`http://localhost:3000/api/inscriptions?classeId=${selectedClassId}&anneeScolaireId=${selectedAnneeId}`)
       .then(res => {
         if (!res.ok) {
           console.error('Erreur HTTP lors du chargement des inscriptions:', res.status, res.statusText);
@@ -261,45 +321,88 @@ export function GradeInput() {
         return res.json();
       })
       .then((data: InscriptionApiResponse[]) => {
-        console.log('API Response (inscriptions):', data); // DEBOGAGE 9
-        const fetchedEleves: Eleve[] = data.map(inscription => ({
-          id: inscription.utilisateur.id,
-          nom: inscription.utilisateur.nom,
-          prenom: inscription.utilisateur.prenom, // Assurez-vous que le prénom est là
-        }));
+        console.log('Réponse API (inscriptions):', data);
+        if (!Array.isArray(data)) {
+          console.error('La réponse API pour les inscriptions n\'est pas un tableau:', data);
+          throw new Error('Format de données invalide reçu pour les inscriptions.');
+        }
+
+        const fetchedEleves: Eleve[] = data.map(inscription => {
+          // CORRECTION CLÉ ICI : Accès aux détails de l'utilisateur via l'objet imbriqué 'utilisateur'
+          // et s'assurer que le rôle est 'eleve'
+          if (!inscription.utilisateur || inscription.utilisateur.role !== 'eleve') {
+            console.warn(`Inscription ignorée: utilisateur manquant ou rôle non 'eleve' pour l'ID d'inscription ${inscription.id}. Utilisateur trouvé:`, inscription.utilisateur);
+            return null; // Return null for invalid entries
+          }
+          return {
+            id: inscription.utilisateur.id, // Correct : accédez via .utilisateur.id
+            nom: inscription.utilisateur.nom,
+            prenom: inscription.utilisateur.prenom,
+          };
+        }).filter(Boolean) as Eleve[]; // Filter out any null entries from the map
 
         setEleves(fetchedEleves);
         setNotes(fetchedEleves.map(e => ({ eleveId: e.id, nom: e.nom, prenom: e.prenom, note: '' })));
+        console.log('Élèves chargés:', fetchedEleves);
+        console.log('État initial des notes créé:', fetchedEleves.map(e => ({ eleveId: e.id, nom: e.nom, prenom: e.prenom, note: '' })));
+
+
+        if (fetchedEleves.length === 0) {
+          toast({
+            title: 'Aucun élève trouvé',
+            description: 'Aucun élève n\'est actuellement inscrit pour la classe et l\'année scolaire sélectionnées ou les données utilisateur sont incorrectes.',
+            variant: 'default',
+          });
+        }
       })
-      .catch((error) => {
+      .catch(error => {
         console.error("Échec du chargement des élèves:", error);
         toast({
           title: 'Erreur',
-          description: 'Impossible de charger les élèves pour la sélection actuelle.',
+          description: error instanceof Error ? error.message : 'Impossible de charger les élèves pour la sélection actuelle.',
           variant: 'destructive'
         });
-        setEleves([]); // Effacer les élèves en cas d'erreur
+        setEleves([]); // Ensure states are cleared on error
         setNotes([]);
       })
       .finally(() => {
         setLoadingEleves(false);
       });
-  }, [selectedClassId, selectedAnneeId, loadingInitialData]); // Dépend de ces 3 variables
+  }, [selectedClassId, selectedAnneeId, toast]); // Removed `allUsers` from dependencies here.
 
-  const handleNoteChange = (eleveId: number, note: string) => {
-    setNotes(prev => prev.map(n => (n.eleveId === eleveId ? { ...n, note } : n)));
-  };
+  // --- Gestion du changement de note ---
+  const handleNoteChange = useCallback((eleveId: number, note: string) => {
+    // Allow empty string for initial input, then validate numeric range
+    if (note === '') {
+      setNotes(prev => prev.map(n => (n.eleveId === eleveId ? { ...n, note: '' } : n)));
+      return;
+    }
 
-  const saveNotes = () => {
-    // Vérification complète avant l'enregistrement
+    const numericNote = parseFloat(note);
+    // Validate number and range
+    if (isNaN(numericNote) || numericNote < 0 || numericNote > 20) {
+      // If invalid, keep the user's input as is, but don't allow saving yet.
+      // Or you could revert to previous valid note or an empty string.
+      // For now, keeping the raw invalid input to let the user correct.
+      setNotes(prev => prev.map(n => (n.eleveId === eleveId ? { ...n, note: note } : n)));
+    } else {
+      setNotes(prev => prev.map(n => (n.eleveId === eleveId ? { ...n, note: numericNote.toString() } : n)));
+    }
+  }, []);
+
+
+  // --- Fonction d'enregistrement des notes ---
+  const saveNotes = useCallback(async () => {
+    // Check for general form completeness and any empty notes
     if (
-      selectedClassId === null ||
-      selectedEvalTypeId === null ||
       selectedAnneeId === null ||
+      selectedClassId === null ||
+      selectedProfesseurId === null ||
+      selectedEvalTypeId === null ||
       !date ||
       currentMatiere === null ||
-      notes.length === 0 || // S'assurer qu'il y a des notes à enregistrer
-      notes.some(n => n.note === '') // S'assurer que toutes les notes sont remplies
+      notes.length === 0 || // No students loaded means nothing to save
+      notes.some(n => n.note === '') // At least one note is empty
     ) {
       toast({
         title: 'Champ(s) manquant(s) ou incomplet(s)',
@@ -309,49 +412,113 @@ export function GradeInput() {
       return;
     }
 
-    const payload = {
-      classeId: selectedClassId,
-      matiereId: currentMatiere.id,
-      evaluationTypeId: selectedEvalTypeId,
-      anneeScolaireId: selectedAnneeId,
-      date,
-      notes: notes.map(n => ({ eleveId: n.eleveId, note: n.note })),
-    };
+    // Specific validation for note values
+    const invalidNotes = notes.filter(n => {
+      const numericNote = parseFloat(n.note);
+      return isNaN(numericNote) || numericNote < 0 || numericNote > 20;
+    });
 
-    fetch('http://localhost:3000/api/notes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-      .then(res => {
-        if (!res.ok) {
-          console.error('Server error during save:', res.status, res.statusText);
-          throw new Error('Erreur serveur lors de la sauvegarde des notes.');
-        }
-        toast({
-          title: 'Succès',
-          description: 'Notes enregistrées avec succès !',
-          variant: 'default'
-        });
-        // Optionnel: Réinitialiser le formulaire ou certaines valeurs après enregistrement
-        // setNotes(notes.map(n => ({ ...n, note: '' })));
-      })
-      .catch((error) => {
-        console.error("Save notes error:", error);
-        toast({
-          title: 'Échec de l\'enregistrement',
-          description: 'Une erreur est survenue lors de la sauvegarde des notes. Veuillez réessayer.',
-          variant: 'destructive'
-        });
+    if (invalidNotes.length > 0) {
+      toast({
+        title: 'Note(s) invalide(s)',
+        description: 'Veuillez vous assurer que toutes les notes sont des nombres valides entre 0 et 20.',
+        variant: 'destructive'
       });
-  };
+      return;
+    }
 
-  const isFormComplete =
-    selectedClassId !== null &&
-    selectedEvalTypeId !== null &&
-    selectedAnneeId !== null &&
-    date !== '' &&
-    currentMatiere !== null;
+    setIsSaving(true);
+    try {
+      // 1. Déterminer le trimestre
+      const trimestreRes = await fetch(`http://localhost:3000/api/trimestre/by-date?date=${date}&anneeId=${selectedAnneeId}`);
+      if (!trimestreRes.ok) {
+        const errorText = await trimestreRes.text();
+        throw new Error(`Impossible de déterminer le trimestre: ${trimestreRes.status} - ${errorText}`);
+      }
+      const trimestreData = await trimestreRes.json();
+      const trimestreId = trimestreData?.id;
+
+      if (!trimestreId) {
+        throw new Error("Trimestre introuvable pour cette date et année scolaire. Veuillez vérifier les trimestres configurés.");
+      }
+
+      // 2. Créer l'évaluation
+      const evalRes = await fetch('http://localhost:3000/api/evaluation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          matiere_id: currentMatiere.id,
+          classe_id: selectedClassId,
+          professeur_id: selectedProfesseurId,
+          type: selectedEvalTypeId,
+          date_eval: date,
+          trimestre_id: trimestreId,
+          annee_scolaire_id: selectedAnneeId
+        })
+      });
+
+      if (!evalRes.ok) {
+        const errorText = await evalRes.text();
+        throw new Error(`Erreur lors de la création de l'évaluation: ${evalRes.status} - ${errorText}`);
+      }
+      const evalData = await evalRes.json();
+      const evaluationId = evalData?.id;
+
+      if (!evaluationId) throw new Error("L'ID de l'évaluation n'a pas été retourné par l'API.");
+
+      // 3. Enregistrer les notes
+      const notesToSave = notes.map(n => ({
+        evaluation_id: evaluationId,
+        etudiant_id: n.eleveId,
+        note: parseFloat(n.note), // Ensure note is a number
+      }));
+
+      const noteRes = await fetch('http://localhost:3000/api/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(notesToSave)
+      });
+
+      if (!noteRes.ok) {
+        const errorText = await noteRes.text();
+        throw new Error(`Erreur lors de l'enregistrement des notes: ${noteRes.status} - ${errorText}`);
+      }
+
+      toast({
+        title: 'Succès',
+        description: 'Évaluation et notes enregistrées avec succès !',
+        variant: 'default'
+      });
+
+      // Reset form after successful save (optional, depends on UX)
+      setSelectedEvalTypeId(null);
+      setDate('');
+      // Clear notes but keep student list if user wants to enter another evaluation for the same class/year
+      setNotes(prev => prev.map(n => ({ ...n, note: '' })));
+
+    } catch (error: any) {
+      console.error("Erreur lors de l'enregistrement :", error);
+      toast({
+        title: 'Erreur',
+        description: error.message || 'Une erreur inconnue est survenue lors de l\'enregistrement.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [selectedAnneeId, selectedClassId, selectedProfesseurId, selectedEvalTypeId, date, currentMatiere, notes, toast]);
+
+  // Determines if the "Saisie des Notes" section should be visible
+  const isFormComplete = useMemo(() => {
+    return (
+      selectedAnneeId !== null &&
+      selectedClassId !== null &&
+      selectedProfesseurId !== null &&
+      selectedEvalTypeId !== null &&
+      date !== '' &&
+      currentMatiere !== null
+    );
+  }, [selectedAnneeId, selectedClassId, selectedProfesseurId, selectedEvalTypeId, date, currentMatiere]);
 
   if (loadingInitialData) {
     return (
@@ -367,114 +534,160 @@ export function GradeInput() {
       <div className="space-y-10">
         <h1 className="text-2xl font-bold mb-6">Portail de Saisie des Notes</h1>
 
-        {/* Section Informations de l'Évaluation - Version améliorée */}
-<Card className="w-full border border-blue-100 shadow-lg rounded-xl overflow-hidden">
-  <CardHeader className="bg-blue-600 text-white p-6">
-    <div className="flex items-center space-x-3">
-      <ClipboardList className="h-6 w-6" />
-      <CardTitle className="text-xl font-semibold">Critères de l'Évaluation</CardTitle>
-    </div>
-  </CardHeader>
-  <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-    {/* Champs de sélection avec icônes */}
-    {[
-      { 
-        label: 'Classe', 
-        icon: <School className="h-4 w-4 mr-2 text-blue-600" />,
-        value: selectedClassId, 
-        onChange: setSelectedClassId, 
-        items: classes, 
-        placeholder: 'Sélectionner une classe' 
-      },
-      { 
-        label: 'Année scolaire', 
-        icon: <CalendarDays className="h-4 w-4 mr-2 text-blue-600" />,
-        value: selectedAnneeId, 
-        onChange: setSelectedAnneeId, 
-        items: anneesScolaires, 
-        placeholder: 'Sélectionner une année' 
-      },
-      { 
-        label: 'Type d\'évaluation', 
-        icon: <Bookmark className="h-4 w-4 mr-2 text-blue-600" />,
-        value: selectedEvalTypeId, 
-        onChange: setSelectedEvalTypeId, 
-        items: evaluationTypes, 
-        placeholder: 'Sélectionner un type' 
-      },
-    ].map((field, index) => (
-      <div key={index} className="space-y-2">
-        <label className="text-sm font-medium text-gray-700 flex items-center">
-          {field.icon}
-          {field.label}
-        </label>
-        <Select
-          onValueChange={val => {
-            const numVal = val ? Number(val) : null;
-            field.onChange(numVal);
-          }}
-          value={field.value !== null ? String(field.value) : ''}
-          disabled={field.items.length === 0 && field.label !== 'Type d\'évaluation'}
-        >
-          <SelectTrigger className="w-full border-blue-200 focus:ring-blue-500">
-            <SelectValue placeholder={field.placeholder} />
-          </SelectTrigger>
-          <SelectContent>
-            {field.items.length > 0 ? (
-              field.items.map(item => (
-                <SelectItem key={item.id} value={String(item.id)}>
-                  {item.nom || item.libelle}
-                </SelectItem>
-              ))
-            ) : (
-              <SelectItem value="disabled" disabled>
-                Aucun(e) {field.label.toLowerCase()} disponible
-              </SelectItem>
-            )}
-          </SelectContent>
-        </Select>
-      </div>
-    ))}
+        <Card className="w-full border border-blue-100 shadow-lg rounded-xl overflow-hidden">
+          <CardHeader className="bg-blue-600 text-white p-6">
+            <div className="flex items-center space-x-3">
+              <ClipboardList className="h-6 w-6" />
+              <CardTitle className="text-xl font-semibold">Critères de l'Évaluation</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 flex items-center">
+                <CalendarDays className="h-4 w-4 mr-2 text-blue-600" />
+                Année scolaire
+              </label>
+              <Select
+                onValueChange={val => setSelectedAnneeId(val ? Number(val) : null)}
+                value={selectedAnneeId !== null ? String(selectedAnneeId) : ''}
+                disabled={anneesScolaires.length === 0}
+              >
+                <SelectTrigger className="w-full border-blue-200 focus:ring-blue-500">
+                  <SelectValue placeholder="Sélectionner une année" />
+                </SelectTrigger>
+                <SelectContent>
+                  {anneesScolaires.length > 0 ? (
+                    anneesScolaires.map(annee => (
+                      <SelectItem key={annee.id} value={String(annee.id)}>
+                        {annee.libelle}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="disabled" disabled>
+                      Aucune année disponible
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
 
-    {/* Affichage de la matière avec état */}
-    <div className="space-y-2">
-      <label className="text-sm font-medium text-gray-700 flex items-center">
-        <BookOpen className="h-4 w-4 mr-2 text-blue-600" />
-        Matière
-      </label>
-      <div className={`flex items-center h-10 px-3 py-2 rounded-md border ${currentMatiere ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
-        {currentMatiere ? (
-          <>
-            <BookOpen className="h-4 w-4 mr-2 text-blue-600" />
-            <span className="font-medium">{currentMatiere.nom}</span>
-          </>
-        ) : (
-          'Aucune matière trouvée'
-        )}
-      </div>
-      {!currentMatiere && selectedClassId !== null && selectedAnneeId !== null && (
-        <p className="text-xs text-red-500 mt-1">
-          Combinaison classe/année non affectée à une matière
-        </p>
-      )}
-    </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 flex items-center">
+                <School className="h-4 w-4 mr-2 text-blue-600" />
+                Classe
+              </label>
+              <Select
+                onValueChange={val => setSelectedClassId(val ? Number(val) : null)}
+                value={selectedClassId !== null ? String(selectedClassId) : ''}
+                disabled={selectedAnneeId === null || classesForSelectedAnnee.length === 0}
+              >
+                <SelectTrigger className="w-full border-blue-200 focus:ring-blue-500">
+                  <SelectValue placeholder="Sélectionner une classe" />
+                </SelectTrigger>
+                <SelectContent>
+                  {classesForSelectedAnnee.length > 0 ? (
+                    classesForSelectedAnnee.map(classe => (
+                      <SelectItem key={classe.id} value={String(classe.id)}>
+                        {classe.nom}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="disabled" disabled>
+                      {selectedAnneeId === null ? "Sélectionnez une année d'abord" : "Aucune classe disponible pour cette année"}
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
 
-    {/* Champ Date amélioré */}
-    <div className="space-y-2">
-      <label htmlFor="date-input" className="text-sm font-medium text-gray-700 flex items-center">
-        <CalendarDays className="h-4 w-4 mr-2 text-blue-600" />
-        Date de l'évaluation
-      </label>
-      <Input
-        id="date-input"
-        type="date"
-        value={date}
-        onChange={e => setDate(e.target.value)}
-        className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
-      />
-    </div>
-  </CardContent>
-</Card>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 flex items-center">
+                <User className="h-4 w-4 mr-2 text-blue-600" />
+                Professeur
+              </label>
+              <Select
+                onValueChange={val => setSelectedProfesseurId(val ? Number(val) : null)}
+                value={selectedProfesseurId !== null ? String(selectedProfesseurId) : ''}
+                disabled={selectedClassId === null || professeursForSelectedClassAndAnnee.length === 0}
+              >
+                <SelectTrigger className="w-full border-blue-200 focus:ring-blue-500">
+                  <SelectValue placeholder="Sélectionner un professeur" />
+                </SelectTrigger>
+                <SelectContent>
+                  {professeursForSelectedClassAndAnnee.length > 0 ? (
+                    professeursForSelectedClassAndAnnee.map(prof => (
+                      <SelectItem key={prof.id} value={String(prof.id)}>
+                        {prof.nom} {prof.prenom}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="disabled" disabled>
+                      {selectedClassId === null ? "Sélectionnez une classe d'abord" : "Aucun professeur disponible pour cette classe/année"}
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 flex items-center">
+                <Bookmark className="h-4 w-4 mr-2 text-blue-600" />
+                Type d'évaluation
+              </label>
+              <Select
+                onValueChange={val => setSelectedEvalTypeId(val ? Number(val) : null)}
+                value={selectedEvalTypeId !== null ? String(selectedEvalTypeId) : ''}
+              >
+                <SelectTrigger className="w-full border-blue-200 focus:ring-blue-500">
+                  <SelectValue placeholder="Sélectionner un type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {evaluationTypes.map(type => (
+                    <SelectItem key={type.id} value={String(type.id)}>
+                      {type.nom}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 flex items-center">
+                <BookOpen className="h-4 w-4 mr-2 text-blue-600" />
+                Matière
+              </label>
+              <div className={`flex items-center h-10 px-3 py-2 rounded-md border ${currentMatiere ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
+                {currentMatiere ? (
+                  <>
+                    <BookOpen className="h-4 w-4 mr-2 text-blue-600" />
+                    <span className="font-medium">{currentMatiere.nom}</span>
+                  </>
+                ) : (
+                  <span className="text-gray-500">Aucune matière trouvée</span>
+                )}
+              </div>
+              {!currentMatiere && selectedAnneeId !== null && selectedClassId !== null && selectedProfesseurId !== null && (
+                <p className="text-xs text-red-500 mt-1">
+                  Cette combinaison (Année, Classe, Professeur) n'est pas affectée à une matière.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="date-input" className="text-sm font-medium text-gray-700 flex items-center">
+                <CalendarDays className="h-4 w-4 mr-2 text-blue-600" />
+                Date de l'évaluation
+              </label>
+              <Input
+                id="date-input"
+                type="date"
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
+              />
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Section Saisie des Notes */}
         {isFormComplete ? (
@@ -484,10 +697,9 @@ export function GradeInput() {
                 <Users className="mr-3 h-6 w-6 text-blue-500" />
                 Saisie des Notes:
                 <span className="ml-2">
-                  {classes.find(c => c.id === selectedClassId)?.nom} - {currentMatiere?.nom}
+                  {allClasses.find(c => c.id === selectedClassId)?.nom || 'Chargement...'} - {currentMatiere?.nom || 'Chargement...'}
                 </span>
               </CardTitle>
-              
             </CardHeader>
             <CardContent className="p-6">
               {loadingEleves ? (
@@ -504,7 +716,7 @@ export function GradeInput() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {notes.length === 0 ? (
+                    {notes.length === 0 && !loadingEleves ? (
                       <TableRow>
                         <TableCell colSpan={2} className="text-center py-8 text-gray-500 text-lg font-medium">
                           Aucun élève inscrit pour la sélection actuelle.
@@ -536,11 +748,20 @@ export function GradeInput() {
             <CardContent className="flex justify-end p-6 pt-0">
               <Button
                 onClick={saveNotes}
-                disabled={!isFormComplete || loadingEleves || notes.some(n => n.note === '')}
+                disabled={!isFormComplete || loadingEleves || isSaving || notes.some(n => n.note === '') || notes.length === 0} // Added notes.length === 0 check
                 className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-md transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center gap-2 text-lg"
               >
-                <Save size={20} />
-                Enregistrer les Notes
+                {isSaving ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin" />
+                    Enregistrement...
+                  </>
+                ) : (
+                  <>
+                    <Save size={20} />
+                    Enregistrer les Notes
+                  </>
+                )}
               </Button>
             </CardContent>
           </Card>
@@ -550,9 +771,8 @@ export function GradeInput() {
               Commencez par choisir les critères de l'évaluation !
             </p>
             <p className="text-lg text-gray-600">
-              Sélectionnez une <strong>Classe</strong>, l'<strong>Année scolaire</strong>, le <strong>Type d'évaluation</strong> et la <strong>Date</strong> pour afficher la liste des élèves et commencer la saisie des notes.
+              Sélectionnez une **Année scolaire**, une **Classe**, un **Professeur**, le **Type d'évaluation** et la **Date** pour afficher la liste des élèves et la matière correspondante.
             </p>
-
             <CalendarDays className="mt-6 h-16 w-16 text-blue-400 mx-auto" />
           </div>
         )}

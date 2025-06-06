@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -21,6 +21,11 @@ export default function SchoolManagement() {
   const [openAnnee, setOpenAnnee] = useState<string | null>(null);
   const [loadingTrimestres, setLoadingTrimestres] = useState(false);
   const [coeffData, setCoeffData] = useState<{ [matiereId: string]: number }>({});
+  const [anneeScolaireId, setAnneeScolaireId] = useState(''); // ✅ PAS null
+  const [anneeScolaireFiltre, setAnneeScolaireFiltre] = useState(""); // ou null
+  const [anneeSelectionnee, setAnneeSelectionnee] = useState<string | null>(null);
+
+
   // States pour les formulaires
   const [classeNom, setClasseNom] = useState("");
   const [classeNiveau, setClasseNiveau] = useState("Primaire");
@@ -39,7 +44,7 @@ export default function SchoolManagement() {
 const [anneeLibelle, setAnneeLibelle] = useState("");
 const [anneeDebut, setAnneeDebut] = useState("");
 const [anneeFin, setAnneeFin] = useState(""); // <-- Correction : Déclaré comme un état
-const [anneeScolaireId, setAnneeScolaireId] = useState(null);
+
 
 
 // Étape 2
@@ -70,13 +75,22 @@ const [trimestres, setTrimestres] = useState<{
 const [successMsg, setSuccessMsg] = useState("");
 
   // Données récupérées depuis l'API
-  const [classes, setClasses] = useState<{ id: string, nom: string }[]>([]);
+  const [classes, setClasses] = useState<
+  { id: string; nom: string; annee_scolaire_id: string }[]
+>([]);
+
   const [matieres, setMatieres] = useState<{ id: string, nom: string }[]>([]);
   const [annees, setAnnees] = useState<{
+    nom: ReactNode;
     date_fin: string;
     date_debut: string; id: string, libelle: string
 }[]>([]);
   const [profs, setProfs] = useState<{ id: string, nom: string, prenom: string }[]>([]);
+  
+
+
+
+
 
 // Définir refreshCoefficients ici pour qu'il soit accessible partout dans le composant
 const refreshCoefficients = () => {
@@ -86,28 +100,58 @@ const refreshCoefficients = () => {
 };
 
 useEffect(() => {
-  fetch("http://localhost:3000/api/classes")
-    .then(res => res.json())
-    .then(data => setClasses(data));
-  fetch("http://localhost:3000/api/matieres")
-    .then(res => res.json())
-    .then(data => setMatieres(data));
-  fetch("http://localhost:3000/api/annees-academiques")
-    .then(res => res.json())
-    .then(data => setAnnees(data));
-  fetch("http://localhost:3000/api/users")
-    .then(res => res.json())
-    .then(data => setProfs(data.filter((u: any) => u.role === "professeur")));
-  fetch("http://localhost:3000/api/trimestres")
-      .then(res => res.json())
-      .then(data => setTrimestres(data))
-      .catch(error => console.error("Error fetching trimestres:", error)); // Ajout d'une gestion d'erreur simple
-  // AJOUTE CETTE LIGNE :
-  fetch("http://localhost:3000/api/affectations")
-    .then(res => res.json())
-    .then(data => setAffectations(data));
-  refreshCoefficients(); // Charger les coefficients au montage
+  const fetchData = async () => {
+    try {
+      let res, data;
+
+      res = await fetch("http://localhost:3000/api/classes");
+      if (!res.ok) throw new Error("Erreur classes : " + res.status);
+      data = await res.json();
+      setClasses(data);
+
+      res = await fetch("http://localhost:3000/api/matieres");
+      if (!res.ok) throw new Error("Erreur matieres : " + res.status);
+      data = await res.json();
+      setMatieres(data);
+
+      res = await fetch("http://localhost:3000/api/annees-academiques");
+      if (!res.ok) throw new Error("Erreur annees : " + res.status);
+      data = await res.json();
+      setAnnees(data);
+
+      res = await fetch("http://localhost:3000/api/users");
+      if (!res.ok) throw new Error("Erreur users : " + res.status);
+      data = await res.json();
+      setProfs(data.filter(u => u.role === "professeur"));
+
+      res = await fetch("http://localhost:3000/api/trimestres");
+      if (!res.ok) throw new Error("Erreur trimestres : " + res.status);
+      data = await res.json();
+      setTrimestres(data);
+
+      res = await fetch("http://localhost:3000/api/affectations");
+      if (!res.ok) throw new Error("Erreur affectations : " + res.status);
+      data = await res.json();
+      setAffectations(data);
+
+      // Charger les coefficients
+      refreshCoefficients();
+
+    } catch (error) {
+      console.error("Erreur fetch global :", error);
+      // Tu peux ici setter des états vides ou afficher un message d'erreur global
+    }
+  };
+
+  fetchData();
 }, []);
+useEffect(() => {
+    if (isAddClasseOpen) {
+      setClasseNom("");
+      setClasseNiveau("Primaire");
+      setAnneeScolaireId("");
+    }
+  }, [isAddClasseOpen]);
 
   function sortAnnees(annees) {
   // Trie les années numérotées, puis "4ème année (Brevet)", puis "Terminale", puis "Autre"
@@ -168,6 +212,7 @@ function groupClassesByNiveauAndAnnee(classes: { id: string, nom: string, niveau
   return grouped;
 }
 
+
 function groupCoefficientsByAnnee() {
   // On regroupe par premier chiffre du nom de la classe liée au coefficient
   const grouped = {};
@@ -215,6 +260,15 @@ function getCoefficientsByClasse(classeId) {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 border border-blue-100 dark:border-gray-700 rounded-2xl shadow flex w-full gap-3 p-2">
             <TabsTrigger
+              value="annees"
+              className="flex-1 flex items-center gap-2 px-4 py-2 rounded-xl font-semibold transition
+                text-blue-800 dark:text-blue-100
+                hover:bg-blue-100 dark:hover:bg-gray-800
+                data-[state=active]:bg-blue-500 data-[state=active]:text-white"
+            >
+              <Calendar className="h-5 w-5" /> Années
+            </TabsTrigger>
+            <TabsTrigger
               value="classes"
               className="flex-1 flex items-center gap-2 px-4 py-2 rounded-xl font-semibold transition
                 text-blue-800 dark:text-blue-100
@@ -241,84 +295,137 @@ function getCoefficientsByClasse(classeId) {
             >
               <User className="h-5 w-5" /> Professeurs
             </TabsTrigger>
-            <TabsTrigger
-              value="annees"
-              className="flex-1 flex items-center gap-2 px-4 py-2 rounded-xl font-semibold transition
-                text-blue-800 dark:text-blue-100
-                hover:bg-blue-100 dark:hover:bg-gray-800
-                data-[state=active]:bg-blue-500 data-[state=active]:text-white"
-            >
-              <Calendar className="h-5 w-5" /> Années
-            </TabsTrigger>
+            
           </TabsList>
 
           {/* Onglet Classes */}
           <TabsContent value="classes">
-            <Card className="bg-white/90 dark:bg-gray-900/90 rounded-3xl shadow-xl border-2 border-blue-100 dark:border-blue-900">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-200">
-                  <Users className="h-6 w-6" /> Gestion des classes
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-  <div className="flex justify-between items-center mb-6">
-    <Button
-      className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg hover:scale-105 transition"
-      onClick={() => setIsAddClasseOpen(true)}
-    >
-      <Plus className="h-4 w-4 mr-2" />
-      Ajouter une classe
-    </Button>
-    {successMsg && (
-      <div className="ml-4 px-4 py-2 rounded bg-green-100 text-green-800 text-sm font-semibold shadow">
-        {successMsg}
-      </div>
-    )}
-  </div>
-  <div>
-    {classes.length === 0 ? (
-      <div className="text-gray-500 italic">Aucune classe trouvée.</div>
-    ) : (
-      Object.entries(groupClassesByNiveauAndAnnee(classes)).map(([niveau, annees]) => (
-        <div key={niveau} className="mb-10">
-          <h3 className="text-xl font-bold text-blue-700 mb-4 capitalize flex items-center gap-2">
-            <Users className="h-6 w-6" /> {niveau}
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            {sortAnnees(annees).map(annee => (
-              <div
-  key={annee}
-  className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 border border-blue-200 dark:border-blue-800 rounded-2xl shadow p-4 mb-2
-    transition-all duration-300 ease-out hover:scale-105 hover:shadow-xl"
-  style={{ animation: "fadeIn 0.6s" }}
->
-  <div className="flex items-center gap-2 mb-3">
-    <Calendar className="h-5 w-5 text-indigo-600 dark:text-indigo-300" />
-    <span className="text-base font-semibold text-indigo-700 dark:text-indigo-200">{annee}</span>
-  </div>
-  <ul className="flex flex-wrap gap-3">
-    {annees[annee].map(classe => (
-      <li
-        key={classe.id}
-        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-700 shadow-sm font-semibold text-blue-900 dark:text-blue-100 text-base
-          transition-all duration-300 ease-out hover:bg-blue-100 dark:hover:bg-blue-900 hover:scale-105"
-        style={{ animation: "fadeIn 0.7s" }}
+  <Card className="bg-white/90 dark:bg-gray-900/90 rounded-3xl shadow-xl border-2 border-blue-100 dark:border-blue-900">
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-200">
+        <Users className="h-6 w-6" /> Gestion des classes
+      </CardTitle>
+    </CardHeader>
+
+    {/* Filtre année scolaire */}
+    <div className="mb-6 w-full max-w-xs px-6">
+      <label
+        htmlFor="annee-select"
+        className="block mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300"
       >
-        <span className="inline-block w-2 h-2 rounded-full bg-blue-400 mr-1" />
-        {classe.nom}
-      </li>
-    ))}
-  </ul>
-</div>
-            ))}
-          </div>
+        Filtrer par année scolaire
+      </label>
+      <div className="relative">
+        <select
+          id="annee-select"
+          value={anneeScolaireFiltre}
+          onChange={(e) => setAnneeScolaireFiltre(e.target.value)}
+          className="block w-full appearance-none rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 pr-10 text-gray-800 dark:text-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-400"
+        >
+          <option value="">Toutes les années</option>
+          {annees.map((a) => (
+            <option key={a.id} value={String(a.id)}>
+              {a.libelle}
+            </option>
+          ))}
+        </select>
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 dark:text-gray-400">
+          <Calendar className="h-5 w-5" />
         </div>
-      ))
-    )}
-  </div>
-</CardContent>
-            </Card>
-          </TabsContent>
+      </div>
+    </div>
+
+    <CardContent>
+      {/* Bouton Ajouter + message succès */}
+      <div className="flex justify-between items-center mb-6 px-6">
+        <Button
+          className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg hover:scale-105 transition-transform duration-300"
+          onClick={() => setIsAddClasseOpen(true)}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Ajouter une classe
+        </Button>
+        {successMsg && (
+          <div className="ml-4 px-4 py-2 rounded bg-green-100 text-green-800 text-sm font-semibold shadow">
+            {successMsg}
+          </div>
+        )}
+      </div>
+
+      <div className="px-6">
+        {/* Si aucune année sélectionnée */}
+        {!anneeScolaireFiltre ? (
+          <p className="text-center text-gray-500 dark:text-gray-400 py-10 italic font-semibold">
+            Veuillez sélectionner une année scolaire pour voir les classes.
+          </p>
+        ) : classes.length === 0 ? (
+          <div className="text-gray-500 italic text-center py-10">
+            Aucune classe trouvée.
+          </div>
+        ) : (
+          (() => {
+            const classesFiltrees = classes.filter(
+              (c) => String(c.annee_scolaire_id) === anneeScolaireFiltre
+            );
+
+            if (classesFiltrees.length === 0) {
+              return (
+                <div className="text-red-500 font-semibold text-center py-6">
+                  Aucune classe pour cette année scolaire.
+                </div>
+              );
+            }
+
+            const grouped = groupClassesByNiveauAndAnnee(classesFiltrees);
+
+            const sortedAnneesKeys = (anneesObj) =>
+              Object.keys(anneesObj).sort();
+
+            return Object.entries(grouped).map(([niveau, annees]) => (
+              <div key={niveau} className="mb-10">
+                <h3 className="text-xl font-bold text-blue-700 mb-4 capitalize flex items-center gap-2">
+                  <Users className="h-6 w-6" /> {niveau}
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  {sortedAnneesKeys(annees).map((annee) => (
+                    <div
+                      key={annee}
+                      className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 border border-blue-200 dark:border-blue-800 rounded-2xl shadow p-4
+                        transition-transform duration-300 ease-out hover:scale-105 hover:shadow-xl"
+                    >
+                      <div className="flex items-center gap-2 mb-3">
+                        <Calendar className="h-5 w-5 text-indigo-600 dark:text-indigo-300" />
+                        <span className="text-base font-semibold text-indigo-700 dark:text-indigo-200">
+                          {annee}
+                        </span>
+                      </div>
+
+                      <ul className="flex flex-wrap gap-3">
+                        {annees[annee].map((classe) => (
+                          <li
+                            key={classe.id}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-700 shadow-sm font-semibold text-blue-900 dark:text-blue-100 text-base
+                              transition-colors duration-300 ease-out hover:bg-blue-100 dark:hover:bg-blue-900 hover:scale-105"
+                          >
+                            <span className="inline-block w-2 h-2 rounded-full bg-blue-400 mr-1" />
+                            {classe.nom}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ));
+          })()
+        )}
+      </div>
+    </CardContent>
+  </Card>
+</TabsContent>
+
+
 
           {/* Onglet Coefficients */}
           <TabsContent value="coefficients">
@@ -718,7 +825,6 @@ return matieresUniques.map(c => (
       <Dialog open={isAddClasseOpen} onOpenChange={setIsAddClasseOpen}>
   <DialogContent className="rounded-2xl shadow-2xl border-2 border-blue-300 dark:border-blue-900 w-full max-w-lg bg-white dark:bg-gray-900">
     <DialogHeader>
-      
       <DialogTitle className="text-center text-2xl font-bold text-gray-800 dark:text-white">
         Nouvelle Classe
       </DialogTitle>
@@ -729,58 +835,53 @@ return matieresUniques.map(c => (
 
     <form
       onSubmit={async (e) => {
-  e.preventDefault();
+        e.preventDefault();
 
-  // Créer la nouvelle classe
-  const res = await fetch("http://localhost:3000/api/classes", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ nom: classeNom, niveau: classeNiveau }),
-  });
-  const newClasse = await res.json();
-
-  // Vérifie que c'est collège ou lycée (avec accents)
-  const isCollegeOuLycee = (niveau) => {
-    return niveau.toLowerCase() === "collège" || niveau.toLowerCase() === "lycée";
-  };
-
-  let message = "Classe ajoutée avec succès !";
-
-  if (isCollegeOuLycee(classeNiveau)) {
-    // Extraire le chiffre du nom de classe (ex: "3AS2" → "3")
-    const prefixChiffre = classeNom.match(/^\d+/)?.[0];
-
-    if (prefixChiffre) {
-      // Chercher une classe existante avec ce même chiffre, différente de la nouvelle
-      const classeReference = classes.find(
-        (cl) => cl.nom.startsWith(prefixChiffre) && cl.nom !== classeNom
-      );
-
-      if (classeReference) {
-        // Copier les coefficients depuis classeReference vers newClasse
-        await fetch("http://localhost:3000/api/coefficientclasse/clone", {
+        // Création de la classe
+        const res = await fetch("http://localhost:3000/api/classes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fromClasseId: classeReference.id, toClasseId: newClasse.id }),
+          body: JSON.stringify({ nom: classeNom, niveau: classeNiveau,anneeScolaireId }),
         });
 
-        message = "Classe ajoutée et coefficients affectés automatiquement.";
-      }
-    }
-  } else {
-    console.log("Pas de coefficients à affecter pour une classe primaire");
-  }
+        const nouvelleClasse = await res.json();
 
-  // Mettre à jour le state
-  setClasses([...classes, newClasse]);
-  setClasseNom("");
-  setClasseNiveau("Primaire");
-  setIsAddClasseOpen(false);
+        // Fonction de vérification du niveau
+        const estCollegeOuLycee = (niveau: string) =>
+          ["collège", "lycée"].includes(niveau.toLowerCase());
 
-  toast.success(message);
-}}
+        let message = "Classe ajoutée avec succès !";
 
+        if (estCollegeOuLycee(classeNiveau)) {
+          const prefixe = classeNom.match(/^\d+/)?.[0];
 
+          if (prefixe) {
+            const classeExistante = classes.find(
+      (c) => c.nom.startsWith(prefixe) && c.nom !== classeNom && c.annee_scolaire_id === anneeScolaireId
+    );
+
+            if (classeExistante) {
+              await fetch("http://localhost:3000/api/coefficientclasse/clone", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  fromClasseId: classeExistante.id,
+                  toClasseId: nouvelleClasse.id,
+                }),
+              });
+
+              message = "Classe ajoutée et coefficients copiés automatiquement.";
+            }
+          }
+        }
+
+        setClasses([...classes, nouvelleClasse]);
+        setClasseNom("");
+        setClasseNiveau("Primaire");
+        setIsAddClasseOpen(false);
+        
+        toast.success(message);
+      }}
       className="space-y-6 mt-4"
     >
       <fieldset className="border border-blue-200 dark:border-blue-800 rounded-xl p-6 space-y-5 bg-gray-50 dark:bg-gray-800/50">
@@ -795,7 +896,7 @@ return matieresUniques.map(c => (
 
         {/* Nom de la classe */}
         <div className="space-y-3">
-          <label htmlFor="classeNom" className="block text-sm font-medium text-gray-700 dark:text-gray-200 flex items-center gap-1">
+          <label htmlFor="classeNom" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
             Nom de la classe <span className="text-red-500">*</span>
           </label>
           <div className="relative">
@@ -803,7 +904,7 @@ return matieresUniques.map(c => (
               id="classeNom"
               value={classeNom}
               onChange={(e) => setClasseNom(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white transition-all duration-200 pl-11"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white pl-11"
               placeholder="Ex: 3AS1, 4ème B, CP2..."
               required
             />
@@ -814,10 +915,32 @@ return matieresUniques.map(c => (
             </div>
           </div>
         </div>
+        
+        {/* Sélection de l’année scolaire */}
+<div className="space-y-3">
+  <label htmlFor="anneeScolaire" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+    Année scolaire <span className="text-red-500">*</span>
+  </label>
+  <select
+    id="anneeScolaire"
+    value={anneeScolaireId}
+    onChange={(e) => setAnneeScolaireId(e.target.value)}
+    required
+    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
+  >
+    <option value="">Sélectionner une année scolaire</option>
+    {annees.map((annee) => (
+      <option key={annee.id} value={annee.id}>
+  {annee.libelle}
+</option>
 
-        {/* Niveau (boutons cliquables) */}
+    ))}
+  </select>
+</div>
+
+        {/* Boutons niveau */}
         <div className="space-y-3">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 flex items-center gap-1">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
             Niveau scolaire <span className="text-red-500">*</span>
           </label>
           <div className="grid grid-cols-3 gap-3">
@@ -826,27 +949,12 @@ return matieresUniques.map(c => (
                 key={niveau}
                 type="button"
                 onClick={() => setClasseNiveau(niveau)}
-                className={`px-4 py-3 rounded-xl font-medium border transition-all duration-200 flex items-center justify-center gap-2 ${
+                className={`px-4 py-3 rounded-xl font-medium border flex items-center justify-center gap-2 transition-all ${
                   classeNiveau === niveau
                     ? "bg-blue-600 text-white border-blue-600 shadow-md"
                     : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-700"
                 }`}
               >
-                {niveau === "Primaire" && (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                )}
-                {niveau === "Collège" && (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                )}
-                {niveau === "Lycée" && (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
-                )}
                 {niveau}
               </button>
             ))}
@@ -858,7 +966,7 @@ return matieresUniques.map(c => (
         <button
           type="button"
           onClick={() => setIsAddClasseOpen(false)}
-          className="px-5 py-2.5 rounded-lg text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white font-medium flex items-center gap-2 transition-colors duration-200"
+          className="px-5 py-2.5 rounded-lg text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white font-medium flex items-center gap-2 transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -867,7 +975,7 @@ return matieresUniques.map(c => (
         </button>
         <Button
           type="submit"
-          className="px-6 py-3 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-bold shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
+          className="px-6 py-3 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-bold shadow-md hover:shadow-lg flex items-center gap-2"
         >
           <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
@@ -1133,75 +1241,82 @@ if (isNaN(classeId)) {
         </select>
       </div>
 
-      {/* Classes */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-          Classes <span className="text-red-500">*</span>
-        </label>
-        <div className="border border-blue-300 dark:border-blue-700 rounded-lg bg-white dark:bg-gray-800 p-2 max-h-48 overflow-y-auto shadow-inner">
-          {classes.map(classe => (
-            <div 
-              key={classe.id}
-              className={`flex items-center p-2 rounded-md mb-1 cursor-pointer transition-colors duration-150 ${
-                affectClasses.includes(classe.id) 
-                  ? 'bg-blue-100 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-700' 
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 border border-transparent'
-              }`}
-              onClick={() => {
-                if (affectClasses.includes(classe.id)) {
-                  setAffectClasses(affectClasses.filter(id => id !== classe.id));
-                } else {
-                  setAffectClasses([...affectClasses, classe.id]);
-                }
-              }}
-            >
-              <div className={`flex items-center justify-center h-5 w-5 rounded border ${
-                affectClasses.includes(classe.id)
-                  ? 'bg-blue-600 border-blue-600 dark:bg-blue-500 dark:border-blue-500'
-                  : 'border-gray-300 dark:border-gray-500'
-              }`}>
-                {affectClasses.includes(classe.id) && (
-                  <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-              </div>
-              <span className="ml-3 text-gray-900 dark:text-gray-100">
-                {classe.nom}
-              </span>
-            </div>
-          ))}
-        </div>
-        {affectClasses.length > 0 ? (
-          <p className="text-xs text-blue-600 dark:text-blue-400">
-            {affectClasses.length} classe(s) sélectionnée(s)
-          </p>
-        ) : (
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Aucune classe sélectionnée
-          </p>
-        )}
-      </div>
-
       {/* Année scolaire */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-          Année Scolaire <span className="text-red-500">*</span>
-        </label>
-        <select
-          value={affectAnnee}
-          onChange={(e) => setAffectAnnee(e.target.value)}
-          className="w-full rounded-lg border border-blue-300 dark:border-blue-700 px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
-          required
-        >
-          <option value="">Sélectionner une année</option>
-          {annees.map(annee => (
-            <option key={annee.id} value={annee.id}>
-              {annee.libelle}
-            </option>
-          ))}
-        </select>
+<div className="space-y-2">
+  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+    Année Scolaire <span className="text-red-500">*</span>
+  </label>
+  <select
+    value={affectAnnee}
+    onChange={(e) => {
+      setAffectAnnee(e.target.value);
+      // Réinitialiser la sélection de classes quand l'année change
+      setAffectClasses([]);
+    }}
+    className="w-full rounded-lg border border-blue-300 dark:border-blue-700 px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
+    required
+  >
+    <option value="">Sélectionner une année</option>
+    {annees.map(annee => (
+      <option key={annee.id} value={annee.id}>
+        {annee.libelle}
+      </option>
+    ))}
+  </select>
+</div>
+
+{/* Classes - filtrées par année scolaire */}
+<div className="space-y-2">
+  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+    Classes <span className="text-red-500">*</span>
+  </label>
+  <div className="border border-blue-300 dark:border-blue-700 rounded-lg bg-white dark:bg-gray-800 p-2 max-h-48 overflow-y-auto shadow-inner">
+    {(affectAnnee
+      ? classes.filter(classe => classe.annee_scolaire_id.toString() === affectAnnee)
+      : []
+    ).map(classe => (
+      <div 
+        key={classe.id}
+        className={`flex items-center p-2 rounded-md mb-1 cursor-pointer transition-colors duration-150 ${
+          affectClasses.includes(classe.id) 
+            ? 'bg-blue-100 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-700' 
+            : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 border border-transparent'
+        }`}
+        onClick={() => {
+          if (affectClasses.includes(classe.id)) {
+            setAffectClasses(affectClasses.filter(id => id !== classe.id));
+          } else {
+            setAffectClasses([...affectClasses, classe.id]);
+          }
+        }}
+      >
+        <div className={`flex items-center justify-center h-5 w-5 rounded border ${
+          affectClasses.includes(classe.id)
+            ? 'bg-blue-600 border-blue-600 dark:bg-blue-500 dark:border-blue-500'
+            : 'border-gray-300 dark:border-gray-500'
+        }`}>
+          {affectClasses.includes(classe.id) && (
+            <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+        </div>
+        <span className="ml-3 text-gray-900 dark:text-gray-100">
+          {classe.nom}
+        </span>
       </div>
+    ))}
+  </div>
+  {affectClasses.length > 0 ? (
+    <p className="text-xs text-blue-600 dark:text-blue-400">
+      {affectClasses.length} classe(s) sélectionnée(s)
+    </p>
+  ) : (
+    <p className="text-xs text-gray-500 dark:text-gray-400">
+      {affectAnnee ? "Aucune classe sélectionnée" : "Veuillez sélectionner une année"}
+    </p>
+  )}
+</div>
 
       {/* Boutons */}
       <div className="flex justify-end gap-2 pt-4">
@@ -1345,17 +1460,29 @@ if (isNaN(classeId)) {
         { nom: "Trimestre 3", date_debut: trimestre3Debut, date_fin: trimestre3Fin }
       ];
 
-      for (const trimestre of allTrimestres) {
-        await fetch("http://localhost:3000/api/trimestres", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...trimestre, annee_scolaire_id: anneeScolaireId })
-        });
-      }
+      const nouveauxTrimestres = [];
 
-      setIsAddTrimestreOpen(false);
-      setSuccessMsg("Trimestres ajoutés avec succès !");
-      setTimeout(() => setSuccessMsg(""), 3000);
+for (const trimestre of allTrimestres) {
+  const res = await fetch("http://localhost:3000/api/trimestres", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...trimestre, annee_scolaire_id: anneeScolaireId })
+  });
+
+  if (res.ok) {
+    const newTrimestre = await res.json();
+    nouveauxTrimestres.push(newTrimestre);
+  }
+}
+
+// Met à jour l'état local des trimestres affichés
+setTrimestres(prev => [...prev, ...nouveauxTrimestres]);
+
+// Ferme le formulaire et affiche un message
+setIsAddTrimestreOpen(false);
+setSuccessMsg("Trimestres ajoutés avec succès !");
+setTimeout(() => setSuccessMsg(""), 3000);
+
     }}
     className="space-y-6"
   >
