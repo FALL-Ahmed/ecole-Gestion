@@ -35,7 +35,7 @@ export class Evaluation {
   dateEval: string;
 
   @ManyToOne(() => Trimestre)
-  @JoinColumn({ name: 'trimestre_id' })
+  @JoinColumn({ name: 'trimestre' })
   trimestre: Trimestre;
 
   @ManyToOne(() => anneescolaire)

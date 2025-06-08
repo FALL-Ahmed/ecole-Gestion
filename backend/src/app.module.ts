@@ -12,6 +12,8 @@ import { MatiereModule } from './matieres/matiere.module';
 import { AffectationModule } from './affectation/affectation.module';
 import { CoefficientClasseModule } from './coeff/coeff.module';
 import { TrimestreModule } from './trimestre/trimestre.module';
+import { EvaluationModule } from './evaluation/evaluation.module';
+import { NoteModule } from './note/note.module';
 
 
 
@@ -37,6 +39,8 @@ import { TrimestreModule } from './trimestre/trimestre.module';
     AffectationModule, 
     CoefficientClasseModule,
     TrimestreModule,
+    EvaluationModule,
+    NoteModule,
   ],
   controllers: [AppController],
   providers: [AppService],

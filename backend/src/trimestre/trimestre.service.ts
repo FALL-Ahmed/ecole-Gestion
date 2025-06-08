@@ -27,7 +27,16 @@ export class TrimestreService {
 
     return this.trimestreRepo.save(trimestre);
   }
-  
+  async findByDate(date: string, anneeId: number): Promise<Trimestre | null> {
+  return this.trimestreRepo
+    .createQueryBuilder('trimestre')
+    .leftJoinAndSelect('trimestre.anneeScolaire', 'annee')
+    .where('trimestre.date_debut <= :date', { date })
+    .andWhere('trimestre.date_fin >= :date', { date })
+    .andWhere('annee.id = :anneeId', { anneeId })
+    .getOne();
+}
+
 
   findAll(): Promise<Trimestre[]> {
     return this.trimestreRepo.find({ relations: ['anneeScolaire'] });

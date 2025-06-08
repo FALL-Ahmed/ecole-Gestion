@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
-import { Save, Loader2, BookOpen, CalendarDays, Users, Bookmark, School, ClipboardList, User } from 'lucide-react';
+import { Save, Loader2, BookOpen, CalendarDays, Users, Bookmark, School, ClipboardList, User, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext'; // Assuming AuthContext is correctly implemented
 
 // --- Définition des Types ---
@@ -91,13 +91,12 @@ export function GradeInput() {
   const [allClasses, setAllClasses] = useState<Classe[]>([]);
   const [allMatieres, setAllMatieres] = useState<Matiere[]>([]);
   // allUsers contiendra TOUS les utilisateurs (élèves, profs, admins)
-  const [allUsers, setAllUsers] = useState<Utilisateur[]>([]);
+  const [allUsers, setAllUsers] = useState<Utilisateur[]>([]); // Still needed for initial data loading/processing
   const [processedAffectations, setProcessedAffectations] = useState<ProcessedAffectation[]>([]);
 
   // --- États des sélections du formulaire ---
   const [selectedAnneeId, setSelectedAnneeId] = useState<number | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
-  const [selectedProfesseurId, setSelectedProfesseurId] = useState<number | null>(null); // Corrected type to number
   const [selectedEvalTypeId, setSelectedEvalTypeId] = useState<number | null>(null);
   const [date, setDate] = useState<string>('');
 
@@ -125,7 +124,7 @@ export function GradeInput() {
     const fetchAllBaseData = async () => {
       setLoadingInitialData(true);
       try {
-        console.log('Chargement des données initiales...');
+        console.log('🔄 Chargement des données initiales...');
 
         const [affectationsRes, allClassesRes, anneesRes, utilisateursRes] = await Promise.all([
           fetch('http://localhost:3000/api/affectations?include=professeur,matiere,classe,annee_scolaire'),
@@ -137,7 +136,7 @@ export function GradeInput() {
         const checkResponse = async (res: Response, name: string) => {
           if (!res.ok) {
             const errorText = await res.text();
-            console.error(`Échec du chargement des ${name}: ${res.status} - ${errorText}`);
+            console.error(`🔥 Échec du chargement des ${name}: ${res.status} - ${errorText}`);
             throw new Error(`Erreur lors du chargement des ${name}.`);
           }
         };
@@ -157,15 +156,15 @@ export function GradeInput() {
             utilisateursRes.json(),
           ]);
 
-        console.log('Données brutes (Affectations):', rawAffectations);
-        console.log('Données brutes (Classes):', rawAllClasses);
-        console.log('Données brutes (Années Académiques):', rawAnnees);
-        console.log('Données brutes (Utilisateurs):', rawUtilisateurs);
+        console.log('📦 Données brutes (Affectations):', rawAffectations);
+        console.log('📦 Données brutes (Classes):', rawAllClasses);
+        console.log('📦 Données brutes (Années Académiques):', rawAnnees);
+        console.log('📦 Données brutes (Utilisateurs):', rawUtilisateurs);
 
         const processed = rawAffectations.map(aff => {
           // Ensure all necessary nested objects exist before processing
           if (!aff.professeur || !aff.matiere || !aff.classe || !aff.annee_scolaire) {
-            console.warn('Affectation invalide (données manquantes), ignorée:', aff);
+            console.warn('⚠️ Affectation invalide (données manquantes), ignorée:', aff);
             return null;
           }
           return {
@@ -189,14 +188,14 @@ export function GradeInput() {
         const uniqueMatieres = Array.from(new Map(rawAffectations.map(aff => [aff.matiere.id, aff.matiere])).values());
         setAllMatieres(uniqueMatieres);
 
-        console.log('Affectations traitées pour le state:', processed);
-        console.log('Toutes les classes:', rawAllClasses);
-        console.log('Toutes les années scolaires:', rawAnnees);
-        console.log('Tous les utilisateurs (élèves et profs):', rawUtilisateurs);
-        console.log('Toutes les matières:', uniqueMatieres);
+        console.log('✅ Affectations traitées pour le state:', processed);
+        console.log('✅ Toutes les classes:', rawAllClasses);
+        console.log('✅ Toutes les années scolaires:', rawAnnees);
+        console.log('✅ Tous les utilisateurs (élèves et profs):', rawUtilisateurs);
+        console.log('✅ Toutes les matières:', uniqueMatieres);
 
       } catch (error) {
-        console.error('Erreur globale lors du chargement des données initiales:', error);
+        console.error('🔥 Erreur globale lors du chargement des données initiales:', error);
         toast({
           title: 'Erreur de chargement',
           description: error instanceof Error ? error.message : 'Impossible de charger les données initiales du formulaire. Veuillez réessayer.',
@@ -214,43 +213,60 @@ export function GradeInput() {
 
   // 1. Filtrer les classes disponibles en fonction de l'année scolaire sélectionnée
   const classesForSelectedAnnee = useMemo(() => {
-    if (selectedAnneeId === null) {
-      return [];
-    }
-    const uniqueClassIds = new Set(
-      processedAffectations
-        .filter(aff => aff.anneeScolaireId === selectedAnneeId)
-        .map(aff => aff.classeId)
-    );
-    return allClasses.filter(cls => uniqueClassIds.has(cls.id));
-  }, [selectedAnneeId, processedAffectations, allClasses]);
+  console.log("🔍 useMemo [classesForSelectedAnnee]: selectedAnneeId:", selectedAnneeId);
+  console.log("📦 useMemo [classesForSelectedAnnee]: processedAffectations:", processedAffectations);
+  console.log("📚 useMemo [classesForSelectedAnnee]: allClasses:", allClasses);
 
-  // 2. Filtrer les professeurs disponibles en fonction de la classe et de l'année scolaire sélectionnées
-  const professeursForSelectedClassAndAnnee = useMemo(() => {
-    if (selectedAnneeId === null || selectedClassId === null) {
-      return [];
-    }
-    const uniqueProfIds = new Set(
-      processedAffectations
-        .filter(aff => aff.anneeScolaireId === selectedAnneeId && aff.classeId === selectedClassId)
-        .map(aff => aff.professeurId)
-    );
-    // Filtrer les profs de allUsers qui correspondent aux IDs trouvés
-    // Ensure the user role is 'professeur'
-    return allUsers.filter(user => uniqueProfIds.has(user.id) && user.role === 'professeur');
-  }, [selectedAnneeId, selectedClassId, processedAffectations, allUsers]); // <--- Utilise allUsers pour filtrer les profs
+  if (selectedAnneeId === null) {
+    console.log("⚠️ useMemo [classesForSelectedAnnee]: Aucune année sélectionnée, retour d'une liste vide");
+    return [];
+  }
 
-  // 3. Déterminer automatiquement la matière en fonction de l'année, de la classe et du professeur sélectionnés
+  const selectedId = Number(selectedAnneeId);
+
+  // Filter affectations by selected year AND the logged-in professor
+  const filteredAffectations = processedAffectations.filter(
+    (aff) => Number(aff.anneeScolaireId) === selectedId && aff.professeurId === user?.id
+  );
+
+  // Get unique class IDs from these filtered affectations
+  const classIdsSet = new Set(filteredAffectations.map((aff) => aff.classeId));
+
+  // Filter the full list of classes to only include those IDs
+  const filteredClasses = allClasses.filter((cls) => classIdsSet.has(cls.id));
+
+  console.log("✅ useMemo [classesForSelectedAnnee]: Classes filtrées pour l'année et le professeur connecté:", filteredClasses);
+  return filteredClasses;
+}, [selectedAnneeId, processedAffectations, allClasses, user]); // Depend on user
+
+  // 2. Déterminer automatiquement la matière en fonction de l'année, de la classe et du professeur connecté
   useEffect(() => {
     console.log('--- Debug: Détermination de la matière courante ---');
     console.log('selectedAnneeId:', selectedAnneeId);
     console.log('selectedClassId:', selectedClassId);
-    console.log('selectedProfesseurId:', selectedProfesseurId);
+    console.log('Logged-in user ID:', user?.id); // Log the logged-in user ID
+
+    // Use the logged-in user's ID as the professor ID
+    const selectedProfesseurId = user?.id || null;
+
+    // Check if user is logged in and is a professor
+    if (!user || user.role !== 'professeur') {
+        console.warn('⚠️ Utilisateur non connecté ou n\'est pas un professeur. Impossible de déterminer la matière.');
+        setCurrentMatiere(null);
+        // setEleves([]); // Students/Notes reset is now handled by the [selectedClassId, selectedAnneeId] effect
+        // setNotes([]);
+        // Optionally show a toast or message if the user role is incorrect
+        // toast({ title: 'Accès refusé', description: 'Seuls les professeurs peuvent saisir des notes.', variant: 'destructive' });
+        return;
+    }
+
+    console.log('Using selectedProfesseurId (from user):', selectedProfesseurId);
 
     if (selectedAnneeId === null || selectedClassId === null || selectedProfesseurId === null) {
+      console.log('ℹ️ Critères Année, Classe ou Professeur incomplets. Réinitialisation de la matière.');
       setCurrentMatiere(null);
-      setEleves([]); // Reset students when criteria change
-      setNotes([]);   // Reset notes
+      // setEleves([]); // Students/Notes reset is now handled by the [selectedClassId, selectedAnneeId] effect
+      // setNotes([]);
       return;
     }
 
@@ -266,12 +282,14 @@ export function GradeInput() {
     if (foundAffectation) {
       const matiereDetails = allMatieres.find(m => m.id === foundAffectation.matiereId);
       if (matiereDetails) {
+        console.log('✅ Matière courante définie:', matiereDetails);
         setCurrentMatiere(matiereDetails);
       } else {
-        console.warn('Détails de la matière introuvables pour l\'ID:', foundAffectation.matiereId);
+        console.warn('⚠️ Détails de la matière introuvables pour l\'ID:', foundAffectation.matiereId);
         setCurrentMatiere(null);
       }
     } else {
+      console.log('ℹ️ Aucune affectation trouvée pour cette combinaison.');
       setCurrentMatiere(null);
       // Only show toast if affectations data has been loaded and no match is found
       if (processedAffectations.length > 0) {
@@ -282,93 +300,112 @@ export function GradeInput() {
         });
       }
     }
-    setEleves([]); // Always clear students and notes when these selections change
-    setNotes([]);
-  }, [selectedAnneeId, selectedClassId, selectedProfesseurId, processedAffectations, allMatieres, toast]);
+    // setEleves([]); // Students/Notes reset is now handled by the [selectedClassId, selectedAnneeId] effect
+    // setNotes([]);
+  }, [selectedAnneeId, selectedClassId, user, processedAffectations, allMatieres, toast]); // Depend on user
 
   // --- Réinitialisation des sélections dépendantes ---
   useEffect(() => {
+    console.log('--- Debug: selectedAnneeId changed. Resetting Class. ---');
     setSelectedClassId(null);
-    setSelectedProfesseurId(null);
   }, [selectedAnneeId]);
 
-  useEffect(() => {
-    setSelectedProfesseurId(null);
-  }, [selectedClassId]);
+
+  // --- CHARGEMENT DES ÉLÈVES (basé sur la classe et l'année sélectionnées) ET INITIALISATION DES NOTES ---
+ useEffect(() => {
+  const fetchElevesAndInitNotes = async () => {
+    console.log('--- Debug: useEffect [selectedClassId, selectedAnneeId] triggered ---');
+    console.log('Current selectedClassId:', selectedClassId);
+    console.log('Current selectedAnneeId:', selectedAnneeId);
+    console.log('Current loadingInitialData:', loadingInitialData);
 
 
-  // --- CHARGEMENT DES ÉLÈVES (basé sur la classe et l'année sélectionnées) ---
-  useEffect(() => {
-    if (selectedClassId === null || selectedAnneeId === null) {
-      setEleves([]);
-      setNotes([]);
+    if (selectedClassId === null || selectedAnneeId === null || loadingInitialData) {
+      console.warn('⛔ Critères Année ou Classe incomplets, ou chargement initial en cours. Resetting eleves/notes.');
+      setLoadingEleves(false); // Ensure loading is off if criteria are incomplete
+      setEleves([]); // Reset students when criteria change
+      setNotes([]);   // Reset notes
       return;
     }
 
-    setLoadingEleves(true);
-    console.log(`Chargement des élèves pour Classe ID: ${selectedClassId}, Année Scolaire ID: ${selectedAnneeId}`);
+    console.log(`🔄 Chargement des élèves pour Classe ID: ${selectedClassId}, Année Scolaire ID: ${selectedAnneeId}`);
+    setLoadingEleves(true); // Start loading indicator
+    setEleves([]); // Clear previous students while loading
+    setNotes([]); // Clear previous notes while loading
+    try {
+      const res = await fetch(
+        `http://localhost:3000/api/inscriptions?classeId=${selectedClassId}&anneeScolaireId=${selectedAnneeId}`
+      );
 
-    // Adjust the API call to potentially include relations if not already handled by default backend behavior
-    // If your backend handles the 'include' automatically based on your service logic,
-    // then the current URL is fine. If not, you might need something like:
-    // `http://localhost:3000/api/inscriptions?classeId=${selectedClassId}&anneeScolaireId=${selectedAnneeId}&include=utilisateur`
-    fetch(`http://localhost:3000/api/inscriptions?classeId=${selectedClassId}&anneeScolaireId=${selectedAnneeId}`)
-      .then(res => {
-        if (!res.ok) {
-          console.error('Erreur HTTP lors du chargement des inscriptions:', res.status, res.statusText);
+      if (!res.ok) {
+          const errorText = await res.text();
+          console.error('🔥 Erreur HTTP lors du chargement des inscriptions:', res.status, res.statusText, errorText);
           throw new Error('Erreur lors du chargement des inscriptions.');
         }
-        return res.json();
-      })
-      .then((data: InscriptionApiResponse[]) => {
-        console.log('Réponse API (inscriptions):', data);
-        if (!Array.isArray(data)) {
-          console.error('La réponse API pour les inscriptions n\'est pas un tableau:', data);
-          throw new Error('Format de données invalide reçu pour les inscriptions.');
-        }
 
-        const fetchedEleves: Eleve[] = data.map(inscription => {
-          // CORRECTION CLÉ ICI : Accès aux détails de l'utilisateur via l'objet imbriqué 'utilisateur'
-          // et s'assurer que le rôle est 'eleve'
-          if (!inscription.utilisateur || inscription.utilisateur.role !== 'eleve') {
-            console.warn(`Inscription ignorée: utilisateur manquant ou rôle non 'eleve' pour l'ID d'inscription ${inscription.id}. Utilisateur trouvé:`, inscription.utilisateur);
-            return null; // Return null for invalid entries
-          }
-          return {
-            id: inscription.utilisateur.id, // Correct : accédez via .utilisateur.id
-            nom: inscription.utilisateur.nom,
-            prenom: inscription.utilisateur.prenom,
-          };
-        }).filter(Boolean) as Eleve[]; // Filter out any null entries from the map
+      const data: InscriptionApiResponse[] = await res.json();
 
-        setEleves(fetchedEleves);
-        setNotes(fetchedEleves.map(e => ({ eleveId: e.id, nom: e.nom, prenom: e.prenom, note: '' })));
-        console.log('Élèves chargés:', fetchedEleves);
-        console.log('État initial des notes créé:', fetchedEleves.map(e => ({ eleveId: e.id, nom: e.nom, prenom: e.prenom, note: '' })));
+      console.log('📦 Réponse API (inscriptions):', data);
+      console.table(data);
 
 
-        if (fetchedEleves.length === 0) {
-          toast({
-            title: 'Aucun élève trouvé',
-            description: 'Aucun élève n\'est actuellement inscrit pour la classe et l\'année scolaire sélectionnées ou les données utilisateur sont incorrectes.',
-            variant: 'default',
-          });
-        }
-      })
-      .catch(error => {
-        console.error("Échec du chargement des élèves:", error);
-        toast({
-          title: 'Erreur',
-          description: error instanceof Error ? error.message : 'Impossible de charger les élèves pour la sélection actuelle.',
-          variant: 'destructive'
-        });
-        setEleves([]); // Ensure states are cleared on error
+      if (!Array.isArray(data)) {
+        console.error('⚠️ Réponse API inattendue (pas un tableau).', data);
+        setEleves([]);
         setNotes([]);
-      })
-      .finally(() => {
-        setLoadingEleves(false);
+        return;
+      }
+
+      const fetchedEleves: Eleve[] = data
+        .map((inscription: InscriptionApiResponse) => { // Use the correct type here
+          const user = inscription.utilisateur;
+
+          if (!user) {
+            console.warn("⚠️ Aucune utilisateur lié à cette inscription:", inscription);
+            return null;
+          }
+
+          // Ensure the user object has the 'role' property and it is 'eleve'
+          if (user.role !== 'eleve') {
+            console.info("ℹ️ Utilisateur ignoré (role !== 'eleve'):", user);
+            return null;
+          }
+
+          return {
+            id: user.id,
+            nom: user.nom,
+            prenom: user.prenom,
+          };
+        })
+        .filter(Boolean) as Eleve[]; // Filter out null entries and cast
+
+      console.log('✅ Élèves filtrés:', fetchedEleves);
+      console.log(`📊 Nombre d'élèves filtrés: ${fetchedEleves.length}`);
+      setEleves(fetchedEleves); // <--- Update eleves state
+
+      // Initialise les notes ici, directement après avoir les élèves
+      const initialNotes = fetchedEleves.map(e => ({ eleveId: e.id, nom: e.nom, prenom: e.prenom, note: '' }));
+      console.log('📝 Notes initialisées:', initialNotes);
+      setNotes(initialNotes); // <--- Initialize notes state
+
+    } catch (error) {
+      console.error('🔥 Erreur lors du chargement des élèves:', error);
+      toast({
+        title: 'Erreur',
+        description: error instanceof Error ? error.message : 'Impossible de charger les élèves pour la sélection actuelle.',
+        variant: 'destructive'
       });
-  }, [selectedClassId, selectedAnneeId, toast]); // Removed `allUsers` from dependencies here.
+      setEleves([]); // Ensure state is empty on error
+      setNotes([]); // Reset notes on error as well
+    } finally {
+      setLoadingEleves(false); // Stop loading indicator
+      console.log('--- Debug: useEffect [selectedClassId, selectedAnneeId] finished ---');
+    }
+  };
+
+  fetchElevesAndInitNotes();
+}, [selectedClassId, selectedAnneeId, loadingInitialData, toast]); // Dependencies: selectedClassId, selectedAnneeId, loadingInitialData, toast
+
 
   // --- Gestion du changement de note ---
   const handleNoteChange = useCallback((eleveId: number, note: string) => {
@@ -393,17 +430,28 @@ export function GradeInput() {
 
   // --- Fonction d'enregistrement des notes ---
   const saveNotes = useCallback(async () => {
+    console.log('--- Debug: saveNotes triggered ---');
+    console.log('Current notes state:', notes);
+
     // Check for general form completeness and any empty notes
+    // Use the logged-in user's ID as the professor ID for the payload
+    const professeurId = user?.id || null;
+
+    if (!professeurId) {
+        console.warn('⚠️ Utilisateur non connecté. Impossible d\'enregistrer.');
+        toast({ title: 'Erreur', description: 'Vous devez être connecté pour enregistrer les notes.', variant: 'destructive' });
+        return;
+    }
     if (
       selectedAnneeId === null ||
       selectedClassId === null ||
-      selectedProfesseurId === null ||
       selectedEvalTypeId === null ||
       !date ||
       currentMatiere === null ||
       notes.length === 0 || // No students loaded means nothing to save
       notes.some(n => n.note === '') // At least one note is empty
     ) {
+      console.warn('⚠️ Tentative d\'enregistrement avec champs manquants ou notes vides.');
       toast({
         title: 'Champ(s) manquant(s) ou incomplet(s)',
         description: 'Veuillez remplir toutes les informations d\'évaluation et toutes les notes avant d\'enregistrer.',
@@ -419,6 +467,7 @@ export function GradeInput() {
     });
 
     if (invalidNotes.length > 0) {
+      console.warn('⚠️ Tentative d\'enregistrement avec notes invalides:', invalidNotes);
       toast({
         title: 'Note(s) invalide(s)',
         description: 'Veuillez vous assurer que toutes les notes sont des nombres valides entre 0 et 20.',
@@ -429,8 +478,10 @@ export function GradeInput() {
 
     setIsSaving(true);
     try {
+      console.log('🚀 Début de l\'enregistrement...');
       // 1. Déterminer le trimestre
-      const trimestreRes = await fetch(`http://localhost:3000/api/trimestre/by-date?date=${date}&anneeId=${selectedAnneeId}`);
+      console.log(`🔍 Recherche du trimestre pour la date ${date} et année ${selectedAnneeId}`);
+      const trimestreRes = await fetch(`http://localhost:3000/api/trimestres/by-date?date=${date}&anneeId=${selectedAnneeId}`);
       if (!trimestreRes.ok) {
         const errorText = await trimestreRes.text();
         throw new Error(`Impossible de déterminer le trimestre: ${trimestreRes.status} - ${errorText}`);
@@ -441,20 +492,42 @@ export function GradeInput() {
       if (!trimestreId) {
         throw new Error("Trimestre introuvable pour cette date et année scolaire. Veuillez vérifier les trimestres configurés.");
       }
+      console.log('✅ Trimestre trouvé avec ID:', trimestreId);
+      // Vérification cruciale avant de construire le payload
+      if (!currentMatiere || typeof currentMatiere.id === 'undefined') {
+        toast({
+            title: 'Erreur de données',
+            description: 'La matière n\'a pas été correctement déterminée. Veuillez vérifier vos sélections.',
+            variant: 'destructive',
+        });
+        setIsSaving(false);
+        return;
+      }
+      if (selectedClassId === null || professeurId === null || selectedEvalTypeId === null || !date || trimestreId === null || selectedAnneeId === null) {
+        toast({
+            title: 'Erreur de données',
+            description: 'Un ou plusieurs champs requis sont manquants pour la création de l\'évaluation.',
+            variant: 'destructive',
+        });
+        setIsSaving(false);
+        return;
+      }
 
       // 2. Créer l'évaluation
+      const evaluationPayload = {
+          matiere: { id: currentMatiere.id },
+          classe: { id: selectedClassId },
+          professeur: { id: professeurId },
+          type: selectedEvalTypeId, // Assurez-vous que le type de l'entité backend (string/number) correspond
+          dateEval: date, // Correspond à la propriété 'dateEval' de l'entité Evaluation
+          trimestre: { id: trimestreId },
+          anneeScolaire: { id: selectedAnneeId } // Correspond à la propriété 'anneeScolaire' de l'entité
+        };
+      console.log('📥 Création de l\'évaluation avec les données:', evaluationPayload);
       const evalRes = await fetch('http://localhost:3000/api/evaluation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          matiere_id: currentMatiere.id,
-          classe_id: selectedClassId,
-          professeur_id: selectedProfesseurId,
-          type: selectedEvalTypeId,
-          date_eval: date,
-          trimestre_id: trimestreId,
-          annee_scolaire_id: selectedAnneeId
-        })
+        body: JSON.stringify(evaluationPayload)
       });
 
       if (!evalRes.ok) {
@@ -465,6 +538,7 @@ export function GradeInput() {
       const evaluationId = evalData?.id;
 
       if (!evaluationId) throw new Error("L'ID de l'évaluation n'a pas été retourné par l'API.");
+      console.log('✅ Évaluation créée avec ID:', evaluationId);
 
       // 3. Enregistrer les notes
       const notesToSave = notes.map(n => ({
@@ -472,6 +546,7 @@ export function GradeInput() {
         etudiant_id: n.eleveId,
         note: parseFloat(n.note), // Ensure note is a number
       }));
+      console.log('📝 Enregistrement des notes:', notesToSave);
 
       const noteRes = await fetch('http://localhost:3000/api/notes', {
         method: 'POST',
@@ -483,6 +558,7 @@ export function GradeInput() {
         const errorText = await noteRes.text();
         throw new Error(`Erreur lors de l'enregistrement des notes: ${noteRes.status} - ${errorText}`);
       }
+      console.log('✅ Notes enregistrées avec succès.');
 
       toast({
         title: 'Succès',
@@ -497,7 +573,7 @@ export function GradeInput() {
       setNotes(prev => prev.map(n => ({ ...n, note: '' })));
 
     } catch (error: any) {
-      console.error("Erreur lors de l'enregistrement :", error);
+      console.error("🔥 Erreur lors de l'enregistrement :", error);
       toast({
         title: 'Erreur',
         description: error.message || 'Une erreur inconnue est survenue lors de l\'enregistrement.',
@@ -505,20 +581,33 @@ export function GradeInput() {
       });
     } finally {
       setIsSaving(false);
+      console.log('--- Debug: saveNotes finished ---');
     }
-  }, [selectedAnneeId, selectedClassId, selectedProfesseurId, selectedEvalTypeId, date, currentMatiere, notes, toast]);
+  }, [selectedAnneeId, selectedClassId, user, selectedEvalTypeId, date, currentMatiere, notes, toast]); // Depend on user
 
   // Determines if the "Saisie des Notes" section should be visible
   const isFormComplete = useMemo(() => {
-    return (
+    console.log('--- Debug: Checking isFormComplete ---');
+    console.log('selectedAnneeId:', selectedAnneeId);
+    console.log('selectedClassId:', selectedClassId);
+    console.log('selectedEvalTypeId:', selectedEvalTypeId);
+    console.log('date:', date);
+    console.log('currentMatiere:', currentMatiere);
+    console.log('user:', user);
+
+    // Form is complete if all required fields are selected/filled AND user is a professor
+    const complete = (
       selectedAnneeId !== null &&
       selectedClassId !== null &&
-      selectedProfesseurId !== null &&
       selectedEvalTypeId !== null &&
       date !== '' &&
-      currentMatiere !== null
+      currentMatiere !== null &&
+      user?.role === 'professeur' // Check if user is logged in and is a professor
     );
-  }, [selectedAnneeId, selectedClassId, selectedProfesseurId, selectedEvalTypeId, date, currentMatiere]);
+    console.log('isFormComplete:', complete);
+    return complete;
+  }, [selectedAnneeId, selectedClassId, selectedEvalTypeId, date, currentMatiere, user]); // Depend on user
+
 
   if (loadingInitialData) {
     return (
@@ -528,6 +617,18 @@ export function GradeInput() {
       </div>
     );
   }
+
+  // Render a message if the user is not a professor
+  if (!user || user.role !== 'professeur') {
+      return (
+          <div className="min-h-screen bg-gray-50 p-6 md:p-4 flex flex-col items-center justify-center">
+              <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
+              <span className="text-2xl font-medium text-gray-700">Accès refusé</span>
+              <p className="text-lg text-gray-600 mt-2">Seuls les professeurs sont autorisés à saisir des notes.</p>
+          </div>
+      );
+  }
+
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 md:p-4">
@@ -593,45 +694,34 @@ export function GradeInput() {
                     ))
                   ) : (
                     <SelectItem value="disabled" disabled>
-                      {selectedAnneeId === null ? "Sélectionnez une année d'abord" : "Aucune classe disponible pour cette année"}
+                      {selectedAnneeId === null ? "Sélectionnez une année d'abord" : "Aucune classe disponible pour cette année et ce professeur"}
                     </SelectItem>
                   )}
                 </SelectContent>
               </Select>
             </div>
 
+            {/* Champ Professeur - Affichage automatique */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700 flex items-center">
                 <User className="h-4 w-4 mr-2 text-blue-600" />
                 Professeur
               </label>
-              <Select
-                onValueChange={val => setSelectedProfesseurId(val ? Number(val) : null)}
-                value={selectedProfesseurId !== null ? String(selectedProfesseurId) : ''}
-                disabled={selectedClassId === null || professeursForSelectedClassAndAnnee.length === 0}
-              >
-                <SelectTrigger className="w-full border-blue-200 focus:ring-blue-500">
-                  <SelectValue placeholder="Sélectionner un professeur" />
-                </SelectTrigger>
-                <SelectContent>
-                  {professeursForSelectedClassAndAnnee.length > 0 ? (
-                    professeursForSelectedClassAndAnnee.map(prof => (
-                      <SelectItem key={prof.id} value={String(prof.id)}>
-                        {prof.nom} {prof.prenom}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="disabled" disabled>
-                      {selectedClassId === null ? "Sélectionnez une classe d'abord" : "Aucun professeur disponible pour cette classe/année"}
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              <div className={`flex items-center h-10 px-3 py-2 rounded-md border ${user?.role === 'professeur' ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
+                {user?.role === 'professeur' ? (
+                  <>
+                    <User className="h-4 w-4 mr-2 text-blue-600" />
+                    <span className="font-medium">{user.nom} {user.prenom}</span>
+                  </>
+                ) : (
+                  <span className="text-gray-500">Non applicable (pas professeur)</span>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700 flex items-center">
-                <Bookmark className="h-4 w-4 mr-2 text-blue-600" />
+                <Bookmark className="h-4 w-4 mr-2 text-blue-600" /> {/* Keep icon */}
                 Type d'évaluation
               </label>
               <Select
@@ -665,10 +755,11 @@ export function GradeInput() {
                 ) : (
                   <span className="text-gray-500">Aucune matière trouvée</span>
                 )}
-              </div>
-              {!currentMatiere && selectedAnneeId !== null && selectedClassId !== null && selectedProfesseurId !== null && (
+              </div> {/* Keep the warning */}
+              {/* Adjusted warning condition */}
+              {!currentMatiere && selectedAnneeId !== null && selectedClassId !== null && user?.role === 'professeur' && processedAffectations.length > 0 && (
                 <p className="text-xs text-red-500 mt-1">
-                  Cette combinaison (Année, Classe, Professeur) n'est pas affectée à une matière.
+                  Cette combinaison (Année, Classe, Professeur connecté) n'est pas affectée à une matière.
                 </p>
               )}
             </div>
@@ -716,31 +807,31 @@ export function GradeInput() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {notes.length === 0 && !loadingEleves ? (
-                      <TableRow>
-                        <TableCell colSpan={2} className="text-center py-8 text-gray-500 text-lg font-medium">
-                          Aucun élève inscrit pour la sélection actuelle.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      notes.map(({ eleveId, nom, prenom, note }) => (
-                        <TableRow key={eleveId} className="hover:bg-gray-50 transition-colors">
-                          <TableCell className="font-semibold text-gray-800 py-3">{nom} {prenom}</TableCell>
-                          <TableCell className="text-right">
-                            <Input
-                              type="number"
-                              min={0}
-                              max={20}
-                              step={0.1}
-                              value={note}
-                              onChange={e => handleNoteChange(eleveId, e.target.value)}
-                              className="text-center font-bold text-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
+  {notes.length > 0 ? (
+    notes.map(({ eleveId, nom, prenom, note }) => (
+      <TableRow key={eleveId} className="hover:bg-gray-50 transition-colors">
+        <TableCell className="font-semibold text-gray-800 py-3">{nom} {prenom}</TableCell>
+        <TableCell className="text-right">
+          <Input
+            type="number"
+            min={0}
+            max={20}
+            step={0.1}
+            value={note}
+            onChange={e => handleNoteChange(eleveId, e.target.value)}
+            className="text-center font-bold text-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+          />
+        </TableCell>
+      </TableRow>
+    ))
+  ) : (
+    <TableRow>
+      <TableCell colSpan={2} className="text-center py-8 text-gray-500 text-lg font-medium">
+        {loadingEleves ? 'Chargement des élèves...' : 'Aucun élève inscrit pour la sélection actuelle.'}
+      </TableCell>
+    </TableRow>
+  )}
+</TableBody>
                 </Table>
               )}
             </CardContent>
@@ -770,10 +861,10 @@ export function GradeInput() {
             <p className="text-2xl font-semibold text-gray-700 mb-4">
               Commencez par choisir les critères de l'évaluation !
             </p>
-            <p className="text-lg text-gray-600">
-              Sélectionnez une **Année scolaire**, une **Classe**, un **Professeur**, le **Type d'évaluation** et la **Date** pour afficher la liste des élèves et la matière correspondante.
+           <p className="text-lg text-gray-600">
+              Sélectionnez l'<strong>Année scolaire</strong>, la <strong>Classe</strong>, le <strong>Type d'évaluation</strong> et la <strong>Date</strong> pour afficher la liste des élèves et commencer la saisie des notes. Le professeur est automatiquement défini par votre compte.
             </p>
-            <CalendarDays className="mt-6 h-16 w-16 text-blue-400 mx-auto" />
+            <CalendarDays className="mt-6 h-16 w-16 text-blue-400 mx-auto" /> {/* Keep icon */}
           </div>
         )}
       </div>
