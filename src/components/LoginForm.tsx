@@ -1,3 +1,4 @@
+// src/components/LoginForm.tsx
 import React, { useState } from 'react';
 import {
   Card,
@@ -32,42 +33,61 @@ export function LoginForm() {
       });
 
       if (!response.ok) {
+        // This error message is user-facing. Keep it generic for security.
         throw new Error('Email ou mot de passe incorrect');
       }
 
       const data = await response.json();
       const user = data.user;
 
-      // Sauvegarde utilisateur
+      // Save user data to local storage
       localStorage.setItem('user', JSON.stringify(user));
+      // Update AuthContext
       setUser(user);
 
-      toast({
-        title: "Connexion réussie",
-        description: `Bienvenue ${user.email}`,
-      });
+     toast({
+  title: "Connexion réussie",
+  description: `Bienvenue ${user.prenom} ${user.nom}`, // Utilise prenom et nom
+});
 
-      // Si l'utilisateur est professeur, on récupère ses affectations
+      // If the user is a professor, fetch their assignments
       if (user?.role === 'professeur') {
-  try {
-    const affectationRes = await fetch(
-      `http://localhost:3000/api/affectations?professeurId=${user.id}`
-    );
-    const affectations = await affectationRes.json();
-    console.log('Affectations récupérées :', affectations); // <-- Ajout du console.log ici
-    localStorage.setItem('affectations', JSON.stringify(affectations));
-  } catch (err) {
-    console.error("Erreur lors de la récupération des affectations :", err);
-  }
-}
+        try {
+          // Ensure user.id is treated as a number for the API call if needed
+          const professorId = typeof user.id === 'string' ? parseInt(user.id) : user.id;
+          if (isNaN(professorId)) {
+            console.error("Invalid professor ID:", user.id);
+            throw new Error("Identifiant de professeur invalide.");
+          }
 
+          const affectationRes = await fetch(
+            `http://localhost:3000/api/affectations?professeurId=${professorId}`
+          );
 
-      // Redirection (ex: tableau de bord)
+          if (!affectationRes.ok) {
+            // Throw error for network issues or non-200 responses for affectations
+            throw new Error(`Failed to fetch affectations: ${affectationRes.statusText}`);
+          }
+
+          const affectations = await affectationRes.json();
+          console.log('Affectations récupérées :', affectations); // Still useful for debugging
+          localStorage.setItem('affectations', JSON.stringify(affectations));
+        } catch (err) {
+          console.error("Erreur lors de la récupération des affectations :", err);
+          toast({
+            title: "Attention !",
+            description: "Impossible de charger les affectations du professeur. Réessayez plus tard.",
+            variant: "default", // Changed to warning as it's not a login critical error
+          });
+        }
+      }
+
+      // Redirection (e.g., to dashboard) - uncomment when ready
       // window.location.href = '/dashboard';
     } catch (error) {
       toast({
         title: "Erreur de connexion",
-        description: "Email ou mot de passe incorrect",
+        description: error instanceof Error ? error.message : "Une erreur inconnue est survenue.",
         variant: "destructive",
       });
     } finally {

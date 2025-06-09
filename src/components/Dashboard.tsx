@@ -1,54 +1,110 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { useAuth } from '@/contexts/AuthContext';
-import { Users, BookOpen, GraduationCap, TrendingUp, Calendar as CalendarIcon } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext'; // **Vérifiez bien ce chemin d'importation**
+import { Users, BookOpen, GraduationCap, TrendingUp, Calendar as CalendarIcon } from 'lucide-react'; // **Assurez-vous que 'lucide-react' est installé**
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import axios from 'axios';
+
+// --- Interface Definitions for Type Safety ---
+
+interface User {
+  id: string;
+  role: 'eleve' | 'professeur' | 'admin';
+  nom: string;
+}
+
+interface NoteApiData {
+  id: string;
+  note: number | null; // Peut être null ou undefined
+  etudiant?: { id: string };
+  evaluation?: { id: string };
+}
+
+interface EvaluationApiData {
+  id: string;
+  type: string;
+  date_eval: string; // La date peut être une chaîne de caractères vide ou invalide
+  matiere?: { id: string };
+  anneeScolaire?: { id: string };
+}
+
+interface MatiereApiData {
+  id: string;
+  nom: string;
+}
+
+interface ConfigurationApiData {
+  annee_scolaire?: { id: string };
+}
+
+// Structure enrichie pour l'affichage des notes
+interface EnrichedNote {
+  id: string;
+  evaluationId: string; // Pour le tri par ordre d'ajout
+  subject: string;
+  type: string;
+  score: number | null; // Peut être null si la note n'est pas présente
+  date: string; // La date brute de l'évaluation, pour affichage
+}
+
+// --- Mock Data (à adapter si vous les fetcher réellement) ---
+// (Les autres interfaces comme StudentPerformanceDataItem, StatsDataItem, etc. restent inchangées)
+
+interface StudentPerformanceDataItem {
+  month: string;
+  moyenne: number;
+}
+
+interface StatsDataItem {
+  name: string;
+  value: string | number;
+  icon: React.ElementType;
+  color: string;
+}
+
+interface GradesByClassItem {
+  class: string;
+  moyenne: number;
+}
+
+interface StudentDistributionItem {
+  name: string;
+  value: number;
+  color: string;
+}
+
 
 export function Dashboard() {
   const { user } = useAuth();
   const [selectedClass, setSelectedClass] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>('2023-2024');
+  const [latestNotes, setLatestNotes] = useState<EnrichedNote[]>([]);
+  const [loadingNotes, setLoadingNotes] = useState<boolean>(true);
+  const [errorNotes, setErrorNotes] = useState<string | null>(null);
 
-  // Mock data for professor classes
   const professorClasses = ['6ème A', '6ème B', '5ème A', '4ème B', '3ème A'];
-  
-  // Années scolaires disponibles
-  const academicYears = [
-    '2022-2023',
-    '2023-2024',
-    '2024-2025'
-  ];
+  const academicYears = ['2022-2023', '2023-2024', '2024-2025'];
 
-  // Données avec année scolaire
-  const studentPerformanceData = {
+  const studentPerformanceData: { [key: string]: StudentPerformanceDataItem[] } = {
     '2022-2023': [
-      { month: 'Sep', moyenne: 13.2 },
-      { month: 'Oct', moyenne: 13.8 },
-      { month: 'Nov', moyenne: 13.5 },
-      { month: 'Dec', moyenne: 14.2 },
-      { month: 'Jan', moyenne: 13.9 },
-      { month: 'Feb', moyenne: 14.3 },
+      { month: 'Sep', moyenne: 13.2 }, { month: 'Oct', moyenne: 13.8 },
+      { month: 'Nov', moyenne: 13.5 }, { month: 'Dec', moyenne: 14.2 },
+      { month: 'Jan', moyenne: 13.9 }, { month: 'Feb', moyenne: 14.3 },
     ],
     '2023-2024': [
-      { month: 'Sep', moyenne: 13.5 },
-      { month: 'Oct', moyenne: 14.2 },
-      { month: 'Nov', moyenne: 13.8 },
-      { month: 'Dec', moyenne: 15.0 },
-      { month: 'Jan', moyenne: 14.3 },
-      { month: 'Feb', moyenne: 14.8 },
+      { month: 'Sep', moyenne: 13.5 }, { month: 'Oct', moyenne: 14.2 },
+      { month: 'Nov', moyenne: 13.8 }, { month: 'Dec', moyenne: 15.0 },
+      { month: 'Jan', moyenne: 14.3 }, { month: 'Feb', moyenne: 14.8 },
     ],
     '2024-2025': [
-      { month: 'Sep', moyenne: 14.0 },
-      { month: 'Oct', moyenne: 14.5 },
-      { month: 'Nov', moyenne: 14.2 },
-      { month: 'Dec', moyenne: 15.2 },
-      { month: 'Jan', moyenne: 14.8 },
-      { month: 'Feb', moyenne: 15.1 },
+      { month: 'Sep', moyenne: 14.0 }, { month: 'Oct', moyenne: 14.5 },
+      { month: 'Nov', moyenne: 14.2 }, { month: 'Dec', moyenne: 15.2 },
+      { month: 'Jan', moyenne: 14.8 }, { month: 'Feb', moyenne: 15.1 },
     ]
   };
 
-  const statsData = {
+  const statsData: { [key: string]: StatsDataItem[] } = {
     '2022-2023': [
       { name: 'Élèves', value: 230, icon: Users, color: 'bg-blue-500' },
       { name: 'Professeurs', value: 16, icon: BookOpen, color: 'bg-green-500' },
@@ -69,58 +125,186 @@ export function Dashboard() {
     ]
   };
 
-  const gradesByClass = {
+  const gradesByClass: { [key: string]: GradesByClassItem[] } = {
     '2022-2023': [
-      { class: '6ème A', moyenne: 13.8 },
-      { class: '6ème B', moyenne: 13.5 },
-      { class: '5ème A', moyenne: 14.7 },
-      { class: '5ème B', moyenne: 14.2 },
-      { class: '4ème A', moyenne: 13.6 },
-      { class: '4ème B', moyenne: 14.3 },
+      { class: '6ème A', moyenne: 13.8 }, { class: '6ème B', moyenne: 13.5 },
+      { class: '5ème A', moyenne: 14.7 }, { class: '5ème B', moyenne: 14.2 },
+      { class: '4ème A', moyenne: 13.6 }, { class: '4ème B', moyenne: 14.3 },
     ],
     '2023-2024': [
-      { class: '6ème A', moyenne: 14.2 },
-      { class: '6ème B', moyenne: 13.8 },
-      { class: '5ème A', moyenne: 15.1 },
-      { class: '5ème B', moyenne: 14.5 },
-      { class: '4ème A', moyenne: 13.9 },
-      { class: '4ème B', moyenne: 14.7 },
+      { class: '6ème A', moyenne: 14.2 }, { class: '6ème B', moyenne: 13.8 },
+      { class: '5ème A', moyenne: 15.1 }, { class: '5ème B', moyenne: 14.5 },
+      { class: '4ème A', moyenne: 13.9 }, { class: '4ème B', moyenne: 14.7 },
     ],
     '2024-2025': [
-      { class: '6ème A', moyenne: 14.5 },
-      { class: '6ème B', moyenne: 14.2 },
-      { class: '5ème A', moyenne: 15.4 },
-      { class: '5ème B', moyenne: 14.8 },
-      { class: '4ème A', moyenne: 14.2 },
-      { class: '4ème B', moyenne: 15.0 },
+      { class: '6ème A', moyenne: 14.5 }, { class: '6ème B', moyenne: 14.2 },
+      { class: '5ème A', moyenne: 15.4 }, { class: '5ème B', moyenne: 14.8 },
+      { class: '4ème A', moyenne: 14.2 }, { class: '4ème B', moyenne: 15.0 },
     ]
   };
 
-  const studentDistribution = {
+  const studentDistribution: { [key: string]: StudentDistributionItem[] } = {
     '2022-2023': [
-      { name: '6ème', value: 65, color: '#8884d8' },
-      { name: '5ème', value: 60, color: '#82ca9d' },
-      { name: '4ème', value: 55, color: '#ffc658' },
-      { name: '3ème', value: 50, color: '#ff7c7c' },
+      { name: '6ème', value: 65, color: '#8884d8' }, { name: '5ème', value: 60, color: '#82ca9d' },
+      { name: '4ème', value: 55, color: '#ffc658' }, { name: '3ème', value: 50, color: '#ff7c7c' },
     ],
     '2023-2024': [
-      { name: '6ème', value: 68, color: '#8884d8' },
-      { name: '5ème', value: 62, color: '#82ca9d' },
-      { name: '4ème', value: 58, color: '#ffc658' },
-      { name: '3ème', value: 57, color: '#ff7c7c' },
+      { name: '6ème', value: 68, color: '#8884d8' }, { name: '5ème', value: 62, color: '#82ca9d' },
+      { name: '4ème', value: 58, color: '#ffc658' }, { name: '3ème', value: 57, color: '#ff7c7c' },
     ],
     '2024-2025': [
-      { name: '6ème', value: 70, color: '#8884d8' },
-      { name: '5ème', value: 65, color: '#82ca9d' },
-      { name: '4ème', value: 60, color: '#ffc658' },
-      { name: '3ème', value: 65, color: '#ff7c7c' },
+      { name: '6ème', value: 70, color: '#8884d8' }, { name: '5ème', value: 65, color: '#82ca9d' },
+      { name: '4ème', value: 60, color: '#ffc658' }, { name: '3ème', value: 65, color: '#ff7c7c' },
     ]
   };
 
-  const filterDataByClass = (data: any[]) => {
+  const filterDataByClass = (data: (GradesByClassItem | StudentDistributionItem)[]) => {
     if (selectedClass === 'all') return data;
-    return data.filter(item => item.class === selectedClass || item.name === selectedClass);
+    return data.filter(item =>
+      ('class' in item && item.class === selectedClass) ||
+      ('name' in item && item.name === selectedClass)
+    );
   };
+
+  // --- useEffect pour récupérer les dernières notes de l'élève ---
+  useEffect(() => {
+    const fetchLatestNotes = async () => {
+      setLoadingNotes(true);
+      setErrorNotes(null);
+
+      // Vérification du rôle et de l'ID de l'utilisateur
+      if (user?.role !== 'eleve' || !user?.id) {
+        console.log('--- NOTES FETCH SKIPPED (Not an "eleve" or missing ID) ---');
+        setLatestNotes([]);
+        setLoadingNotes(false);
+        return;
+      }
+
+      console.log('--- STARTING STUDENT NOTES FETCH ---');
+      console.log(`User: ${user.nom} (ID: ${user.id}, Role: ${user.role})`);
+
+      try {
+        // 1. Récupération de la configuration de l'année scolaire
+        console.log('Fetching configuration from: http://localhost:3000/api/configuration');
+        const configResponse = await axios.get<ConfigurationApiData>('http://localhost:3000/api/configuration');
+        const currentAcademicYearId = configResponse.data?.annee_scolaire?.id;
+
+        console.log('Config response data:', configResponse.data);
+
+        if (!currentAcademicYearId) {
+          console.warn("WARN: Academic year ID is UNDEFINED/NULL from configuration API. This might affect evaluation filtering.");
+        } else {
+          console.log(`Current academic year ID: ${currentAcademicYearId}`);
+        }
+
+        // 2. Récupération des données brutes (notes, évaluations, matières) en parallèle
+        console.log('Fetching notes, evaluations, and subjects in parallel...');
+        const [notesResponse, evaluationsResponse, matieresResponse] = await Promise.all([
+          axios.get<NoteApiData[]>(`http://localhost:3000/api/notes`),
+          axios.get<EvaluationApiData[]>(`http://localhost:3000/api/evaluations`),
+          axios.get<MatiereApiData[]>(`http://localhost:3000/api/matieres`),
+        ]);
+
+        const allNotes = notesResponse.data;
+        const allEvaluations = evaluationsResponse.data;
+        const allMatieres = matieresResponse.data;
+
+        console.log(`Fetched ${allNotes.length} notes, ${allEvaluations.length} evaluations, ${allMatieres.length} subjects.`);
+        // Logs de débogage pour les données brutes
+        // console.log('DEBUG: All Notes:', allNotes);
+        // console.log('DEBUG: All Evaluations:', allEvaluations);
+        // console.log('DEBUG: All Matieres:', allMatieres);
+
+        // 3. Filtrage des notes pour l'élève connecté
+        const studentNotes = allNotes.filter(
+          (note: NoteApiData) => String(note.etudiant?.id) === String(user.id)
+        );
+        console.log(`Found ${studentNotes.length} notes for student ID: ${user.id}.`);
+        // console.log('DEBUG: Student Notes:', studentNotes);
+
+
+        // 4. Enrichissement des notes avec les détails d'évaluation et de matière
+        const notesWithDetails: EnrichedNote[] = studentNotes
+          .map((note: NoteApiData) => {
+            const noteEvaluationId = note.evaluation?.id;
+
+            if (!noteEvaluationId) {
+              console.warn(`SKIP: Note ID ${note.id} is missing 'evaluation.id'.`, note);
+              return null;
+            }
+
+            const evaluation = allEvaluations.find(
+              (evalItem: EvaluationApiData) =>
+                String(evalItem.id) === String(noteEvaluationId) &&
+                // Filtrer par année scolaire UNIQUEMENT si currentAcademicYearId est défini
+                (currentAcademicYearId ? String(evalItem.anneeScolaire?.id) === String(currentAcademicYearId) : true)
+            );
+
+            if (!evaluation) {
+              console.warn(`SKIP: No evaluation found for note ID ${note.id} (Evaluation ID: ${noteEvaluationId}, Academic Year ID: ${currentAcademicYearId || 'N/A'}).`, { note, allEvaluations });
+              return null;
+            }
+
+            const evaluationMatiereId = evaluation.matiere?.id;
+            if (!evaluationMatiereId) {
+              console.warn(`SKIP: Evaluation ID ${evaluation.id} is missing 'matiere.id'.`, evaluation);
+              return null;
+            }
+
+            const matiere = allMatieres.find(
+              (subItem: MatiereApiData) => String(subItem.id) === String(evaluationMatiereId)
+            );
+
+            if (!matiere) {
+              console.warn(`SKIP: No subject found for evaluation ID ${evaluation.id} (Subject ID: ${evaluationMatiereId}).`, { evaluation, allMatieres });
+              return null;
+            }
+
+            // Assigner la note et la date avec des valeurs par défaut si null/undefined
+            const score = note.note !== undefined && note.note !== null ? note.note : null;
+           
+
+            console.log(`SUCCESS: Enriched Note for Note ID ${note.id}: Type='${evaluation.type}', Subject='${matiere.nom}', Score=${score}`);
+
+            return {
+              id: note.id,
+              evaluationId: evaluation.id, // Utilisé pour le tri
+              subject: matiere.nom,
+              type: evaluation.type,
+              score: score,
+             
+            };
+          })
+          .filter(Boolean) as EnrichedNote[]; // Supprime les éléments `null`
+
+        // 5. Tri par ID d'évaluation décroissant (pour les 5 dernières entrées)
+        const sortedLatestNotes = notesWithDetails
+          .sort((a, b) => {
+            const idA = parseInt(a.evaluationId);
+            const idB = parseInt(b.evaluationId);
+            // Gérer les cas où les IDs ne sont pas des nombres valides
+            if (isNaN(idA) || isNaN(idB)) {
+                console.warn(`WARN: Cannot parse evaluationId for sorting. a.evaluationId: '${a.evaluationId}', b.evaluationId: '${b.evaluationId}'`);
+                return 0; // Traiter comme égaux si non-numériques
+            }
+            return idB - idA; // Tri décroissant (plus grand ID = plus récent)
+          })
+          .slice(0, 5); // Prendre les 5 premières après le tri
+
+        console.log('Final latest notes for display (sorted by evaluation ID, top 5):', sortedLatestNotes);
+        setLatestNotes(sortedLatestNotes);
+
+      } catch (err) {
+        console.error('ERROR during student notes fetch:', err);
+        setErrorNotes(`Failed to load recent notes. Error: ${axios.isAxiosError(err) ? err.message : 'Unknown error'}. Please check your backend server logs.`);
+        setLatestNotes([]);
+      } finally {
+        setLoadingNotes(false);
+      }
+    };
+
+    fetchLatestNotes();
+  }, [user?.id, user?.role]); // Dépendances du hook
 
   const renderDashboardContent = () => {
     switch (user?.role) {
@@ -232,7 +416,7 @@ export function Dashboard() {
         return (
           <>
             <div className="mb-6 flex justify-between items-center">
-              <h2 className="text-xl font-semibold">Vue d'ensemble</h2>
+              <h2 className="text-xl font-semibold">Vue d'overview</h2>
               <div className="flex gap-4">
                 <Select value={selectedYear} onValueChange={setSelectedYear}>
                   <SelectTrigger className="w-[150px]">
@@ -277,8 +461,8 @@ export function Dashboard() {
               </Card>
               <Card>
                 <CardContent className="p-6">
-                  <h3 className="font-semibold text-lg mb-2">Cours cette semaine</h3>
-                  <p className="text-3xl font-bold text-purple-600">18</p>
+                  <h3 className="font-semibold text-lg mb-2">Cours Aujourd'hui</h3>
+                  <p className="text-3xl font-bold text-purple-600">6</p>
                   <p className="text-sm text-gray-600">heures de cours</p>
                 </CardContent>
               </Card>
@@ -315,13 +499,12 @@ export function Dashboard() {
                 <CardContent>
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={studentPerformanceData[selectedYear]}>
-                     <CartesianGrid strokeDasharray="3 3" />
-                     <XAxis dataKey="month" />
-                     <YAxis domain={[0, 20]} />
-                     <Tooltip />
-                     <Bar dataKey="moyenne" fill="#3b82f6" />
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" />
+                      <YAxis domain={[0, 20]} />
+                      <Tooltip />
+                      <Bar dataKey="moyenne" fill="#3b82f6" />
                     </BarChart>
-
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
@@ -439,18 +622,37 @@ export function Dashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span>Contrôle Mathématiques</span>
-                      <span className="font-bold text-green-600">16/20</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Devoir Français</span>
-                      <span className="font-bold text-blue-600">14/20</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Exposé Histoire</span>
-                      <span className="font-bold text-purple-600">15/20</span>
-                    </div>
+                    {loadingNotes && <p className="text-gray-600">Chargement des notes...</p>}
+                    {errorNotes && <p className="text-red-500">{errorNotes}</p>}
+                    {!loadingNotes && !errorNotes && latestNotes.length === 0 && (
+                      <p className="text-gray-600">Aucune note récente disponible.</p>
+                    )}
+                    {!loadingNotes && !errorNotes && latestNotes.length > 0 && (
+                      latestNotes.map((note: EnrichedNote) => (
+                        <div key={note.id} className="flex flex-col p-2 border rounded-lg">
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium">
+                              {note.type} de {note.subject}
+                            </span>
+                            <span className="font-bold text-xl text-blue-600">
+                              {/* Afficher la note ou "N/A" si null/undefined */}
+                              {note.score !== null ? `${note.score}/20` : 'N/A'}
+                            </span>
+                          </div>
+                          <span className="text-sm text-gray-600">
+                            {/* Afficher la date brute ou "Date inconnue" */}
+                            {note.date && note.date !== 'Date inconnue'
+                                ? new Date(note.date).toLocaleDateString('fr-FR', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric',
+                                  })
+                                : note.date // Fallback to "Date inconnue" or actual invalid string
+                            }
+                          </span>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -467,14 +669,16 @@ export function Dashboard() {
     <div className="p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">
-          Tableau de Bord - {user?.role === 'admin' ? 'Administration' : 
-                               user?.role === 'professeur' ? 'Professeur' : 'eleve'}
+          Tableau de Bord -{' '}
+          {user?.role === 'admin' ? 'Administration' :
+            user?.role === 'professeur' ? 'Professeur' : 'Élève'}
         </h1>
-        <p className="text-gray-600">
-          Bienvenue, {user?.nom}
-        </p>
+       <p className="text-gray-600">
+  Bienvenue, <strong>{user?.nom} {user?.prenom}</strong>
+</p>
+
       </div>
-      
+
       {renderDashboardContent()}
     </div>
   );

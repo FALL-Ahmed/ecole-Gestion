@@ -1,3 +1,4 @@
+// src/note/note.entity.ts
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -13,7 +14,7 @@ export class Note {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => Evaluation, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Evaluation, (evaluation) => evaluation.notes, { onDelete: 'CASCADE' }) // Ajout de (evaluation) => evaluation.notes
   @JoinColumn({ name: 'evaluation_id' })
   evaluation: Evaluation;
 
@@ -23,6 +24,4 @@ export class Note {
 
   @Column({ type: 'float' })
   note: number;
-
-  
 }

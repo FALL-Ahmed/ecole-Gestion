@@ -1,17 +1,20 @@
+// src/evaluation/evaluation.entity.ts
 import {
   Entity,
   Column,
   PrimaryGeneratedColumn,
   ManyToOne,
   JoinColumn,
+  OneToMany,
 } from 'typeorm';
 import { Matiere } from 'src/matieres/matiere.entity';
 import { Classe } from 'src/classe/classe.entity';
-import { User } from 'src/users/user.entity'; // Remplace selon le nom réel de ton entité
+import { User } from 'src/users/user.entity'; // This is correct for professeur
 import { Trimestre } from 'src/trimestre/trimestre.entity';
 import { anneescolaire } from 'src/annee-academique/annee-academique.entity';
+import { Note } from 'src/note/note.entity';
 
-@Entity('evaluation') // correspond à la table existante
+@Entity('evaluation')
 export class Evaluation {
   @PrimaryGeneratedColumn()
   id: number;
@@ -25,7 +28,7 @@ export class Evaluation {
   classe: Classe;
 
   @ManyToOne(() => User)
-  @JoinColumn({ name: 'professeur_id' }) // le champ dans la table 'evaluation'
+  @JoinColumn({ name: 'professeur_id' })
   professeur: User;
 
   @Column()
@@ -35,10 +38,17 @@ export class Evaluation {
   dateEval: string;
 
   @ManyToOne(() => Trimestre)
-  @JoinColumn({ name: 'trimestre' })
-  trimestre: Trimestre;
+@JoinColumn({ name: 'trimestre' }) // nom explicite et clair
+trimestre: Trimestre;
+
+@Column({ name: 'trimestre' }) // colonne pour gérer facilement l'ID
+trimestreId: number;
+
 
   @ManyToOne(() => anneescolaire)
   @JoinColumn({ name: 'annee_scolaire_id' })
   anneeScolaire: anneescolaire;
+
+  @OneToMany(() => Note, (note) => note.evaluation)
+  notes: Note[];
 }

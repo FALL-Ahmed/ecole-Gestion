@@ -34,10 +34,7 @@ export class EvaluationService {
     if (matiereId) {
       where.matiere = { id: matiereId }; // Assuming 'matiere' is a relation with an 'id' field
     }
-    if (trimestreName) {
-      
-      where.trimestre = { nom: trimestreName };
-    }
+   
     if (anneeScolaireId !== undefined) {
       where.anneeScolaire = { id: anneeScolaireId }; // Assuming 'anneeScolaire' is a relation with an 'id' field
     }

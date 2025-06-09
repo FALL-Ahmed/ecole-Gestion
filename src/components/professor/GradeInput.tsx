@@ -21,10 +21,11 @@ import { useAuth } from '@/contexts/AuthContext'; // Assuming AuthContext is cor
 
 // --- Définition des Types ---
 
-// Types de base pour les entités utilisées dans les Selects
+// Types de base pour les entités utilisées
 type AnneeScolaire = { id: number; libelle: string; dateDebut?: string; dateFin?: string; };
 type Classe = { id: number; nom: string; niveau?: string; annee_scolaire_id?: number };
 type Matiere = { id: number; nom: string; code?: string; };
+type Trimestre = { id: number; nom: string; date_debut: string; date_fin: string; }; // Ajout du type Trimestre
 
 // Type Utilisateur révisé pour inclure tous les champs pertinents
 type Utilisateur = {
@@ -66,36 +67,42 @@ type ProcessedAffectation = {
 
 type Eleve = { id: number; nom: string; prenom: string; };
 
+// Type pour les types d'évaluation (avec id pour le select et nom pour l'envoi au backend)
 type EvaluationType = { id: number; nom: string; };
 
-// --- NOUVEAU TYPE DE LA RÉPONSE API POUR /api/inscriptions ---
-// Ce type attend les objets complets 'utilisateur', 'classe', 'annee_scolaire' imbriqués
-// car votre backend les retourne grâce à `relations` dans InscriptionService.
+// Type de la réponse API pour /api/inscriptions
 type InscriptionApiResponse = {
   id: number;
   date_inscription: string;
   actif: boolean;
-  utilisateur: Utilisateur;       // L'objet Utilisateur complet est ici
-  classe: Classe;                 // L'objet Classe complet est ici
-  annee_scolaire: AnneeScolaire; // L'objet AnneeScolaire complet est ici
+  utilisateur: Utilisateur;
+  classe: Classe;
+  annee_scolaire: AnneeScolaire;
+};
+
+// Type pour la configuration de l'année académique active
+type Configuration = {
+  id: number;
+  annee_scolaire?: AnneeScolaire;
+  annee_academique_active_id?: number;
 };
 
 // Type pour une entrée de note dans l'état
 type NoteEntry = { eleveId: number; nom: string; prenom: string; note: string };
 
+// --- Composant GradeInput ---
 export function GradeInput() {
-  const { user } = useAuth(); // If user role affects what they can see/do, you might use this.
+  const { user } = useAuth();
 
   // --- États des données initiales chargées depuis l'API ---
-  const [anneesScolaires, setAnneesScolaires] = useState<AnneeScolaire[]>([]);
+  const [activeAnneeScolaire, setActiveAnneeScolaire] = useState<AnneeScolaire | null>(null);
+  const [currentTrimestre, setCurrentTrimestre] = useState<Trimestre | null>(null); // NOUVEAU: État pour le trimestre déterminé
   const [allClasses, setAllClasses] = useState<Classe[]>([]);
   const [allMatieres, setAllMatieres] = useState<Matiere[]>([]);
-  // allUsers contiendra TOUS les utilisateurs (élèves, profs, admins)
-  const [allUsers, setAllUsers] = useState<Utilisateur[]>([]); // Still needed for initial data loading/processing
+  const [allUsers, setAllUsers] = useState<Utilisateur[]>([]); // Utilisateurs incluant les professeurs
   const [processedAffectations, setProcessedAffectations] = useState<ProcessedAffectation[]>([]);
 
   // --- États des sélections du formulaire ---
-  const [selectedAnneeId, setSelectedAnneeId] = useState<number | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
   const [selectedEvalTypeId, setSelectedEvalTypeId] = useState<number | null>(null);
   const [date, setDate] = useState<string>('');
@@ -112,25 +119,49 @@ export function GradeInput() {
   const [loadingEleves, setLoadingEleves] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
-  // --- Types d'évaluation fixes (peuvent être chargés depuis une API si dynamiques) ---
-  const evaluationTypes: EvaluationType[] = useMemo(() => [
-    { id: 1, nom: 'Devoir 1' },
-    { id: 2, nom: 'Devoir 2' },
-    { id: 3, nom: 'Composition' },
-  ], []);
-
-  // --- CHARGEMENT INITIAL DES DONNÉES (Affectations, Classes, Années, Utilisateurs) ---
+  // --- CHARGEMENT INITIAL DES DONNÉES (Configuration, Affectations, Classes, Utilisateurs) ---
   useEffect(() => {
     const fetchAllBaseData = async () => {
       setLoadingInitialData(true);
       try {
         console.log('🔄 Chargement des données initiales...');
 
-        const [affectationsRes, allClassesRes, anneesRes, utilisateursRes] = await Promise.all([
+        // Step 1: Fetch active academic year configuration first
+        const configRes = await fetch('http://localhost:3000/api/configuration');
+        if (!configRes.ok) {
+          const errorText = await configRes.text();
+          throw new Error(`Erreur lors du chargement de la configuration: ${configRes.status} - ${errorText}`);
+        }
+        const configData: Configuration | Configuration[] = await configRes.json();
+        let activeAnneeId: number | null = null;
+        let activeAnneeLibelle: string = 'N/A';
+
+        if (Array.isArray(configData) && configData.length > 0) {
+          activeAnneeId = configData[0].annee_academique_active_id || configData[0].annee_scolaire?.id || null;
+          activeAnneeLibelle = configData[0].annee_scolaire?.libelle || 'N/A';
+        } else if (configData && !Array.isArray(configData)) {
+          activeAnneeId = configData.annee_academique_active_id || configData.annee_scolaire?.id || null;
+          activeAnneeLibelle = configData.annee_scolaire?.libelle || 'N/A';
+        }
+
+        if (activeAnneeId) {
+          setActiveAnneeScolaire({ id: activeAnneeId, libelle: activeAnneeLibelle });
+          console.log('✅ Année académique active chargée:', { id: activeAnneeId, libelle: activeAnneeLibelle });
+        } else {
+          toast({
+            title: 'Configuration manquante',
+            description: 'L\'ID de l\'année académique active n\'a pas pu être trouvé. Veuillez vérifier la configuration API.',
+            variant: 'destructive',
+          });
+          setLoadingInitialData(false);
+          return;
+        }
+
+        // Step 2: Fetch other data using Promise.all
+        const [affectationsRes, allClassesRes, utilisateursRes] = await Promise.all([
           fetch('http://localhost:3000/api/affectations?include=professeur,matiere,classe,annee_scolaire'),
           fetch('http://localhost:3000/api/classes'),
-          fetch('http://localhost:3000/api/annees-academiques'),
-          fetch('http://localhost:3000/api/users'), // <--- Appel pour TOUS les utilisateurs (élèves et profs)
+          fetch('http://localhost:3000/api/users'),
         ]);
 
         const checkResponse = async (res: Response, name: string) => {
@@ -144,25 +175,21 @@ export function GradeInput() {
         await Promise.all([
           checkResponse(affectationsRes, 'affectations'),
           checkResponse(allClassesRes, 'classes'),
-          checkResponse(anneesRes, 'années académiques'),
           checkResponse(utilisateursRes, 'utilisateurs'),
         ]);
 
-        const [rawAffectations, rawAllClasses, rawAnnees, rawUtilisateurs]:
-          [AffectationApiResponse[], Classe[], AnneeScolaire[], Utilisateur[]] = await Promise.all([
+        const [rawAffectations, rawAllClasses, rawUtilisateurs]:
+          [AffectationApiResponse[], Classe[], Utilisateur[]] = await Promise.all([
             affectationsRes.json(),
             allClassesRes.json(),
-            anneesRes.json(),
             utilisateursRes.json(),
           ]);
 
         console.log('📦 Données brutes (Affectations):', rawAffectations);
         console.log('📦 Données brutes (Classes):', rawAllClasses);
-        console.log('📦 Données brutes (Années Académiques):', rawAnnees);
         console.log('📦 Données brutes (Utilisateurs):', rawUtilisateurs);
 
         const processed = rawAffectations.map(aff => {
-          // Ensure all necessary nested objects exist before processing
           if (!aff.professeur || !aff.matiere || !aff.classe || !aff.annee_scolaire) {
             console.warn('⚠️ Affectation invalide (données manquantes), ignorée:', aff);
             return null;
@@ -178,19 +205,16 @@ export function GradeInput() {
             anneeScolaireId: aff.annee_scolaire.id,
             anneeScolaireLibelle: aff.annee_scolaire.libelle,
           };
-        }).filter(Boolean) as ProcessedAffectation[]; // Filter out any null entries
+        }).filter(Boolean) as ProcessedAffectation[];
 
         setProcessedAffectations(processed);
         setAllClasses(rawAllClasses);
-        setAnneesScolaires(rawAnnees);
-        setAllUsers(rawUtilisateurs); // <--- Stocke TOUS les utilisateurs
-        // Extract unique matières from affectations
+        setAllUsers(rawUtilisateurs);
         const uniqueMatieres = Array.from(new Map(rawAffectations.map(aff => [aff.matiere.id, aff.matiere])).values());
         setAllMatieres(uniqueMatieres);
 
         console.log('✅ Affectations traitées pour le state:', processed);
         console.log('✅ Toutes les classes:', rawAllClasses);
-        console.log('✅ Toutes les années scolaires:', rawAnnees);
         console.log('✅ Tous les utilisateurs (élèves et profs):', rawUtilisateurs);
         console.log('✅ Toutes les matières:', uniqueMatieres);
 
@@ -207,72 +231,63 @@ export function GradeInput() {
     };
 
     fetchAllBaseData();
-  }, [toast]); // Dependencies: toast (from use-toast hook)
+  }, [toast]); // Dependencies: toast
 
   // --- FILTRES CASCADANTS ET MISE À JOUR DU FORMULAIRE ---
 
-  // 1. Filtrer les classes disponibles en fonction de l'année scolaire sélectionnée
-  const classesForSelectedAnnee = useMemo(() => {
-  console.log("🔍 useMemo [classesForSelectedAnnee]: selectedAnneeId:", selectedAnneeId);
-  console.log("📦 useMemo [classesForSelectedAnnee]: processedAffectations:", processedAffectations);
-  console.log("📚 useMemo [classesForSelectedAnnee]: allClasses:", allClasses);
+  // 1. Filtrer les classes disponibles en fonction de l'année scolaire active et du professeur connecté
+  const classesForProfessorAndActiveAnnee = useMemo(() => {
+    console.log("🔍 useMemo [classesForProfessorAndActiveAnnee]: activeAnneeScolaire:", activeAnneeScolaire);
+    console.log("📦 useMemo [classesForProfessorAndActiveAnnee]: processedAffectations:", processedAffectations);
+    console.log("📚 useMemo [classesForProfessorAndActiveAnnee]: allClasses:", allClasses);
+    console.log("👤 useMemo [classesForProfessorAndActiveAnnee]: user:", user);
 
-  if (selectedAnneeId === null) {
-    console.log("⚠️ useMemo [classesForSelectedAnnee]: Aucune année sélectionnée, retour d'une liste vide");
-    return [];
-  }
-
-  const selectedId = Number(selectedAnneeId);
-
-  // Filter affectations by selected year AND the logged-in professor
-  const filteredAffectations = processedAffectations.filter(
-    (aff) => Number(aff.anneeScolaireId) === selectedId && aff.professeurId === user?.id
-  );
-
-  // Get unique class IDs from these filtered affectations
-  const classIdsSet = new Set(filteredAffectations.map((aff) => aff.classeId));
-
-  // Filter the full list of classes to only include those IDs
-  const filteredClasses = allClasses.filter((cls) => classIdsSet.has(cls.id));
-
-  console.log("✅ useMemo [classesForSelectedAnnee]: Classes filtrées pour l'année et le professeur connecté:", filteredClasses);
-  return filteredClasses;
-}, [selectedAnneeId, processedAffectations, allClasses, user]); // Depend on user
-
-  // 2. Déterminer automatiquement la matière en fonction de l'année, de la classe et du professeur connecté
-  useEffect(() => {
-    console.log('--- Debug: Détermination de la matière courante ---');
-    console.log('selectedAnneeId:', selectedAnneeId);
-    console.log('selectedClassId:', selectedClassId);
-    console.log('Logged-in user ID:', user?.id); // Log the logged-in user ID
-
-    // Use the logged-in user's ID as the professor ID
-    const selectedProfesseurId = user?.id || null;
-
-    // Check if user is logged in and is a professor
-    if (!user || user.role !== 'professeur') {
-        console.warn('⚠️ Utilisateur non connecté ou n\'est pas un professeur. Impossible de déterminer la matière.');
-        setCurrentMatiere(null);
-        // setEleves([]); // Students/Notes reset is now handled by the [selectedClassId, selectedAnneeId] effect
-        // setNotes([]);
-        // Optionally show a toast or message if the user role is incorrect
-        // toast({ title: 'Accès refusé', description: 'Seuls les professeurs peuvent saisir des notes.', variant: 'destructive' });
-        return;
+    if (activeAnneeScolaire === null || user === null || user.role !== 'professeur') {
+      console.log("⚠️ useMemo [classesForProfessorAndActiveAnnee]: Année active, utilisateur ou rôle incomplets, retour d'une liste vide");
+      return [];
     }
 
-    console.log('Using selectedProfesseurId (from user):', selectedProfesseurId);
+    const selectedProfesseurId = user.id;
 
-    if (selectedAnneeId === null || selectedClassId === null || selectedProfesseurId === null) {
-      console.log('ℹ️ Critères Année, Classe ou Professeur incomplets. Réinitialisation de la matière.');
+    // Filter affectations by selected year AND the logged-in professor
+    const filteredAffectations = processedAffectations.filter(
+      (aff) => aff.anneeScolaireId === activeAnneeScolaire.id && aff.professeurId === selectedProfesseurId
+    );
+
+    // Get unique class IDs from these filtered affectations
+    const classIdsSet = new Set(filteredAffectations.map((aff) => aff.classeId));
+
+    // Filter the full list of classes to only include those IDs
+    const filteredClasses = allClasses.filter((cls) => classIdsSet.has(cls.id));
+
+    console.log("✅ useMemo [classesForProfessorAndActiveAnnee]: Classes filtrées pour l'année active et le professeur connecté:", filteredClasses);
+    return filteredClasses;
+  }, [activeAnneeScolaire, processedAffectations, allClasses, user]);
+
+  // 2. Déterminer automatiquement la matière en fonction de l'année active, de la classe et du professeur connecté
+  useEffect(() => {
+    console.log('--- Debug: Détermination de la matière courante ---');
+    console.log('activeAnneeScolaire:', activeAnneeScolaire);
+    console.log('selectedClassId:', selectedClassId);
+    console.log('Logged-in user ID:', user?.id);
+
+    const selectedProfesseurId = user?.id || null;
+
+    if (!user || user.role !== 'professeur') {
+      console.warn('⚠️ Utilisateur non connecté ou n\'est pas un professeur. Impossible de déterminer la matière.');
       setCurrentMatiere(null);
-      // setEleves([]); // Students/Notes reset is now handled by the [selectedClassId, selectedAnneeId] effect
-      // setNotes([]);
+      return;
+    }
+
+    if (activeAnneeScolaire === null || selectedClassId === null || selectedProfesseurId === null) {
+      console.log('ℹ️ Critères Année active, Classe ou Professeur incomplets. Réinitialisation de la matière.');
+      setCurrentMatiere(null);
       return;
     }
 
     const foundAffectation = processedAffectations.find(
       aff =>
-        aff.anneeScolaireId === selectedAnneeId &&
+        aff.anneeScolaireId === activeAnneeScolaire.id &&
         aff.classeId === selectedClassId &&
         aff.professeurId === selectedProfesseurId
     );
@@ -291,7 +306,6 @@ export function GradeInput() {
     } else {
       console.log('ℹ️ Aucune affectation trouvée pour cette combinaison.');
       setCurrentMatiere(null);
-      // Only show toast if affectations data has been loaded and no match is found
       if (processedAffectations.length > 0) {
         toast({
           title: 'Aucune affectation trouvée',
@@ -300,156 +314,222 @@ export function GradeInput() {
         });
       }
     }
-    // setEleves([]); // Students/Notes reset is now handled by the [selectedClassId, selectedAnneeId] effect
-    // setNotes([]);
-  }, [selectedAnneeId, selectedClassId, user, processedAffectations, allMatieres, toast]); // Depend on user
+  }, [activeAnneeScolaire, selectedClassId, user, processedAffectations, allMatieres, toast]);
 
-  // --- Réinitialisation des sélections dépendantes ---
+  // --- Réinitialisation des sélections dépendantes lors du changement de l'année active (si elle change un jour)
   useEffect(() => {
-    console.log('--- Debug: selectedAnneeId changed. Resetting Class. ---');
+    console.log('--- Debug: activeAnneeScolaire changed. Resetting Class. ---');
     setSelectedClassId(null);
-  }, [selectedAnneeId]);
+  }, [activeAnneeScolaire]);
+
+  // --- CHARGEMENT DU TRIMESTRE BASÉ SUR LA DATE ET L'ANNÉE SCOLAIRE ACTIVE ---
+  useEffect(() => {
+    const fetchTrimestre = async () => {
+      if (!date || !activeAnneeScolaire) {
+        setCurrentTrimestre(null);
+        return;
+      }
+
+      try {
+        console.log(`🔍 Recherche du trimestre pour la date ${date} et année active ${activeAnneeScolaire.id}`);
+        const trimestreRes = await fetch(`http://localhost:3000/api/trimestres/by-date?date=${date}&anneeId=${activeAnneeScolaire.id}`);
+        if (!trimestreRes.ok) {
+          const errorText = await trimestreRes.text();
+          throw new Error(`Impossible de déterminer le trimestre: ${trimestreRes.status} - ${errorText}`);
+        }
+        const trimestreData = await trimestreRes.json();
+        setCurrentTrimestre(trimestreData);
+        console.log('✅ Trimestre trouvé:', trimestreData);
+
+      } catch (error) {
+        console.error('🔥 Erreur lors de la détermination du trimestre:', error);
+        toast({
+          title: 'Erreur Trimestre',
+          description: error instanceof Error ? error.message : 'Impossible de déterminer le trimestre pour la date sélectionnée.',
+          variant: 'destructive',
+        });
+        setCurrentTrimestre(null);
+      }
+    };
+
+    fetchTrimestre();
+  }, [date, activeAnneeScolaire, toast]); // Dépend de la date et de l'année scolaire active
 
 
-  // --- CHARGEMENT DES ÉLÈVES (basé sur la classe et l'année sélectionnées) ET INITIALISATION DES NOTES ---
- useEffect(() => {
-  const fetchElevesAndInitNotes = async () => {
-    console.log('--- Debug: useEffect [selectedClassId, selectedAnneeId] triggered ---');
-    console.log('Current selectedClassId:', selectedClassId);
-    console.log('Current selectedAnneeId:', selectedAnneeId);
-    console.log('Current loadingInitialData:', loadingInitialData);
-
-
-    if (selectedClassId === null || selectedAnneeId === null || loadingInitialData) {
-      console.warn('⛔ Critères Année ou Classe incomplets, ou chargement initial en cours. Resetting eleves/notes.');
-      setLoadingEleves(false); // Ensure loading is off if criteria are incomplete
-      setEleves([]); // Reset students when criteria change
-      setNotes([]);   // Reset notes
-      return;
+  // --- TYPES D'ÉVALUATION DYNAMIQUES BASÉS SUR LE TRIMESTRE ---
+  const evaluationTypes: EvaluationType[] = useMemo(() => {
+    if (!currentTrimestre) {
+      console.log('ℹ️ Aucune date ou trimestre non trouvé, types d\'évaluation vides.');
+      return []; // Aucune date sélectionnée ou trimestre non trouvé
     }
 
-    console.log(`🔄 Chargement des élèves pour Classe ID: ${selectedClassId}, Année Scolaire ID: ${selectedAnneeId}`);
-    setLoadingEleves(true); // Start loading indicator
-    setEleves([]); // Clear previous students while loading
-    setNotes([]); // Clear previous notes while loading
-    try {
-      const res = await fetch(
-        `http://localhost:3000/api/inscriptions?classeId=${selectedClassId}&anneeScolaireId=${selectedAnneeId}`
-      );
+    console.log(`📊 Détermination des types d'évaluation pour le trimestre: ${currentTrimestre.nom}`);
+    // Ajustez les IDs et les noms selon votre modèle de base de données et votre logique
+    if (currentTrimestre.nom === 'Trimestre 1') {
+      return [
+        { id: 1, nom: 'Devoir 1' },
+        { id: 2, nom: 'Devoir 2' },
+        { id: 3, nom: 'Composition 1' },
+      ];
+    } else if (currentTrimestre.nom === 'Trimestre 2') {
+      return [
+        { id: 4, nom: 'Devoir 3' },
+        { id: 5, nom: 'Devoir 4' },
+        { id: 6, nom: 'Composition 2' },
+      ];
+    } else if (currentTrimestre.nom === 'Trimestre 3') {
+      return [
+        { id: 7, nom: 'Devoir 5' },
+        { id: 8, nom: 'Devoir 6' },
+        { id: 9, nom: 'Composition 3' },
+      ];
+    } else {
+      console.warn('⚠️ Trimestre non reconnu ou logique non couverte, retour types génériques.');
+      return [
+        { id: 99, nom: 'Autre Type' }, // Un type générique pour les cas non gérés
+      ];
+    }
+  }, [currentTrimestre]); // Dépend maintenant de currentTrimestre
 
-      if (!res.ok) {
-          const errorText = await res.text();
-          console.error('🔥 Erreur HTTP lors du chargement des inscriptions:', res.status, res.statusText, errorText);
-          throw new Error('Erreur lors du chargement des inscriptions.');
-        }
-
-      const data: InscriptionApiResponse[] = await res.json();
-
-      console.log('📦 Réponse API (inscriptions):', data);
-      console.table(data);
+  // --- Réinitialiser le type d'évaluation sélectionné si la liste des types change ---
+  useEffect(() => {
+    // Si la liste des types d'évaluation devient vide ou si le type sélectionné n'est plus dans la nouvelle liste
+    if (selectedEvalTypeId !== null && !evaluationTypes.some(type => type.id === selectedEvalTypeId)) {
+      setSelectedEvalTypeId(null);
+      console.log('ℹ️ Type d\'évaluation réinitialisé car la liste a changé.');
+    }
+  }, [evaluationTypes, selectedEvalTypeId]);
 
 
-      if (!Array.isArray(data)) {
-        console.error('⚠️ Réponse API inattendue (pas un tableau).', data);
+  // --- CHARGEMENT DES ÉLÈVES (basé sur la classe et l'année académique active) ET INITIALISATION DES NOTES ---
+  useEffect(() => {
+    const fetchElevesAndInitNotes = async () => {
+      console.log('--- Debug: useEffect [selectedClassId, activeAnneeScolaire] triggered ---');
+      console.log('Current selectedClassId:', selectedClassId);
+      console.log('Current activeAnneeScolaire:', activeAnneeScolaire);
+      console.log('Current loadingInitialData:', loadingInitialData);
+
+
+      if (selectedClassId === null || activeAnneeScolaire === null || loadingInitialData) {
+        console.warn('⛔ Critères Classe ou Année active incomplets, ou chargement initial en cours. Resetting eleves/notes.');
+        setLoadingEleves(false);
         setEleves([]);
         setNotes([]);
         return;
       }
 
-      const fetchedEleves: Eleve[] = data
-        .map((inscription: InscriptionApiResponse) => { // Use the correct type here
-          const user = inscription.utilisateur;
+      console.log(`🔄 Chargement des élèves pour Classe ID: ${selectedClassId}, Année Scolaire ID: ${activeAnneeScolaire.id}`);
+      setLoadingEleves(true);
+      setEleves([]);
+      setNotes([]);
+      try {
+        const res = await fetch(
+          `http://localhost:3000/api/inscriptions?classeId=${selectedClassId}&anneeAcademiqueId=${activeAnneeScolaire.id}`
+        );
 
-          if (!user) {
-            console.warn("⚠️ Aucune utilisateur lié à cette inscription:", inscription);
-            return null;
-          }
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error('🔥 Erreur HTTP lors du chargement des inscriptions:', res.status, res.statusText, errorText);
+          throw new Error('Erreur lors du chargement des inscriptions.');
+        }
 
-          // Ensure the user object has the 'role' property and it is 'eleve'
-          if (user.role !== 'eleve') {
-            console.info("ℹ️ Utilisateur ignoré (role !== 'eleve'):", user);
-            return null;
-          }
+        const data: InscriptionApiResponse[] = await res.json();
 
-          return {
-            id: user.id,
-            nom: user.nom,
-            prenom: user.prenom,
-          };
-        })
-        .filter(Boolean) as Eleve[]; // Filter out null entries and cast
+        console.log('📦 Réponse API (inscriptions):', data);
+        console.table(data);
 
-      console.log('✅ Élèves filtrés:', fetchedEleves);
-      console.log(`📊 Nombre d'élèves filtrés: ${fetchedEleves.length}`);
-      setEleves(fetchedEleves); // <--- Update eleves state
 
-      // Initialise les notes ici, directement après avoir les élèves
-      const initialNotes = fetchedEleves.map(e => ({ eleveId: e.id, nom: e.nom, prenom: e.prenom, note: '' }));
-      console.log('📝 Notes initialisées:', initialNotes);
-      setNotes(initialNotes); // <--- Initialize notes state
+        if (!Array.isArray(data)) {
+          console.error('⚠️ Réponse API inattendue (pas un tableau).', data);
+          setEleves([]);
+          setNotes([]);
+          return;
+        }
 
-    } catch (error) {
-      console.error('🔥 Erreur lors du chargement des élèves:', error);
-      toast({
-        title: 'Erreur',
-        description: error instanceof Error ? error.message : 'Impossible de charger les élèves pour la sélection actuelle.',
-        variant: 'destructive'
-      });
-      setEleves([]); // Ensure state is empty on error
-      setNotes([]); // Reset notes on error as well
-    } finally {
-      setLoadingEleves(false); // Stop loading indicator
-      console.log('--- Debug: useEffect [selectedClassId, selectedAnneeId] finished ---');
-    }
-  };
+        const fetchedEleves: Eleve[] = data
+          .map((inscription: InscriptionApiResponse) => {
+            const user = inscription.utilisateur;
 
-  fetchElevesAndInitNotes();
-}, [selectedClassId, selectedAnneeId, loadingInitialData, toast]); // Dependencies: selectedClassId, selectedAnneeId, loadingInitialData, toast
+            if (!user) {
+              console.warn("⚠️ Aucune utilisateur lié à cette inscription:", inscription);
+              return null;
+            }
 
+            if (user.role !== 'eleve') {
+              console.info("ℹ️ Utilisateur ignoré (role !== 'eleve'):", user);
+              return null;
+            }
+
+            return {
+              id: user.id,
+              nom: user.nom,
+              prenom: user.prenom,
+            };
+          })
+          .filter(Boolean) as Eleve[];
+
+        console.log('✅ Élèves filtrés:', fetchedEleves);
+        console.log(`📊 Nombre d'élèves filtrés: ${fetchedEleves.length}`);
+        setEleves(fetchedEleves);
+
+        const initialNotes = fetchedEleves.map(e => ({ eleveId: e.id, nom: e.nom, prenom: e.prenom, note: '' }));
+        console.log('📝 Notes initialisées:', initialNotes);
+        setNotes(initialNotes);
+
+      } catch (error) {
+        console.error('🔥 Erreur lors du chargement des élèves:', error);
+        toast({
+          title: 'Erreur',
+          description: error instanceof Error ? error.message : 'Impossible de charger les élèves pour la sélection actuelle.',
+          variant: 'destructive'
+        });
+        setEleves([]);
+        setNotes([]);
+      } finally {
+        setLoadingEleves(false);
+        console.log('--- Debug: useEffect [selectedClassId, activeAnneeScolaire] finished ---');
+      }
+    };
+
+    fetchElevesAndInitNotes();
+  }, [selectedClassId, activeAnneeScolaire, loadingInitialData, toast]);
 
   // --- Gestion du changement de note ---
   const handleNoteChange = useCallback((eleveId: number, note: string) => {
-    // Allow empty string for initial input, then validate numeric range
     if (note === '') {
       setNotes(prev => prev.map(n => (n.eleveId === eleveId ? { ...n, note: '' } : n)));
       return;
     }
 
     const numericNote = parseFloat(note);
-    // Validate number and range
     if (isNaN(numericNote) || numericNote < 0 || numericNote > 20) {
-      // If invalid, keep the user's input as is, but don't allow saving yet.
-      // Or you could revert to previous valid note or an empty string.
-      // For now, keeping the raw invalid input to let the user correct.
       setNotes(prev => prev.map(n => (n.eleveId === eleveId ? { ...n, note: note } : n)));
     } else {
       setNotes(prev => prev.map(n => (n.eleveId === eleveId ? { ...n, note: numericNote.toString() } : n)));
     }
   }, []);
 
-
   // --- Fonction d'enregistrement des notes ---
   const saveNotes = useCallback(async () => {
     console.log('--- Debug: saveNotes triggered ---');
     console.log('Current notes state:', notes);
 
-    // Check for general form completeness and any empty notes
-    // Use the logged-in user's ID as the professor ID for the payload
     const professeurId = user?.id || null;
 
     if (!professeurId) {
-        console.warn('⚠️ Utilisateur non connecté. Impossible d\'enregistrer.');
-        toast({ title: 'Erreur', description: 'Vous devez être connecté pour enregistrer les notes.', variant: 'destructive' });
-        return;
+      console.warn('⚠️ Utilisateur non connecté. Impossible d\'enregistrer.');
+      toast({ title: 'Erreur', description: 'Vous devez être connecté pour enregistrer les notes.', variant: 'destructive' });
+      return;
     }
     if (
-      selectedAnneeId === null ||
+      activeAnneeScolaire === null ||
       selectedClassId === null ||
       selectedEvalTypeId === null ||
       !date ||
       currentMatiere === null ||
-      notes.length === 0 || // No students loaded means nothing to save
-      notes.some(n => n.note === '') // At least one note is empty
+      currentTrimestre === null || // S'assurer que le trimestre est également défini
+      notes.length === 0 ||
+      notes.some(n => n.note === '')
     ) {
       console.warn('⚠️ Tentative d\'enregistrement avec champs manquants ou notes vides.');
       toast({
@@ -460,7 +540,6 @@ export function GradeInput() {
       return;
     }
 
-    // Specific validation for note values
     const invalidNotes = notes.filter(n => {
       const numericNote = parseFloat(n.note);
       return isNaN(numericNote) || numericNote < 0 || numericNote > 20;
@@ -479,52 +558,39 @@ export function GradeInput() {
     setIsSaving(true);
     try {
       console.log('🚀 Début de l\'enregistrement...');
-      // 1. Déterminer le trimestre
-      console.log(`🔍 Recherche du trimestre pour la date ${date} et année ${selectedAnneeId}`);
-      const trimestreRes = await fetch(`http://localhost:3000/api/trimestres/by-date?date=${date}&anneeId=${selectedAnneeId}`);
-      if (!trimestreRes.ok) {
-        const errorText = await trimestreRes.text();
-        throw new Error(`Impossible de déterminer le trimestre: ${trimestreRes.status} - ${errorText}`);
-      }
-      const trimestreData = await trimestreRes.json();
-      const trimestreId = trimestreData?.id;
+
+      // Le trimestre est déjà déterminé par l'useEffect séparé, on le récupère de l'état
+      const trimestreId = currentTrimestre?.id;
 
       if (!trimestreId) {
         throw new Error("Trimestre introuvable pour cette date et année scolaire. Veuillez vérifier les trimestres configurés.");
       }
-      console.log('✅ Trimestre trouvé avec ID:', trimestreId);
-      // Vérification cruciale avant de construire le payload
-      if (!currentMatiere || typeof currentMatiere.id === 'undefined') {
-        toast({
-            title: 'Erreur de données',
-            description: 'La matière n\'a pas été correctement déterminée. Veuillez vérifier vos sélections.',
-            variant: 'destructive',
-        });
-        setIsSaving(false);
-        return;
-      }
-      if (selectedClassId === null || professeurId === null || selectedEvalTypeId === null || !date || trimestreId === null || selectedAnneeId === null) {
-        toast({
-            title: 'Erreur de données',
-            description: 'Un ou plusieurs champs requis sont manquants pour la création de l\'évaluation.',
-            variant: 'destructive',
-        });
-        setIsSaving(false);
-        return;
+      console.log('✅ Trimestre ID pour l\'évaluation:', trimestreId);
+
+      // Trouver le nom du type d'évaluation à envoyer
+      const evaluationTypeSelected = evaluationTypes.find(t => t.id === selectedEvalTypeId);
+      if (!evaluationTypeSelected) {
+          toast({
+              title: 'Erreur de sélection',
+              description: 'Type d\'évaluation non trouvé. Veuillez sélectionner un type valide.',
+              variant: 'destructive',
+          });
+          setIsSaving(false);
+          return;
       }
 
       // 2. Créer l'évaluation
       const evaluationPayload = {
-          matiere: { id: currentMatiere.id },
-          classe: { id: selectedClassId },
-          professeur: { id: professeurId },
-          type: selectedEvalTypeId, // Assurez-vous que le type de l'entité backend (string/number) correspond
-          dateEval: date, // Correspond à la propriété 'dateEval' de l'entité Evaluation
-          trimestre: { id: trimestreId },
-          anneeScolaire: { id: selectedAnneeId } // Correspond à la propriété 'anneeScolaire' de l'entité
-        };
+        matiere: { id: currentMatiere.id },
+        classe: { id: selectedClassId },
+        professeur: { id: professeurId },
+        type: evaluationTypeSelected.nom, // Utilisez le nom du type comme string
+        dateEval: date,
+        trimestre: { id: trimestreId },
+        anneeScolaire: { id: activeAnneeScolaire.id }
+      };
       console.log('📥 Création de l\'évaluation avec les données:', evaluationPayload);
-      const evalRes = await fetch('http://localhost:3000/api/evaluation', {
+      const evalRes = await fetch('http://localhost:3000/api/evaluations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(evaluationPayload)
@@ -544,7 +610,7 @@ export function GradeInput() {
       const notesToSave = notes.map(n => ({
         evaluation_id: evaluationId,
         etudiant_id: n.eleveId,
-        note: parseFloat(n.note), // Ensure note is a number
+        note: parseFloat(n.note),
       }));
       console.log('📝 Enregistrement des notes:', notesToSave);
 
@@ -566,10 +632,9 @@ export function GradeInput() {
         variant: 'default'
       });
 
-      // Reset form after successful save (optional, depends on UX)
+      // Reset form after successful save
       setSelectedEvalTypeId(null);
       setDate('');
-      // Clear notes but keep student list if user wants to enter another evaluation for the same class/year
       setNotes(prev => prev.map(n => ({ ...n, note: '' })));
 
     } catch (error: any) {
@@ -583,31 +648,31 @@ export function GradeInput() {
       setIsSaving(false);
       console.log('--- Debug: saveNotes finished ---');
     }
-  }, [selectedAnneeId, selectedClassId, user, selectedEvalTypeId, date, currentMatiere, notes, toast]); // Depend on user
+  }, [activeAnneeScolaire, selectedClassId, user, selectedEvalTypeId, date, currentMatiere, currentTrimestre, notes, toast, evaluationTypes]);
 
   // Determines if the "Saisie des Notes" section should be visible
   const isFormComplete = useMemo(() => {
     console.log('--- Debug: Checking isFormComplete ---');
-    console.log('selectedAnneeId:', selectedAnneeId);
+    console.log('activeAnneeScolaire:', activeAnneeScolaire);
     console.log('selectedClassId:', selectedClassId);
     console.log('selectedEvalTypeId:', selectedEvalTypeId);
     console.log('date:', date);
     console.log('currentMatiere:', currentMatiere);
+    console.log('currentTrimestre:', currentTrimestre); // Inclure le trimestre dans la condition
     console.log('user:', user);
 
-    // Form is complete if all required fields are selected/filled AND user is a professor
     const complete = (
-      selectedAnneeId !== null &&
+      activeAnneeScolaire !== null &&
       selectedClassId !== null &&
       selectedEvalTypeId !== null &&
       date !== '' &&
       currentMatiere !== null &&
-      user?.role === 'professeur' // Check if user is logged in and is a professor
+      currentTrimestre !== null && // Le trimestre doit être déterminé
+      user?.role === 'professeur'
     );
     console.log('isFormComplete:', complete);
     return complete;
-  }, [selectedAnneeId, selectedClassId, selectedEvalTypeId, date, currentMatiere, user]); // Depend on user
-
+  }, [activeAnneeScolaire, selectedClassId, selectedEvalTypeId, date, currentMatiere, currentTrimestre, user]);
 
   if (loadingInitialData) {
     return (
@@ -620,13 +685,13 @@ export function GradeInput() {
 
   // Render a message if the user is not a professor
   if (!user || user.role !== 'professeur') {
-      return (
-          <div className="min-h-screen bg-gray-50 p-6 md:p-4 flex flex-col items-center justify-center">
-              <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
-              <span className="text-2xl font-medium text-gray-700">Accès refusé</span>
-              <p className="text-lg text-gray-600 mt-2">Seuls les professeurs sont autorisés à saisir des notes.</p>
-          </div>
-      );
+    return (
+      <div className="min-h-screen bg-gray-50 p-6 md:p-4 flex flex-col items-center justify-center">
+        <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
+        <span className="text-2xl font-medium text-gray-700">Accès refusé</span>
+        <p className="text-lg text-gray-600 mt-2">Seuls les professeurs sont autorisés à saisir des notes.</p>
+      </div>
+    );
   }
 
 
@@ -643,35 +708,20 @@ export function GradeInput() {
             </div>
           </CardHeader>
           <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Année scolaire - AFFICHAGE AUTOMATIQUE, NON SÉLECTIONNABLE */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700 flex items-center">
                 <CalendarDays className="h-4 w-4 mr-2 text-blue-600" />
-                Année scolaire
+                Année scolaire actuelle
               </label>
-              <Select
-                onValueChange={val => setSelectedAnneeId(val ? Number(val) : null)}
-                value={selectedAnneeId !== null ? String(selectedAnneeId) : ''}
-                disabled={anneesScolaires.length === 0}
-              >
-                <SelectTrigger className="w-full border-blue-200 focus:ring-blue-500">
-                  <SelectValue placeholder="Sélectionner une année" />
-                </SelectTrigger>
-                <SelectContent>
-                  {anneesScolaires.length > 0 ? (
-                    anneesScolaires.map(annee => (
-                      <SelectItem key={annee.id} value={String(annee.id)}>
-                        {annee.libelle}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="disabled" disabled>
-                      Aucune année disponible
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center h-10 px-3 py-2 rounded-md border bg-blue-50 border-blue-200 text-blue-800">
+                <span className="font-medium">
+                  {activeAnneeScolaire?.libelle || 'Chargement...'}
+                </span>
+              </div>
             </div>
 
+            {/* Classe */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700 flex items-center">
                 <School className="h-4 w-4 mr-2 text-blue-600" />
@@ -680,28 +730,28 @@ export function GradeInput() {
               <Select
                 onValueChange={val => setSelectedClassId(val ? Number(val) : null)}
                 value={selectedClassId !== null ? String(selectedClassId) : ''}
-                disabled={selectedAnneeId === null || classesForSelectedAnnee.length === 0}
+                disabled={classesForProfessorAndActiveAnnee.length === 0 || !activeAnneeScolaire}
               >
                 <SelectTrigger className="w-full border-blue-200 focus:ring-blue-500">
                   <SelectValue placeholder="Sélectionner une classe" />
                 </SelectTrigger>
                 <SelectContent>
-                  {classesForSelectedAnnee.length > 0 ? (
-                    classesForSelectedAnnee.map(classe => (
+                  {classesForProfessorAndActiveAnnee.length > 0 ? (
+                    classesForProfessorAndActiveAnnee.map(classe => (
                       <SelectItem key={classe.id} value={String(classe.id)}>
                         {classe.nom}
                       </SelectItem>
                     ))
                   ) : (
                     <SelectItem value="disabled" disabled>
-                      {selectedAnneeId === null ? "Sélectionnez une année d'abord" : "Aucune classe disponible pour cette année et ce professeur"}
+                      {activeAnneeScolaire === null ? "Chargement de l'année..." : "Aucune classe affectée à vous pour cette année"}
                     </SelectItem>
                   )}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Champ Professeur - Affichage automatique */}
+            {/* Professeur - Affichage automatique */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700 flex items-center">
                 <User className="h-4 w-4 mr-2 text-blue-600" />
@@ -719,153 +769,159 @@ export function GradeInput() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 flex items-center">
-                <Bookmark className="h-4 w-4 mr-2 text-blue-600" /> {/* Keep icon */}
-                Type d'évaluation
-              </label>
-              <Select
-                onValueChange={val => setSelectedEvalTypeId(val ? Number(val) : null)}
-                value={selectedEvalTypeId !== null ? String(selectedEvalTypeId) : ''}
-              >
-                <SelectTrigger className="w-full border-blue-200 focus:ring-blue-500">
-                  <SelectValue placeholder="Sélectionner un type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {evaluationTypes.map(type => (
-                    <SelectItem key={type.id} value={String(type.id)}>
-                      {type.nom}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
+            {/* Matière - Affichage automatique */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700 flex items-center">
                 <BookOpen className="h-4 w-4 mr-2 text-blue-600" />
                 Matière
               </label>
               <div className={`flex items-center h-10 px-3 py-2 rounded-md border ${currentMatiere ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
-                {currentMatiere ? (
-                  <>
-                    <BookOpen className="h-4 w-4 mr-2 text-blue-600" />
-                    <span className="font-medium">{currentMatiere.nom}</span>
-                  </>
-                ) : (
-                  <span className="text-gray-500">Aucune matière trouvée</span>
-                )}
-              </div> {/* Keep the warning */}
-              {/* Adjusted warning condition */}
-              {!currentMatiere && selectedAnneeId !== null && selectedClassId !== null && user?.role === 'professeur' && processedAffectations.length > 0 && (
-                <p className="text-xs text-red-500 mt-1">
-                  Cette combinaison (Année, Classe, Professeur connecté) n'est pas affectée à une matière.
-                </p>
-              )}
+                <span className="font-medium">
+                  {currentMatiere ? currentMatiere.nom : 'Automatique après sélection'}
+                </span>
+              </div>
             </div>
 
+            {/* Date de l'évaluation */}
             <div className="space-y-2">
-              <label htmlFor="date-input" className="text-sm font-medium text-gray-700 flex items-center">
+              <label className="text-sm font-medium text-gray-700 flex items-center">
                 <CalendarDays className="h-4 w-4 mr-2 text-blue-600" />
                 Date de l'évaluation
               </label>
               <Input
-                id="date-input"
                 type="date"
                 value={date}
                 onChange={e => setDate(e.target.value)}
-                className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
+                className="border-blue-200 focus:ring-blue-500"
               />
             </div>
+
+            {/* Trimestre - AFFICHAGE AUTOMATIQUE, NON SÉLECTIONNABLE */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 flex items-center">
+                <CalendarDays className="h-4 w-4 mr-2 text-blue-600" />
+                Trimestre
+              </label>
+              <div className="flex items-center h-10 px-3 py-2 rounded-md border bg-blue-50 border-blue-200 text-blue-800">
+                <span className="font-medium">
+                  {currentTrimestre?.nom || 'Sélectionnez une date...'}
+                </span>
+              </div>
+            </div>
+
+            {/* Type d'évaluation */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 flex items-center">
+                <Bookmark className="h-4 w-4 mr-2 text-blue-600" />
+                Type d'évaluation
+              </label>
+              <Select
+                onValueChange={val => setSelectedEvalTypeId(val ? Number(val) : null)}
+                value={selectedEvalTypeId !== null ? String(selectedEvalTypeId) : ''}
+                disabled={evaluationTypes.length === 0} // Désactive si aucun type n'est disponible
+              >
+                <SelectTrigger className="w-full border-blue-200 focus:ring-blue-500">
+                  <SelectValue placeholder="Sélectionner un type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {evaluationTypes.length > 0 ? (
+                    evaluationTypes.map(type => (
+                      <SelectItem key={type.id} value={String(type.id)}>
+                        {type.nom}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="disabled" disabled>
+                      Sélectionnez une date d'abord
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
           </CardContent>
         </Card>
 
-        {/* Section Saisie des Notes */}
+        {/* Section de Saisie des Notes */}
         {isFormComplete ? (
-          <Card className="shadow-lg border border-gray-200 animate-fade-in-up">
-            <CardHeader className="bg-white border-b border-gray-100 rounded-t-lg p-6">
-              <CardTitle className="flex items-center text-2xl font-bold text-gray-700">
-                <Users className="mr-3 h-6 w-6 text-blue-500" />
-                Saisie des Notes:
-                <span className="ml-2">
-                  {allClasses.find(c => c.id === selectedClassId)?.nom || 'Chargement...'} - {currentMatiere?.nom || 'Chargement...'}
-                </span>
-              </CardTitle>
+          <Card className="w-full border border-blue-200 shadow-lg rounded-xl overflow-hidden"> {/* Bordure de carte légèrement bleutée */}
+
+            <CardHeader className="bg-blue-50 border-b border-blue-200 p-6"> {/* Fond d'en-tête bleu très clair et bordure assortie */}
+
+              <div className="flex items-center space-x-3">
+                <Users className="h-6 w-6" />
+                <CardTitle className="text-xl font-semibold">Saisie des Notes</CardTitle>
+              </div>
             </CardHeader>
             <CardContent className="p-6">
               {loadingEleves ? (
-                <div className="flex flex-col items-center justify-center h-40 bg-gray-50 rounded-lg">
-                  <Loader2 className="h-10 w-10 animate-spin text-blue-500 mb-3" />
-                  <span className="text-xl font-medium text-gray-700">Chargement des élèves...</span>
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-green-500 mr-3" />
+                  <span className="text-lg text-gray-600">Chargement des élèves...</span>
+                </div>
+              ) : eleves.length === 0 ? (
+                <div className="text-center p-8 text-gray-500">
+                  <AlertCircle className="h-10 w-10 mx-auto mb-4 text-yellow-500" />
+                  <p className="text-lg">Aucun élève trouvé pour cette classe et cette année scolaire.</p>
+                  <p className="text-sm">Veuillez vérifier les inscriptions ou les critères de sélection.</p>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-gray-50">
-                      <TableHead className="w-[60%] text-gray-700 text-base">Nom de l'Élève</TableHead>
-                      <TableHead className="w-[40%] text-right text-gray-700 text-base">Note sur 20</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-  {notes.length > 0 ? (
-    notes.map(({ eleveId, nom, prenom, note }) => (
-      <TableRow key={eleveId} className="hover:bg-gray-50 transition-colors">
-        <TableCell className="font-semibold text-gray-800 py-3">{nom} {prenom}</TableCell>
-        <TableCell className="text-right">
-          <Input
-            type="number"
-            min={0}
-            max={20}
-            step={0.1}
-            value={note}
-            onChange={e => handleNoteChange(eleveId, e.target.value)}
-            className="text-center font-bold text-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-          />
-        </TableCell>
-      </TableRow>
-    ))
-  ) : (
-    <TableRow>
-      <TableCell colSpan={2} className="text-center py-8 text-gray-500 text-lg font-medium">
-        {loadingEleves ? 'Chargement des élèves...' : 'Aucun élève inscrit pour la sélection actuelle.'}
-      </TableCell>
-    </TableRow>
-  )}
-</TableBody>
-                </Table>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead>Nom Complet</TableHead>
+                        <TableHead className="text-right">Note (/20)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {notes.map(noteEntry => (
+                        <TableRow key={noteEntry.eleveId}>
+                          <TableCell>{noteEntry.nom} {noteEntry.prenom}</TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max="20"
+                              value={noteEntry.note}
+                              onChange={(e) => handleNoteChange(noteEntry.eleveId, e.target.value)}
+                              className="w-24 text-right ml-auto border-gray-300 focus:border-green-500 focus:ring-green-500"
+                              aria-label={`Note pour ${noteEntry.nom} ${noteEntry.prenom}`}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               )}
-            </CardContent>
-
-            <CardContent className="flex justify-end p-6 pt-0">
-              <Button
-                onClick={saveNotes}
-                disabled={!isFormComplete || loadingEleves || isSaving || notes.some(n => n.note === '') || notes.length === 0} // Added notes.length === 0 check
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-md transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center gap-2 text-lg"
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 size={20} className="animate-spin" />
-                    Enregistrement...
-                  </>
-                ) : (
-                  <>
-                    <Save size={20} />
-                    Enregistrer les Notes
-                  </>
-                )}
-              </Button>
+              <div className="flex justify-end mt-6">
+                <Button
+                  onClick={saveNotes}
+                  disabled={isSaving || eleves.length === 0 || notes.some(n => n.note === '')}
+                  className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all duration-200 flex items-center"
+                >
+                  {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  <Save className="mr-2 h-4 w-4" />
+                  Enregistrer les notes
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ) : (
-          <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200 text-center animate-fade-in">
-            <p className="text-2xl font-semibold text-gray-700 mb-4">
-              Commencez par choisir les critères de l'évaluation !
-            </p>
-           <p className="text-lg text-gray-600">
-              Sélectionnez l'<strong>Année scolaire</strong>, la <strong>Classe</strong>, le <strong>Type d'évaluation</strong> et la <strong>Date</strong> pour afficher la liste des élèves et commencer la saisie des notes. Le professeur est automatiquement défini par votre compte.
-            </p>
-            <CalendarDays className="mt-6 h-16 w-16 text-blue-400 mx-auto" /> {/* Keep icon */}
-          </div>
+          <Card className="w-full border border-gray-200 shadow-lg rounded-xl overflow-hidden bg-gray-50">
+            <CardHeader className="bg-gray-100 text-gray-700 p-6">
+              <div className="flex items-center space-x-3">
+                <Users className="h-6 w-6" />
+                <CardTitle className="text-xl font-semibold">Saisie des Notes</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6 text-center text-gray-500">
+              <AlertCircle className="h-10 w-10 mx-auto mb-4 text-gray-400" />
+              <p className="text-lg">Veuillez compléter tous les critères d'évaluation ci-dessus pour afficher la liste des élèves.</p>
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>

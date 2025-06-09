@@ -14,6 +14,7 @@ import { CoefficientClasseModule } from './coeff/coeff.module';
 import { TrimestreModule } from './trimestre/trimestre.module';
 import { EvaluationModule } from './evaluation/evaluation.module';
 import { NoteModule } from './note/note.module';
+import { ConfigurationModule } from './configuration/configuration.module';
 
 
 
@@ -41,6 +42,7 @@ import { NoteModule } from './note/note.module';
     TrimestreModule,
     EvaluationModule,
     NoteModule,
+    ConfigurationModule
   ],
   controllers: [AppController],
   providers: [AppService],
