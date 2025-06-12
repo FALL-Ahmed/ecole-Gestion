@@ -16,7 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { FileDown, Printer, Save } from 'lucide-react';
+import { BookOpen, FileDown, Printer, Save,  Info, AlertCircle } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 // Define types for API data
@@ -36,57 +36,48 @@ interface Matiere {
   nom: string;
 }
 
-// Interface for Evaluation updated to match your database schema
 interface Evaluation {
   id: number;
   matiere_id: number;
   classe_id: number;
   professeur_id: number;
-  type: string;          // Matches your 'type' column (e.g., "Devoir 5")
+  type: string;
   date_eval: string;
-  trimestre: number;     // Matches your 'trimestre' column (e.g., 6 for Trimestre 3)
+  trimestre: number;
   annee_scolaire_id: number;
 }
 
 interface Eleve {
-  id: number; // This is the utilisateurId from the Inscription and user table
-  nom: string; // The student's name from the user table
-  prenom: string; // Added to store the student's first name
-  classeId: number; // The class the student is inscribed in
-  inscriptionId: number; // The ID of the inscription record itself
+  id: number;
+  nom: string;
+  prenom: string;
+  classeId: number;
+  inscriptionId: number;
 }
 
 interface Note {
-  id?: number; // Optional, for existing notes
+  id?: number;
   eleveId: number;
   evaluationId: number;
   note: number;
 }
 
-// Interface for the temporary object during grade fetching
 interface TempNoteData {
   eleveId: number;
   evaluationId: number;
   noteValue: number | '';
 }
 
-// --- API Functions ---
-const API_BASE_URL = 'http://localhost:3000/api'; // Centralize your API base URL
+const API_BASE_URL = 'http://localhost:3000/api';
 
 const fetchAnneesAcademiques = async (): Promise<AnneeAcademique[]> => {
   try {
     const response = await fetch(`${API_BASE_URL}/annees-academiques`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     return await response.json();
   } catch (error) {
     console.error("Error fetching academic years:", error);
-    toast({
-      title: "Erreur de chargement",
-      description: "Impossible de charger les années académiques.",
-      variant: "destructive",
-    });
+    toast({ title: "Erreur de chargement", description: "Impossible de charger les années académiques.", variant: "destructive" });
     return [];
   }
 };
@@ -94,17 +85,11 @@ const fetchAnneesAcademiques = async (): Promise<AnneeAcademique[]> => {
 const fetchClasses = async (anneeAcademiqueId: number): Promise<Classe[]> => {
   try {
     const response = await fetch(`${API_BASE_URL}/classes?annee_scolaire_id=${anneeAcademiqueId}`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     return await response.json();
   } catch (error) {
     console.error(`Error fetching classes for year ${anneeAcademiqueId}:`, error);
-    toast({
-      title: "Erreur de chargement",
-      description: `Impossible de charger les classes pour l'année sélectionnée.`,
-      variant: "destructive",
-    });
+    toast({ title: "Erreur de chargement", description: "Impossible de charger les classes pour l'année sélectionnée.", variant: "destructive" });
     return [];
   }
 };
@@ -112,18 +97,12 @@ const fetchClasses = async (anneeAcademiqueId: number): Promise<Classe[]> => {
 const fetchMatieresByClasse = async (classeId: number): Promise<Matiere[]> => {
   try {
     const response = await fetch(`${API_BASE_URL}/coefficientclasse?classeId=${classeId}`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const coefficientClasses: any[] = await response.json(); // Use any for flexibility
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const coefficientClasses = await response.json();
     return coefficientClasses.map(cc => cc.matiere);
   } catch (error) {
     console.error(`Error fetching subjects for class ${classeId}:`, error);
-    toast({
-      title: "Erreur de chargement",
-      description: `Impossible de charger les matières pour la classe sélectionnée.`,
-      variant: "destructive",
-    });
+    toast({ title: "Erreur de chargement", description: "Impossible de charger les matières pour la classe sélectionnée.", variant: "destructive" });
     return [];
   }
 };
@@ -131,77 +110,48 @@ const fetchMatieresByClasse = async (classeId: number): Promise<Matiere[]> => {
 const fetchElevesByClasse = async (classeId: number, anneeScolaireId: number): Promise<Eleve[]> => {
   try {
     const response = await fetch(`${API_BASE_URL}/inscriptions?classeId=${classeId}&anneeScolaireId=${anneeScolaireId}`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const inscriptions = await response.json();
-
-    const elevesData: Eleve[] = inscriptions.map((inscription: any) => {
-      // MODIFICATION HERE: Check for inscription.utilisateur AND inscription.utilisateur.id
-      if (!inscription.utilisateur || typeof inscription.utilisateur.id === 'undefined' || inscription.utilisateur.id === null) {
-        console.warn("Inscription missing valid utilisateur object or ID:", inscription);
-        return null; // Return null for invalid entries
-      }
-      return {
-        id: inscription.utilisateur.id, // <-- CORRECTED: Get ID from nested utilisateur object
-        nom: inscription.utilisateur.nom || 'Nom Inconnu',
-        prenom: inscription.utilisateur.prenom || '',
-        classeId: inscription.classe.id, // Ensure classeId is pulled from the nested classe object
-        inscriptionId: inscription.id,
-      };
-    }).filter(Boolean) as Eleve[]; // Filter out nulls
-
-    return elevesData;
+    return inscriptions.map(inscription => ({
+      id: inscription.utilisateur.id,
+      nom: inscription.utilisateur.nom || 'Nom Inconnu',
+      prenom: inscription.utilisateur.prenom || '',
+      classeId: inscription.classe.id,
+      inscriptionId: inscription.id,
+    })).filter(Boolean);
   } catch (error) {
     console.error(`Error fetching students for class ${classeId} in year ${anneeScolaireId}:`, error);
-    toast({
-      title: "Erreur de chargement",
-      description: `Impossible de charger les élèves pour la classe sélectionnée.`,
-      variant: "destructive",
-    });
+    toast({ title: "Erreur de chargement", description: "Impossible de charger les élèves pour la classe sélectionnée.", variant: "destructive" });
     return [];
   }
 };
 
 const fetchEvaluations = async (classeId: number, matiereId: number, trimestreNum: number, anneeAcademiqueId: number): Promise<Evaluation[]> => {
   try {
-    // Note: 'trimestreNum' is already the numeric value here
-    const response = await fetch(`${API_BASE_URL}/evaluations?classe_id=${classeId}&matiere_id=${matiereId}&trimestre=${trimestreNum}&annee_scolaire_id=${anneeAcademiqueId}`);
+    const response = await fetch(
+      `${API_BASE_URL}/evaluations?classeId=${classeId}&matiereId=${matiereId}&trimestre=${trimestreNum}&anneeScolaireId=${anneeAcademiqueId}`
+    );
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.error(`Error fetching evaluations for class ${classeId}, subject ${matiereId}, trimestre ${trimestreNum}, year ${anneeAcademiqueId}:`, error);
-    toast({
-      title: "Erreur de chargement",
-      description: `Impossible de charger les évaluations.`,
-      variant: "destructive",
-    });
-    return [];
-  }
-};
-
-const fetchNote = async (evaluationId: number, eleveId: number): Promise<Note | null> => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/notes?evaluation_id=${evaluationId}&etudiant_id=${eleveId}`);
-    if (response.status === 404) {
-      return null;
-    }
-    if (!response.ok) {
+      if (response.status === 404 || response.status === 204) return [];
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const data = await response.json();
-    // Assuming the backend returns an array if found, take the first one.
-    if (Array.isArray(data) && data.length > 0) {
-      return data[0];
-    } else if (data && typeof data === 'object') {
-      return data; // If backend returns a single object directly
-    }
-    return null;
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error(`Error fetching evaluations for class ${classeId}, subject ${matiereId}, trimestre ${trimestreNum}, year ${anneeAcademiqueId}:`, error);
+    toast({ title: "Erreur de chargement", description: "Impossible de charger les évaluations pour la matière sélectionnée.", variant: "destructive" });
+    return [];
+  }
+};
+const fetchNote = async (evaluationId: number, eleveId: number): Promise<Note | null> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/notes?evaluation_id=${evaluationId}&etudiant_id=${eleveId}`);
+    if (response.status === 404 || response.status === 204) return null;
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const data = await response.json();
+    return Array.isArray(data) && data.length > 0 ? data[0] : data || null;
   } catch (error) {
     console.error(`Error fetching note for evaluation ${evaluationId}, student ${eleveId}:`, error);
-    // Don't toast here to avoid spamming for every missing note
     return null;
   }
 };
@@ -210,347 +160,267 @@ const saveNote = async (noteData: Note): Promise<Note> => {
   try {
     const method = noteData.id ? 'PUT' : 'POST';
     const url = noteData.id ? `${API_BASE_URL}/notes/${noteData.id}` : `${API_BASE_URL}/notes`;
-
-    const payload = {
-      evaluation_id: noteData.evaluationId,
-      etudiant_id: noteData.eleveId,
-      note: noteData.note
-    };
-
-    const response = await fetch(url, {
-      method: method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
-    }
+    const payload = { evaluation_id: noteData.evaluationId, etudiant_id: noteData.eleveId, note: noteData.note };
+    const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     return await response.json();
-  } catch (error: any) { // Type 'any' for error to access .message
+  } catch (error) {
     console.error("Error saving note:", noteData, error);
-    toast({
-      title: "Erreur de sauvegarde",
-      description: `Impossible de sauvegarder la note pour l'élève ${noteData.eleveId}. ${error.message || 'Erreur inconnue.'}`,
-      variant: "destructive",
-    });
+    toast({ title: "Erreur de sauvegarde", description: `Impossible de sauvegarder la note. ${error.message || 'Erreur inconnue.'}`, variant: "destructive" });
     throw error;
   }
 };
-// --- End of API Functions ---
 
 export function GradeManagement() {
   const [anneesAcademiques, setAnneesAcademiques] = useState<AnneeAcademique[]>([]);
   const [selectedAnneeAcademiqueId, setSelectedAnneeAcademiqueId] = useState<string>('');
-
   const [classes, setClasses] = useState<Classe[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
-
   const [matieres, setMatieres] = useState<Matiere[]>([]);
   const [selectedMatiereId, setSelectedMatiereId] = useState<string>('');
-
   const [selectedTerm, setSelectedTerm] = useState<string>('');
-  const terms = ['Trimestre 1', 'Trimestre 2', 'Trimestre 3']; // Frontend display names
-
   const [eleves, setEleves] = useState<Eleve[]>([]);
-  const [allEvaluations, setAllEvaluations] = useState<Evaluation[]>([]); // Store all fetched evaluations
+  const [allEvaluations, setAllEvaluations] = useState<Evaluation[]>([]);
   const [gradeData, setGradeData] = useState<{ [eleveId: number]: { [evaluationId: number]: number | '' } }>({});
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Removed loading and isSaving states
-  // const [loading, setLoading] = useState(false);
-  // const [isSaving, setIsSaving] = useState(false);
-
-  // Map frontend term display names to backend numeric trimestre values
-  const trimestreMap: { [key: string]: number } = {
-    'Trimestre 1': 4, // IMPORTANT: Adjust these numbers to match your DB 'trimestre' column
-    'Trimestre 2': 5,
-    'Trimestre 3': 6, // Your sample data shows 6 and 7 for trimestre. Confirm what '7' means.
-                      // For now, I'll use 4, 5, 6 as a common sequence.
-                      // IMPORTANT: You MUST verify these numbers against your actual database.
-  };
-
-  // Map specific evaluation types to their expected names/types from DB, per term
-  // This helps identify which evaluations are the "Devoir 1", "Devoir 2", "Composition 1" for display
-  const termEvaluationTypeMap: { [key: string]: { devoir1: string, devoir2: string, composition: string } } = {
+  const terms = ['Trimestre 1', 'Trimestre 2', 'Trimestre 3'];
+  const trimestreMap = { 'Trimestre 1': 4, 'Trimestre 2': 5, 'Trimestre 3': 6 };
+  const termEvaluationTypeMap = {
     'Trimestre 1': { devoir1: 'Devoir 1', devoir2: 'Devoir 2', composition: 'Composition 1' },
     'Trimestre 2': { devoir1: 'Devoir 3', devoir2: 'Devoir 4', composition: 'Composition 2' },
     'Trimestre 3': { devoir1: 'Devoir 5', devoir2: 'Devoir 6', composition: 'Composition 3' },
   };
 
-  // Helper to get evaluation objects for the current term and their mapped names for display
   const getEvaluationsForDisplay = useCallback(() => {
+    // Retiré les console.log pour le code final, mais ils sont utiles pour le débogage
+    // console.log("--- Début getEvaluationsForDisplay ---");
+    // console.log("selectedTerm:", selectedTerm);
+    // console.log("allEvaluations:", allEvaluations);
+
     if (!selectedTerm || allEvaluations.length === 0) {
+      // console.log("Conditions initiales non remplies. Retourne tableau vide.");
       return [];
     }
 
     const typeMapping = termEvaluationTypeMap[selectedTerm];
-    if (!typeMapping) return [];
+    // console.log("typeMapping pour selectedTerm:", typeMapping);
 
-    const displayEvaluations: Evaluation[] = [];
+    if (!typeMapping) {
+      // console.log("Aucun typeMapping trouvé pour selectedTerm.");
+      return [];
+    }
 
-    // Filter allEvaluations by their 'type' property matching the current term's expected types
-    const devoir1Eval = allEvaluations.find(e => e.type === typeMapping.devoir1);
-    const devoir2Eval = allEvaluations.find(e => e.type === typeMapping.devoir2);
-    const compositionEval = allEvaluations.find(e => e.type === typeMapping.composition);
+    const displayEvaluations = [];
+    const devoir1Eval = allEvaluations.find(e => {
+      const match = e.type === typeMapping.devoir1;
+      // if (match) console.log("Trouvé Devoir 1:", e);
+      return match;
+    });
+    const devoir2Eval = allEvaluations.find(e => {
+      const match = e.type === typeMapping.devoir2;
+      // if (match) console.log("Trouvé Devoir 2:", e);
+      return match;
+    });
+    const compositionEval = allEvaluations.find(e => {
+      const match = e.type === typeMapping.composition;
+      // if (match) console.log("Trouvé Composition:", e);
+      return match;
+    });
 
     if (devoir1Eval) displayEvaluations.push(devoir1Eval);
     if (devoir2Eval) displayEvaluations.push(devoir2Eval);
     if (compositionEval) displayEvaluations.push(compositionEval);
 
+    // console.log("Evaluations à afficher:", displayEvaluations);
+    // console.log("--- Fin getEvaluationsForDisplay ---");
     return displayEvaluations;
   }, [allEvaluations, selectedTerm]);
 
-  // 1. Fetch academic years on component mount
   useEffect(() => {
     const getAnnees = async () => {
-      // setLoading(true); // Removed
       const data = await fetchAnneesAcademiques();
       setAnneesAcademiques(data);
-      // setLoading(false); // Removed
     };
     getAnnees();
   }, []);
 
-  // 2. Fetch classes when academic year changes
   useEffect(() => {
     const anneeId = parseInt(selectedAnneeAcademiqueId);
     if (anneeId) {
-      // setLoading(true); // Removed
-      fetchClasses(anneeId)
-        .then(data => {
-          const filteredClasses = data.filter(
-            (cls: Classe) => cls.annee_scolaire_id === anneeId
-          );
-          setClasses(filteredClasses);
-          // Reset dependent selections and data
-          setSelectedClassId('');
-          setMatieres([]);
-          setSelectedMatiereId('');
-          setEleves([]);
-          setAllEvaluations([]);
-          setGradeData({});
-        })
-        .finally(() => { /* setLoading(false); */ }); // Removed
+      console.log('Chargement des classes pour l\'année scolaire:', anneeId);
+      fetchClasses(anneeId).then(data => {
+        const filteredClasses = data.filter(cls => cls.annee_scolaire_id === anneeId);
+        setClasses(filteredClasses);
+        setSelectedClassId('');
+        setMatieres([]);
+        setSelectedMatiereId('');
+        setSelectedTerm('');
+        setEleves([]);
+        setAllEvaluations([]);
+        setGradeData({});
+      });
     } else {
+      console.log('Aucune année scolaire sélectionnée');
       setClasses([]);
       setSelectedClassId('');
       setMatieres([]);
       setSelectedMatiereId('');
+      setSelectedTerm('');
       setEleves([]);
       setAllEvaluations([]);
       setGradeData({});
     }
   }, [selectedAnneeAcademiqueId]);
 
-  // 3. Fetch subjects (matières) and students when class AND academic year change
   useEffect(() => {
     const classIdNum = parseInt(selectedClassId);
     const anneeAcademiqueIdNum = parseInt(selectedAnneeAcademiqueId);
+    console.log('Changement de classe ou d\'année scolaire:', classIdNum, anneeAcademiqueIdNum);
 
     if (classIdNum && anneeAcademiqueIdNum) {
-      // setLoading(true); // Removed
+      console.log('Chargement des matières et des élèves pour la classe:', classIdNum, 'et l\'année scolaire:', anneeAcademiqueIdNum);
       Promise.all([
         fetchMatieresByClasse(classIdNum),
         fetchElevesByClasse(classIdNum, anneeAcademiqueIdNum)
-      ])
-        .then(([matieresData, elevesData]) => {
-          setMatieres(matieresData);
-          setEleves(elevesData);
-          // Reset dependent selections and data
-          setSelectedMatiereId('');
-          setAllEvaluations([]);
-          setGradeData({});
-        })
-        .finally(() => { /* setLoading(false); */ }); // Removed
+      ]).then(([matieresData, elevesData]) => {
+        console.log('Matieres chargées:', matieresData);
+        console.log('Élèves chargés:', elevesData);
+        setMatieres(matieresData);
+        setEleves(elevesData);
+        setSelectedMatiereId('');
+        setSelectedTerm('');
+        setAllEvaluations([]);
+        setGradeData({});
+      });
     } else {
+      console.log('Aucune classe ou année scolaire sélectionnée');
       setMatieres([]);
       setSelectedMatiereId('');
+      setSelectedTerm('');
       setEleves([]);
       setAllEvaluations([]);
       setGradeData({});
     }
   }, [selectedClassId, selectedAnneeAcademiqueId]);
 
-  // 4. Fetch evaluations and grades when class, subject, term, and students are ready
   useEffect(() => {
-    const fetchAllGrades = async () => {
-      const classIdNum = parseInt(selectedClassId);
-      const matiereIdNum = parseInt(selectedMatiereId);
-      const anneeAcademiqueIdNum = parseInt(selectedAnneeAcademiqueId);
-      const trimestreNum = trimestreMap[selectedTerm]; // Get the numeric trimestre
+    const classIdNum = parseInt(selectedClassId);
+    const matiereIdNum = parseInt(selectedMatiereId);
+    const anneeAcademiqueIdNum = parseInt(selectedAnneeAcademiqueId);
+    const trimestreNum = trimestreMap[selectedTerm];
 
-      if (classIdNum && matiereIdNum && selectedTerm && eleves.length > 0 && anneeAcademiqueIdNum && trimestreNum) {
-        // setLoading(true); // Removed
+    console.log('Chargement des évaluations et des notes pour la classe:', classIdNum, 'la matière:', matiereIdNum, 'le trimestre:', trimestreNum, 'et l\'année scolaire:', anneeAcademiqueIdNum);
+
+    if (classIdNum && matiereIdNum && selectedTerm && anneeAcademiqueIdNum && trimestreNum) {
+      const loadEvaluationsAndGrades = async () => {
+        setIsLoading(true);
         try {
+          console.log('Chargement des évaluations...');
           const evals = await fetchEvaluations(classIdNum, matiereIdNum, trimestreNum, anneeAcademiqueIdNum);
-          setAllEvaluations(evals); // Store all fetched evaluations
+          console.log('Évaluations chargées:', evals);
+          setAllEvaluations(evals);
 
-          const initialGradeData: { [eleveId: number]: { [evaluationId: number]: number | '' } } = {};
-
-          // Only fetch notes for evaluations that match the expected types for display
-          const evaluationsToLoadNotesFor = getEvaluationsForDisplay(); // Use the filtered list
-
-          const notePromises = eleves.flatMap(eleve =>
-            evaluationsToLoadNotesFor.map(async evaluation => {
-              const note = await fetchNote(evaluation.id, eleve.id);
-              return { eleveId: eleve.id, evaluationId: evaluation.id, noteValue: note ? note.note : '' } as TempNoteData;
-            })
+          const initialGradeData = {};
+          const evaluationsToLoadNotesFor = evals.filter(e =>
+            Object.values(termEvaluationTypeMap[selectedTerm] || {}).includes(e.type)
           );
 
-          const fetchedNotes: TempNoteData[] = await Promise.all(notePromises);
-
-          fetchedNotes.forEach(item => {
-            if (!initialGradeData[item.eleveId]) {
-              initialGradeData[item.eleveId] = {};
-            }
-            initialGradeData[item.eleveId][item.evaluationId] = item.noteValue;
-          });
-
+          if (evaluationsToLoadNotesFor.length > 0) {
+            console.log('Chargement des notes pour les évaluations:', evaluationsToLoadNotesFor);
+            const notePromises = eleves.flatMap(eleve =>
+              evaluationsToLoadNotesFor.map(async evaluation => {
+                const note = await fetchNote(evaluation.id, eleve.id);
+                console.log(`Note chargée pour l'élève ${eleve.id} et l'évaluation ${evaluation.id}:`, note);
+                return { eleveId: eleve.id, evaluationId: evaluation.id, noteValue: note ? note.note : '' };
+              })
+            );
+            const fetchedNotes = await Promise.all(notePromises);
+            console.log('Notes chargées:', fetchedNotes);
+            fetchedNotes.forEach(item => {
+              if (!initialGradeData[item.eleveId]) {
+                initialGradeData[item.eleveId] = {};
+              }
+              initialGradeData[item.eleveId][item.evaluationId] = item.noteValue;
+            });
+          }
+          console.log('Données des notes initialisées:', initialGradeData);
           setGradeData(initialGradeData);
         } catch (error) {
-          console.error("Failed to fetch evaluations or grades:", error);
+          console.error("Échec du chargement des évaluations ou des notes:", error);
           toast({
             title: "Erreur",
             description: "Impossible de charger les notes. Veuillez réessayer.",
             variant: "destructive",
           });
         } finally {
-          // setLoading(false); // Removed
+          setIsLoading(false);
         }
-      } else {
-        setAllEvaluations([]);
-        setGradeData({});
-      }
-    };
-    fetchAllGrades();
-  }, [selectedClassId, selectedMatiereId, selectedTerm, eleves, selectedAnneeAcademiqueId, trimestreMap, getEvaluationsForDisplay]); // Add dependencies
+      };
+      loadEvaluationsAndGrades();
+    } else {
+      console.log('Aucune classe, matière, trimestre ou année scolaire sélectionnée');
+      setAllEvaluations([]);
+      setGradeData({});
+    }
+  }, [selectedClassId, selectedMatiereId, selectedTerm, selectedAnneeAcademiqueId, eleves]);
+
+
+
 
   const handleGradeChange = (eleveId: number, evaluationId: number, value: string) => {
     const numValue = parseFloat(value);
-
     if (value === '') {
-      setGradeData(prevData => ({
-        ...prevData,
-        [eleveId]: {
-          ...prevData[eleveId],
-          [evaluationId]: '',
-        },
-      }));
+      setGradeData(prevData => ({ ...prevData, [eleveId]: { ...prevData[eleveId], [evaluationId]: '' } }));
       return;
     }
-
     if (isNaN(numValue) || numValue < 0 || numValue > 20) {
-      toast({
-        title: "Saisie invalide",
-        description: "Veuillez entrer une note entre 0 et 20.",
-        variant: "destructive",
-      });
+      toast({ title: "Saisie invalide", description: "Veuillez entrer une note entre 0 et 20.", variant: "destructive" });
       return;
     }
-
-    setGradeData(prevData => ({
-      ...prevData,
-      [eleveId]: {
-        ...prevData[eleveId],
-        [evaluationId]: numValue,
-      },
-    }));
+    setGradeData(prevData => ({ ...prevData, [eleveId]: { ...prevData[eleveId], [evaluationId]: numValue } }));
   };
 
   const saveGrades = async () => {
-    // setIsSaving(true); // Removed
-    let successCount = 0;
-    let errorOccurred = false;
-
-    const gradesToSave: Note[] = [];
-    // Iterate over the gradeData which holds the current state of grades
+    const gradesToSave = [];
     for (const eleveIdStr in gradeData) {
       const eleveId = parseInt(eleveIdStr);
       for (const evaluationIdStr in gradeData[eleveIdStr]) {
         const evaluationId = parseInt(evaluationIdStr);
         const noteValue = gradeData[eleveIdStr][evaluationIdStr];
-
         if (typeof noteValue === 'number' && !isNaN(noteValue) && noteValue >= 0 && noteValue <= 20) {
           gradesToSave.push({ eleveId, evaluationId, note: noteValue });
         }
       }
     }
 
-    // Use Promise.allSettled to process all saves and collect outcomes
-    const results = await Promise.allSettled(
-      gradesToSave.map(async (noteToSave) => {
-        // Attempt to find existing note by evaluationId and eleveId to determine if it's an update
+    try {
+      await Promise.all(gradesToSave.map(async (noteToSave) => {
         const existingNote = await fetchNote(noteToSave.evaluationId, noteToSave.eleveId);
         if (existingNote && existingNote.id) {
-          // If existing note with ID, update it
-          return await saveNote({ ...noteToSave, id: existingNote.id });
+          await saveNote({ ...noteToSave, id: existingNote.id });
         } else {
-          // Otherwise, create a new note
-          return await saveNote(noteToSave);
+          await saveNote(noteToSave);
         }
-      })
-    );
-
-    // Process results to count successes and failures
-    results.forEach(result => {
-      if (result.status === 'fulfilled') {
-        successCount++;
-      } else {
-        errorOccurred = true;
-        // The individual saveNote function already toasts errors
-      }
-    });
-
-    if (!errorOccurred) {
-      toast({
-        title: "Notes sauvegardées",
-        description: `Toutes les notes ont été enregistrées avec succès.`,
-      });
-    } else if (successCount > 0) {
-      toast({
-        title: "Notes sauvegardées (avec erreurs)",
-        description: `Certaines notes ont été enregistrées, mais des erreurs sont survenues pour d'autres.`,
-        variant: "default",
-      });
-    } else {
-      toast({
-        title: "Échec de la sauvegarde",
-        description: "Aucune note n'a pu être enregistrée. Veuillez vérifier votre connexion et réessayer.",
-        variant: "destructive",
-      });
+      }));
+      toast({ title: "Notes sauvegardées", description: "Toutes les notes ont été enregistrées avec succès." });
+    } catch (error) {
+      toast({ title: "Erreur de sauvegarde", description: "Une erreur est survenue lors de la sauvegarde des notes.", variant: "destructive" });
     }
-    // setIsSaving(false); // Removed
   };
 
-  const generateReports = () => {
-    toast({
-      title: "Génération des bulletins",
-      description: `Les bulletins sont en cours de génération pour la classe sélectionnée.`,
-    });
-    // Implement report generation logic (e.g., API call to backend service)
-  };
-
-  const printGrades = () => {
-    toast({
-      title: "Impression",
-      description: "Préparation de l'impression des notes...",
-    });
-    // Implement print logic (e.g., window.print() or PDF generation)
-  };
+  const generateReports = () => toast({ title: "Génération des bulletins", description: "Les bulletins sont en cours de génération." });
+  const printGrades = () => toast({ title: "Impression", description: "Préparation de l'impression des notes..." });
 
   const isFormComplete = selectedAnneeAcademiqueId && selectedClassId && selectedTerm && selectedMatiereId;
-
   const currentAnneeAcademique = anneesAcademiques.find(a => a.id.toString() === selectedAnneeAcademiqueId)?.libelle;
   const currentClasse = classes.find(c => c.id.toString() === selectedClassId)?.nom;
   const currentMatiere = matieres.find(m => m.id.toString() === selectedMatiereId)?.nom;
-
-  // Get the evaluations to display in the table based on the selected term
   const evaluationsToDisplay = getEvaluationsForDisplay();
 
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">Gestion des Notes</h1>
-
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Sélection</CardTitle>
@@ -558,69 +428,54 @@ export function GradeManagement() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Année Scolaire Select */}
             <div className="space-y-2">
               <label htmlFor="annee-select" className="text-sm font-medium">Année Scolaire</label>
               <Select onValueChange={setSelectedAnneeAcademiqueId} value={selectedAnneeAcademiqueId}>
-                <SelectTrigger id="annee-select"> {/* 'disabled={loading}' removed */}
+                <SelectTrigger id="annee-select">
                   <SelectValue placeholder="Sélectionner une année" />
                 </SelectTrigger>
                 <SelectContent>
                   {anneesAcademiques.map((annee) => (
-                    <SelectItem key={annee.id} value={annee.id.toString()}>
-                      {annee.libelle}
-                    </SelectItem>
+                    <SelectItem key={annee.id} value={annee.id.toString()}>{annee.libelle}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Classe Select */}
             <div className="space-y-2">
               <label htmlFor="classe-select" className="text-sm font-medium">Classe</label>
-              <Select onValueChange={setSelectedClassId} value={selectedClassId} disabled={!selectedAnneeAcademiqueId || classes.length === 0}> {/* '|| loading' removed */}
+              <Select onValueChange={setSelectedClassId} value={selectedClassId} disabled={!selectedAnneeAcademiqueId || classes.length === 0}>
                 <SelectTrigger id="classe-select">
-                  <SelectValue placeholder={"Sélectionner une classe"} /> {/* Conditional placeholder removed */}
+                  <SelectValue placeholder="Sélectionner une classe" />
                 </SelectTrigger>
                 <SelectContent>
                   {classes.map((cls) => (
-                    <SelectItem key={cls.id} value={cls.id.toString()}>
-                      {cls.nom}
-                    </SelectItem>
+                    <SelectItem key={cls.id} value={cls.id.toString()}>{cls.nom}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Trimestre Select */}
             <div className="space-y-2">
               <label htmlFor="term-select" className="text-sm font-medium">Trimestre</label>
-              <Select onValueChange={setSelectedTerm} value={selectedTerm} disabled={!selectedClassId}> {/* '|| loading' removed */}
+              <Select onValueChange={setSelectedTerm} value={selectedTerm} disabled={!selectedClassId}>
                 <SelectTrigger id="term-select">
                   <SelectValue placeholder="Sélectionner un trimestre" />
                 </SelectTrigger>
                 <SelectContent>
                   {terms.map((term) => (
-                    <SelectItem key={term} value={term}>
-                      {term}
-                    </SelectItem>
+                    <SelectItem key={term} value={term}>{term}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Matière Select */}
             <div className="space-y-2">
               <label htmlFor="matiere-select" className="text-sm font-medium">Matière</label>
-              <Select onValueChange={setSelectedMatiereId} value={selectedMatiereId} disabled={!selectedTerm || matieres.length === 0}> {/* '|| loading' removed */}
+              <Select onValueChange={setSelectedMatiereId} value={selectedMatiereId} disabled={!selectedTerm || matieres.length === 0}>
                 <SelectTrigger id="matiere-select">
-                  <SelectValue placeholder={"Sélectionner une matière"} /> {/* Conditional placeholder removed */}
+                  <SelectValue placeholder="Sélectionner une matière" />
                 </SelectTrigger>
                 <SelectContent>
                   {matieres.map((matiere) => (
-                    <SelectItem key={matiere.id} value={matiere.id.toString()}>
-                      {matiere.nom}
-                    </SelectItem>
+                    <SelectItem key={matiere.id} value={matiere.id.toString()}>{matiere.nom}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -629,78 +484,127 @@ export function GradeManagement() {
         </CardContent>
       </Card>
 
-      {/* Grade Display Card */}
       {isFormComplete ? (
         <Card>
-          <CardHeader>
-            <CardTitle>
-              Notes de **{currentMatiere}** - **{currentClasse}** - **{selectedTerm}** ({currentAnneeAcademique})
-            </CardTitle>
-            <CardDescription>
-              Saisissez les notes des élèves (sur 20). Les champs vides signifient qu'aucune note n'a encore été saisie.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {/* 'loading' check for display removed */}
-            {eleves.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">
-                Aucun élève trouvé pour cette classe ou cette année scolaire.
-              </div>
-            ) : evaluationsToDisplay.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">
-                Aucune évaluation configurée pour cette matière et ce trimestre correspondant aux types attendus (Devoir, Composition).
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="min-w-[120px]">Élève</TableHead>
-                      {/* Dynamically generate evaluation columns based on termEvaluationTypeMap */}
-                      {evaluationsToDisplay.map((evalItem) => (
-                        <TableHead key={evalItem.id} className="text-right min-w-[90px]">
-                          {evalItem.type} {/* Display the actual evaluation type from DB */}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {eleves.map((eleve) => (
-                      <TableRow key={eleve.id}>
-                        <TableCell className="font-medium">{eleve.nom} {eleve.prenom}</TableCell>
-                        {evaluationsToDisplay.map(evalItem => (
-                          <TableCell key={`${eleve.id}-${evalItem.id}`} className="text-right">
-                            <Input
-                              type="number"
-                              min="0"
-                              max="20"
-                              step="0.5"
-                              value={gradeData[eleve.id]?.[evalItem.id] ?? ''}
-                              onChange={(e) => handleGradeChange(eleve.id, evalItem.id, e.target.value)}
-                              className="w-20 text-right ml-auto"
-                            />
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
+         <CardHeader className="group px-6 py-5 bg-white/50 backdrop-blur-sm border-b border-gray-200 hover:bg-gray-50/80 transition-colors duration-200">
+  <div className="flex flex-col gap-3">
+    {/* Ligne supérieure avec titre et badge */}
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-3">
+        <BookOpen className="w-6 h-6 text-indigo-600 group-hover:text-indigo-700 transition-colors" />
+        <h3 className="text-xl font-semibold text-gray-900">
+          Les notes de <span className="text-indigo-600 font-bold">{currentMatiere}</span>
+          <span className="mx-1.5 text-gray-400">•</span>
+          <span className="font-medium text-gray-700">{currentClasse}</span>
+        </h3>
+      </div>
+      
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-gray-500">{selectedTerm}</span>
+        <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+          {currentAnneeAcademique}
+        </span>
+      </div>
+    </div>
 
+    {/* Ligne inférieure avec description */}
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      
+      
+      
+    </div>
+  </div>
+</CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="text-center text-gray-500 py-8">Chargement des évaluations et des notes...</div>
+            ) : eleves.length === 0 ? (
+              <div className="text-center text-gray-500 py-8">Aucun élève trouvé pour cette classe ou cette année scolaire.</div>
+            ) : (
+              // This is the crucial part that ensures the correct message is shown
+              // only after loading is complete and students are present.
+              evaluationsToDisplay.length === 0 ? (
+                <div className="text-center text-gray-500 py-8">
+                  Aucune évaluation configurée pour cette matière et ce trimestre correspondant aux types attendus (Devoir, Composition).
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table className="min-w-full">
+  <TableHeader className="bg-gray-50">
+    <TableRow>
+      <TableHead className="min-w-[150px] px-4 py-3 font-semibold text-left sticky left-0 bg-gray-50 z-10">
+        Élève
+      </TableHead>
+      {evaluationsToDisplay.map((evalItem) => (
+        <TableHead 
+          key={evalItem.id} 
+          className="min-w-[100px] px-4 py-3 font-semibold text-center"
+          title={evalItem.description || evalItem.type}
+        >
+          <div className="flex flex-col items-center">
+            <span>{evalItem.type}</span>
+            {evalItem.date && (
+              <span className="text-xs font-normal text-gray-500">
+                {new Date(evalItem.date).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+        </TableHead>
+      ))}
+    </TableRow>
+  </TableHeader>
+  
+  <TableBody className="divide-y divide-gray-200">
+    {eleves.map((eleve) => (
+      <TableRow key={eleve.id} className="hover:bg-gray-50">
+        <TableCell className="font-medium px-4 py-3 sticky left-0 bg-white z-10 whitespace-nowrap">
+          {eleve.nom} {eleve.prenom}
+        </TableCell>
+        
+        {evaluationsToDisplay.map(evalItem => {
+          const gradeValue = gradeData[eleve.id]?.[evalItem.id] ?? '';
+          const isInvalid = gradeValue && (gradeValue < 0 || gradeValue > 20);
+          
+          return (
+            <TableCell 
+              key={`${eleve.id}-${evalItem.id}`} 
+              className="px-4 py-2 text-center"
+            >
+              <div className="flex justify-center">
+                <Input
+                  type="number"
+                  min="0"
+                  max="20"
+                  step="0.5"
+                  value={gradeValue}
+                  onChange={(e) => handleGradeChange(eleve.id, evalItem.id, e.target.value)}
+                  className={`w-24 text-center px-3 py-2 rounded border ${
+                    isInvalid 
+                      ? 'border-red-500 bg-red-50' 
+                      : 'border-gray-300 hover:border-gray-400 focus:border-blue-500'
+                  } focus:ring-2 focus:ring-blue-200 transition-colors`}
+                  aria-label={`Note de ${eleve.prenom} ${eleve.nom} pour ${evalItem.type}`}
+                  aria-invalid={isInvalid}
+                />
+                {isInvalid && (
+                  <span className="sr-only">Note invalide, doit être entre 0 et 20</span>
+                )}
+              </div>
+            </TableCell>
+          );
+        })}
+      </TableRow>
+    ))}
+  </TableBody>
+</Table>
+                </div>
+              )
+            )}
             <div className="mt-6 flex flex-wrap gap-4">
-              <Button onClick={saveGrades} disabled={eleves.length === 0 || evaluationsToDisplay.length === 0}> {/* 'loading || isSaving' removed */}
-                <Save className="mr-2 h-4 w-4" />
-                {"Enregistrer les notes"} {/* Conditional text removed */}
+              <Button onClick={saveGrades} disabled={eleves.length === 0 || evaluationsToDisplay.length === 0 || isLoading}>
+                <Save className="mr-2 h-4 w-4" /> Enregistrer les notes modifiées
               </Button>
-              <Button variant="outline" onClick={generateReports} disabled={eleves.length === 0 || evaluationsToDisplay.length === 0}> {/* 'loading || isSaving' removed */}
-                <FileDown className="mr-2 h-4 w-4" />
-                Générer les bulletins
-              </Button>
-              <Button variant="outline" onClick={printGrades} disabled={eleves.length === 0 || evaluationsToDisplay.length === 0}> {/* 'loading || isSaving' removed */}
-                <Printer className="mr-2 h-4 w-4" />
-                Imprimer
-              </Button>
+             
             </div>
           </CardContent>
         </Card>

@@ -533,42 +533,48 @@ return matieresUniques.map(c => (
       </CardTitle>
       {/* Filtres en haut à droite */}
       <div className="flex gap-2 items-center">
-        <select
-          className="border border-blue-300 dark:border-blue-700 rounded-lg px-3 py-1 text-sm bg-white dark:bg-gray-800 shadow-sm focus:ring-2 focus:ring-blue-300"
-          value={filterProf}
-          onChange={e => setFilterProf(e.target.value)}
-        >
-          <option value="">Tous les professeurs</option>
-          {profs.map(prof => (
-            <option key={prof.id} value={prof.id}>
-              {prof.nom} {prof.prenom}
-            </option>
-          ))}
-        </select>
-        <select
-          className="border border-blue-300 dark:border-blue-700 rounded-lg px-3 py-1 text-sm bg-white dark:bg-gray-800 shadow-sm focus:ring-2 focus:ring-blue-300"
-          value={filterClasse}
-          onChange={e => setFilterClasse(e.target.value)}
-        >
-          <option value="">Toutes les classes</option>
-          {classes.map(classe => (
-            <option key={classe.id} value={classe.id}>
-              {classe.nom}
-            </option>
-          ))}
-        </select>
+        
         <select
   className="border border-blue-300 dark:border-blue-700 rounded-lg px-3 py-1 text-sm bg-white dark:bg-gray-800 shadow-sm focus:ring-2 focus:ring-blue-300"
   value={filterAnnee}
   onChange={e => setFilterAnnee(e.target.value)}
 >
-  <option value="">Toutes les années</option>
+  <option value="">Années</option>
   {annees.map(annee => (
     <option key={annee.id} value={annee.id}>
       {annee.libelle}
     </option>
   ))}
 </select>
+        <select
+          className="border border-blue-300 dark:border-blue-700 rounded-lg px-3 py-1 text-sm bg-white dark:bg-gray-800 shadow-sm focus:ring-2 focus:ring-blue-300"
+          value={filterClasse}
+          onChange={e => setFilterClasse(e.target.value)}
+          disabled={!filterAnnee}
+
+        >
+         <option value="">Toutes les classes</option>
+          {/* Filtrer les classes ici en fonction de filterAnnee */}
+          {classes
+            .filter(classe => filterAnnee ? String(classe.annee_scolaire_id) === filterAnnee : true)
+            .map(classe => (
+              <option key={classe.id} value={classe.id}>
+                {classe.nom}
+              </option>
+            ))}
+        </select>
+        <select
+          className="border border-blue-300 dark:border-blue-700 rounded-lg px-3 py-1 text-sm bg-white dark:bg-gray-800 shadow-sm focus:ring-2 focus:ring-blue-300"
+          value={filterProf}
+          onChange={e => setFilterProf(e.target.value)}
+        >
+          <option value="">Professeurs</option>
+          {profs.map(prof => (
+            <option key={prof.id} value={prof.id}>
+              {prof.nom} {prof.prenom}
+            </option>
+          ))}
+        </select>
       </div>
     </CardHeader>
     <CardContent>
@@ -580,11 +586,19 @@ return matieresUniques.map(c => (
     Affecter un professeur
   </Button>
   {(() => {
+     // Si aucun filtre Année n'est sélectionné, afficher un message d'invite
+    if (!filterAnnee) {
+      return (
+        <div className="italic text-gray-500 dark:text-gray-400 text-center py-8">
+          Veuillez sélectionner une année scolaire pour afficher les affectations.
+        </div>
+      );
+    }
     function groupAffectationsByProf(affectations) {
       const grouped = {};
       affectations.forEach(aff => {
         const profId = aff.professeur?.id;
-        if (!profId) return;
+       
         if (!grouped[profId]) {
           grouped[profId] = {
             professeur: aff.professeur,
@@ -622,8 +636,9 @@ return matieresUniques.map(c => (
     };
     const profGroups = Object.values(grouped) as ProfGroup[];
     return profGroups.length === 0 ? (
-      <div className="italic text-gray-500 text-center py-8">Aucune affectation trouvée.</div>
-    ) : (
+      <div className="italic text-gray-500 dark:text-gray-400 text-center py-8">
+        Aucune affectation trouvée pour les filtres sélectionnés.</div>
+     ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {profGroups.map(profGroup => (
           <div

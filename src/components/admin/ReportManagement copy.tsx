@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { FileDown, Printer, Search, Eye } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
+// --- Définitions de types pour les données de l'API ---
 interface AnneeAcademique {
   id: number;
   libelle: string;
@@ -65,20 +66,19 @@ interface Trimestre {
 interface Evaluation {
   id: number;
   matiere_id: number;
-  matiere?: Matiere;
   classe_id: number;
   professeur_id: number;
   type: 'Devoir' | 'Composition';
   date_eval: string;
-  trimestre: number;
-  libelle: string;
+  trimestre: number; // Numéro du trimestre (clé étrangère vers la table trimestre)
+  libelle: string; // Ce champ sera généré côté frontend
   annee_scolaire_id: number;
 }
 
 interface Note {
   id: number;
-  evaluation: { id: number; matiere?: Matiere };
-  etudiant: { id: number; nom?: string; prenom?: string };
+  evaluation_id: number;
+  etudiant_id: number;
   note: number;
 }
 
@@ -105,11 +105,11 @@ interface BulletinEleve {
   teacherComment: string;
   principalComment: string;
   notesParMatiere: MatiereDetailBulletin[];
-  absences?: number;
-  totalElevesClasse?: number;
 }
 
 const API_BASE_URL = 'http://localhost:3000/api';
+
+// --- Fonctions de récupération des données via API ---
 
 const fetchAnneesAcademiques = async (): Promise<AnneeAcademique[]> => {
   try {
@@ -165,7 +165,7 @@ const fetchMatieresAndCoefficientsByClasse = async (classeId: number): Promise<{
     const matieres = coefficientClasses.map((cc: any) => cc.matiere).filter(Boolean);
     const coefficients = coefficientClasses.map((cc: any) => ({
       id: cc.id,
-      matiere_id: cc.matiere?.id || cc.matiere_id,
+      matiere_id: cc.matiere_id,
       classe_id: cc.classe_id,
       coefficient: cc.coefficient,
     }));
@@ -197,24 +197,26 @@ const fetchEvaluationsForClassAndTerm = async (
   try {
     const response = await fetch(`${API_BASE_URL}/evaluations?classeId=${classeId}&trimestre=${trimestreId}&anneeScolaireId=${anneeScolaireId}`);
     if (!response.ok) {
-      if (response.status === 404 || response.status === 204) return [];
-      throw new Error(`HTTP error! status: ${response.status}`);
+        if (response.status === 404 || response.status === 204) return [];
+        throw new Error(`HTTP error! status: ${response.status}`);
     }
     const data = await response.json();
-
+    
+    // --- Transformation clé ici pour ajouter le champ 'libelle' ---
     const transformedEvaluations = data.map((evalItem: any) => ({
       id: evalItem.id,
-      matiere_id: evalItem.matiere?.id || evalItem.matiere_id,
-      matiere: evalItem.matiere,
+      matiere_id: evalItem.matiere_id,
       classe_id: evalItem.classe_id,
       professeur_id: evalItem.professeur_id,
+      // Normaliser 'type' pour correspondre à l'interface ('Devoir' ou 'Composition')
       type: evalItem.type.toLowerCase().includes('devoir') ? 'Devoir' : 'Composition',
       date_eval: evalItem.date_eval,
       trimestre: evalItem.trimestre,
       annee_scolaire_id: evalItem.annee_scolaire_id,
-      libelle: evalItem.type
+      // Utiliser la valeur de 'type' de l'API pour le 'libelle'
+      libelle: evalItem.type // e.g., "Devoir 5", "Composition 3"
     }));
-
+    
     return transformedEvaluations;
   } catch (error) {
     console.error(`Error fetching evaluations for class ${classeId}, trimestre ID ${trimestreId}, year ${anneeScolaireId}:`, error);
@@ -223,25 +225,20 @@ const fetchEvaluationsForClassAndTerm = async (
   }
 };
 
-const fetchNotesForEvaluations = async (evaluationIds: number[], etudiantId?: number): Promise<Note[]> => {
-  if (evaluationIds.length === 0) return [];
-  let url = `${API_BASE_URL}/notes?evaluationIds=${evaluationIds.join(',')}`;
-  if (etudiantId) {
-    url += `&etudiant_id=${etudiantId}`;
-  }
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      if (response.status === 404 || response.status === 204) return [];
-      throw new Error(`HTTP error! status: ${response.status}`);
+const fetchNotesForEvaluations = async (evaluationIds: number[]): Promise<Note[]> => {
+    if (evaluationIds.length === 0) return [];
+    try {
+        const response = await fetch(`${API_BASE_URL}/notes?evaluationIds=${evaluationIds.join(',')}`);
+        if (!response.ok) {
+            if (response.status === 404 || response.status === 204) return [];
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Error fetching notes for evaluations ${evaluationIds}:`, error);
+        toast({ title: "Erreur de chargement", description: "Impossible de charger les notes.", variant: "destructive" });
+        return [];
     }
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error(`Error fetching notes for evaluations ${evaluationIds}${etudiantId ? ` and student ${etudiantId}` : ''}:`, error);
-    toast({ title: "Erreur de chargement", description: "Impossible de charger les notes.", variant: "destructive" });
-    return [];
-  }
 };
 
 export function ReportManagement() {
@@ -263,6 +260,8 @@ export function ReportManagement() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [dynamicEvaluationHeaders, setDynamicEvaluationHeaders] = useState<string[]>([]);
 
+
+  // 1. Charger les années académiques au montage
   useEffect(() => {
     const getAnnees = async () => {
       const data = await fetchAnneesAcademiques();
@@ -271,12 +270,15 @@ export function ReportManagement() {
     getAnnees();
   }, []);
 
+  // 2. Charger les classes et les trimestres lorsque l'année académique change
   useEffect(() => {
     const anneeId = parseInt(selectedAnneeAcademiqueId);
     if (anneeId) {
       setIsLoading(true);
+      // Charger les trimestres en premier, car ils sont liés directement à l'année
       fetchTrimestresByAnneeAcademique(anneeId).then((trimestresData) => {
         setTrimestres(trimestresData);
+        // Réinitialiser le trimestre sélectionné si les nouveaux trimestres ne contiennent pas l'ancien ID
         if (!trimestresData.some(t => t.id.toString() === selectedTermId)) {
             setSelectedTermId('');
         }
@@ -286,17 +288,19 @@ export function ReportManagement() {
           setSelectedTermId('');
       });
 
+      // Charger les classes
       fetchClasses(anneeId).then((classesData) => {
         setClasses(classesData);
-        setSelectedClassId('');
+        setSelectedClassId(''); // Toujours réinitialiser la classe quand l'année change
       }).catch(error => {
           console.error("Failed to load classes:", error);
           setClasses([]);
           setSelectedClassId('');
-      }).finally(() => setIsLoading(false));
+      }).finally(() => setIsLoading(false)); // Finaliser le chargement après les deux fetches
     } else {
+      // Réinitialiser tous les états si aucune année n'est sélectionnée
       setClasses([]);
-      setTrimestres([]);
+      setTrimestres([]); // Vider les trimestres si pas d'année sélectionnée
       setSelectedClassId('');
       setSelectedTermId('');
       setEleves([]);
@@ -307,8 +311,9 @@ export function ReportManagement() {
       setBulletins([]);
       setDynamicEvaluationHeaders([]);
     }
-  }, [selectedAnneeAcademiqueId]);
+  }, [selectedAnneeAcademiqueId]); // Dépend uniquement de l'année scolaire
 
+  // 3. Charger les élèves, les matières et les coefficients lorsque la classe ou l'année académique change
   useEffect(() => {
     const classIdNum = parseInt(selectedClassId);
     const anneeAcademiqueIdNum = parseInt(selectedAnneeAcademiqueId);
@@ -330,6 +335,7 @@ export function ReportManagement() {
     }
   }, [selectedClassId, selectedAnneeAcademiqueId]);
 
+  // 4. Charger les évaluations et les notes lorsque la classe, le trimestre ou l'année changent
   useEffect(() => {
     const classIdNum = parseInt(selectedClassId);
     const anneeAcademiqueIdNum = parseInt(selectedAnneeAcademiqueId);
@@ -341,6 +347,7 @@ export function ReportManagement() {
         .then(async (evaluationsData) => {
           setAllEvaluations(evaluationsData);
 
+          // Génération des headers dynamiques en utilisant le champ 'libelle'
           const devoirLabels = Array.from(new Set(
             evaluationsData.filter(e => e.type === 'Devoir').map(e => e.libelle)
           )).sort((a, b) => {
@@ -376,6 +383,8 @@ export function ReportManagement() {
     }
   }, [selectedClassId, selectedTermId, selectedAnneeAcademiqueId]);
 
+
+  // 5. Générer les bulletins à chaque fois que les données sous-jacentes changent
   useEffect(() => {
     const canGenerateBulletins = eleves.length > 0 && matieres.length > 0 && coefficients.length > 0 &&
                                  selectedClassId && selectedTermId && selectedAnneeAcademiqueId;
@@ -385,13 +394,13 @@ export function ReportManagement() {
         const bulletinMatiereDetails: MatiereDetailBulletin[] = matieres.map(matiere => {
           const coefficient = coefficients.find(c => c.matiere_id === matiere.id)?.coefficient || 1;
 
+          // Filtrer les évaluations par matière en utilisant le matiere_id
           const evaluationsForMatiere = allEvaluations.filter(e => e.matiere_id === matiere.id);
-
+          
           const eleveNotesForMatiere = allNotes.filter(note =>
-            note.etudiant.id === eleve.id &&
-            evaluationsForMatiere.some(evalItem => evalItem.id === note.evaluation.id)
+            note.etudiant_id === eleve.id && evaluationsForMatiere.some(evalItem => evalItem.id === note.evaluation_id)
           );
-
+          console.log(`Notes for ${eleve.nom} ${eleve.prenom} in ${matiere.nom}:`, eleveNotesForMatiere);
           const notesEvaluations: EvaluationDetailBulletin[] = [];
           let totalPointsDevoirs = 0;
           let countDevoirs = 0;
@@ -399,14 +408,14 @@ export function ReportManagement() {
 
           dynamicEvaluationHeaders.forEach(headerLibelle => {
             const evalItemForHeader = evaluationsForMatiere.find(e => e.libelle === headerLibelle);
-            const note = eleveNotesForMatiere.find(n => n.evaluation.id === evalItemForHeader?.id);
-            const noteValue = note ? note.note : 0;
+            const note = eleveNotesForMatiere.find(n => n.evaluation_id === evalItemForHeader?.id);
+            const noteValue = note ? note.note : 0; // Utilise 0 si la note n'est pas trouvée
 
             notesEvaluations.push({
               id: evalItemForHeader?.id || 0,
-              type: evalItemForHeader?.type || (headerLibelle.toLowerCase().includes('compo') ? 'Composition' : 'Devoir'),
+              type: evalItemForHeader?.type || (headerLibelle.toLowerCase().includes('compo') ? 'Composition' : 'Devoir'), // Fallback type
               libelle: headerLibelle,
-              note: note ? note.note : '00',
+              note: note ? note.note : '00', // Affiche '00' si pas de note, sinon la note
             });
 
             if (evalItemForHeader?.type === 'Devoir') {
@@ -417,6 +426,7 @@ export function ReportManagement() {
             }
           });
 
+          // S'assurer que les notes sont triées selon l'ordre des headers dynamiques
           notesEvaluations.sort((a, b) => {
               const indexA = dynamicEvaluationHeaders.indexOf(a.libelle);
               const indexB = dynamicEvaluationHeaders.indexOf(b.libelle);
@@ -439,7 +449,7 @@ export function ReportManagement() {
               moyenneMatiere = 0;
           }
 
-          const appreciation = "";
+          const appreciation = ""; // Logique d'appréciation à implémenter si besoin
 
           return {
             matiere: matiere.nom,
@@ -460,20 +470,18 @@ export function ReportManagement() {
 
         const overallAvg = totalCoefficients > 0 ? totalPointsGeneraux / totalCoefficients : 0;
 
-        // Ajout des informations supplémentaires pour le bulletin
         return {
           id: eleve.id,
           name: `${eleve.prenom} ${eleve.nom}`,
           avg: parseFloat(overallAvg.toFixed(2)).toString(),
-          rank: '',
+          rank: '', // Le classement sera calculé après le map
           teacherComment: "Ce commentaire est une appréciation générale du professeur principal. Il doit être récupéré de l'API.",
           principalComment: "Ce commentaire est une appréciation du directeur. Il doit être récupéré de l'API.",
           notesParMatiere: bulletinMatiereDetails,
-          absences: 0, // À remplacer par les données réelles
-          totalElevesClasse: eleves.length,
         };
       });
 
+      // Calcul du classement après que toutes les moyennes générales soient disponibles
       generatedBulletins.sort((a, b) => parseFloat(b.avg) - parseFloat(a.avg));
       generatedBulletins.forEach((bulletin, index) => {
         bulletin.rank = `${index + 1}/${generatedBulletins.length}`;
@@ -484,6 +492,7 @@ export function ReportManagement() {
       setBulletins([]);
     }
   }, [eleves, matieres, coefficients, allEvaluations, allNotes, selectedClassId, selectedTermId, selectedAnneeAcademiqueId, dynamicEvaluationHeaders]);
+
 
   const handlePreviewReport = (bulletin: BulletinEleve) => {
     setSelectedReport(bulletin);
@@ -499,6 +508,7 @@ export function ReportManagement() {
       title: "Génération des bulletins",
       description: `Les bulletins de ${classes.find(c => c.id === parseInt(selectedClassId))?.nom} pour le ${trimestres.find(t => t.id === parseInt(selectedTermId))?.nom} sont en cours de génération en PDF.`,
     });
+    // Logique de génération de PDF pour tous les bulletins ici
   };
 
   const exportReport = () => {
@@ -508,6 +518,7 @@ export function ReportManagement() {
       description: `Le bulletin de ${selectedReport?.name} est en cours d'exportation en PDF.`,
     });
     setPreviewOpen(false);
+    // Logique d'exportation PDF pour un bulletin spécifique ici
   };
 
   const printReport = () => {
@@ -516,7 +527,7 @@ export function ReportManagement() {
       title: "Impression",
       description: `Le bulletin de ${selectedReport?.name} est envoyé à l'imprimante.`,
     });
-    window.print();
+    window.print(); // Ouvre la boîte de dialogue d'impression du navigateur
     setPreviewOpen(false);
   };
 
@@ -526,21 +537,11 @@ export function ReportManagement() {
 
   const isFormComplete = selectedAnneeAcademiqueId && selectedClassId && selectedTermId;
 
-  // Fonction pour déterminer la mention en fonction de la moyenne
-  const getMention = (moyenne: number): string => {
-    if (moyenne >= 16) return "Félicitations";
-    if (moyenne >= 14) return "Très Bien";
-    if (moyenne >= 12) return "Bien";
-    if (moyenne >= 10) return "Assez Bien";
-    if (moyenne >= 8) return "Encouragements";
-    return "Avertissement";
-  };
-
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <h1 className="text-3xl font-extrabold text-gray-900 mb-6 border-b pb-4">Gestion des Bulletins Scolaires</h1>
 
-      <Card className="mb-8 shadow-lg rounded-lg">
+      <Card className="mb-8 shadow-lg">
         <CardHeader className="bg-blue-600 text-white rounded-t-lg p-4">
           <CardTitle className="text-2xl font-bold">Sélection des Critères</CardTitle>
           <CardDescription className="text-blue-100">Choisissez l'année scolaire, la classe et le trimestre pour générer les bulletins.</CardDescription>
@@ -550,7 +551,7 @@ export function ReportManagement() {
             <div className="space-y-2">
               <label htmlFor="annee-select" className="text-sm font-medium text-gray-700">Année Scolaire</label>
               <Select onValueChange={setSelectedAnneeAcademiqueId} value={selectedAnneeAcademiqueId}>
-                <SelectTrigger id="annee-select" className="border-gray-300 focus:border-blue-500 rounded-md">
+                <SelectTrigger id="annee-select" className="border-gray-300 focus:border-blue-500">
                   <SelectValue placeholder="Sélectionner une année" />
                 </SelectTrigger>
                 <SelectContent>
@@ -568,7 +569,7 @@ export function ReportManagement() {
                 value={selectedClassId}
                 disabled={!selectedAnneeAcademiqueId || classes.length === 0}
               >
-                <SelectTrigger className="border-gray-300 focus:border-blue-500 rounded-md">
+                <SelectTrigger className="border-gray-300 focus:border-blue-500">
                   <SelectValue placeholder="Sélectionner une classe" />
                 </SelectTrigger>
                 <SelectContent>
@@ -586,12 +587,14 @@ export function ReportManagement() {
               <Select
                 onValueChange={setSelectedTermId}
                 value={selectedTermId}
+                // Les trimestres dépendent uniquement de l'année scolaire, pas de la classe
                 disabled={!selectedAnneeAcademiqueId || trimestres.length === 0}
               >
-                <SelectTrigger className="border-gray-300 focus:border-blue-500 rounded-md">
+                <SelectTrigger className="border-gray-300 focus:border-blue-500">
                   <SelectValue placeholder="Sélectionner un trimestre" />
                 </SelectTrigger>
                 <SelectContent>
+                  {/* Assurez-vous que `trimestres` est bien vidé quand l'année change */}
                   {trimestres.map((trimestre) => (
                     <SelectItem key={trimestre.id} value={trimestre.id.toString()}>
                       {trimestre.nom}
@@ -610,7 +613,7 @@ export function ReportManagement() {
             <Button
               onClick={generateAllReports}
               disabled={isLoading || bulletins.length === 0}
-              className="bg-green-600 hover:bg-green-700 text-white shadow-md px-6 py-3 text-base rounded-md"
+              className="bg-green-600 hover:bg-green-700 text-white shadow-md px-6 py-3 text-base"
             >
               <FileDown className="mr-3 h-5 w-5" />
               Générer tous les bulletins (PDF)
@@ -628,7 +631,7 @@ export function ReportManagement() {
             </div>
           </div>
 
-          <Card className="shadow-lg rounded-lg">
+          <Card className="shadow-lg">
             <CardContent className="p-0">
               {isLoading && (selectedClassId && selectedTermId) ? (
                 <div className="text-center text-gray-500 py-12 text-lg">
@@ -677,14 +680,14 @@ export function ReportManagement() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handlePreviewReport(bulletin)}
-                                className="text-blue-600 hover:bg-blue-50 rounded-md"
+                                className="text-blue-600 hover:bg-blue-50"
                               >
                                 <Eye className="h-4 w-4 mr-1" /> Prévisualiser
                               </Button>
-                              <Button variant="outline" size="sm" onClick={exportReport} className="text-purple-600 hover:bg-purple-50 rounded-md">
+                              <Button variant="outline" size="sm" onClick={exportReport} className="text-purple-600 hover:bg-purple-50">
                                 <FileDown className="h-4 w-4 mr-1" /> PDF
                               </Button>
-                              <Button variant="outline" size="sm" onClick={printReport} className="text-red-600 hover:bg-red-50 rounded-md">
+                              <Button variant="outline" size="sm" onClick={printReport} className="text-red-600 hover:bg-red-50">
                                 <Printer className="h-4 w-4 mr-1" /> Imprimer
                               </Button>
                             </div>
@@ -706,183 +709,107 @@ export function ReportManagement() {
       )}
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-       
+        <DialogContent className="max-w-6xl overflow-y-auto max-h-[95vh] p-8">
+          <DialogHeader className="pb-6 border-b border-gray-200">
+            <DialogTitle className="text-3xl font-extrabold text-center text-blue-700">Bulletin Scolaire</DialogTitle>
+            <DialogDescription className="text-center text-lg mt-2 text-gray-700">
+              <span className="font-semibold">{classes.find(c => c.id === parseInt(selectedClassId))?.nom}</span> - {trimestres.find(t => t.id === parseInt(selectedTermId))?.nom} - <span className="font-semibold">{anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId))?.libelle}</span>
+            </DialogDescription>
+          </DialogHeader>
 
-<DialogContent className="max-w-6xl overflow-y-auto max-h-[95vh] p-0 rounded-lg">
-  <div className="bg-white p-8">
-    {/* En-tête administratif */}
-    <div className="grid grid-cols-3 gap-4 mb-8 text-xs">
-      <div className="text-left">
-        <p>République Islamique de Mauritanie</p>
-        <p>Ministère de l'Éducation Nationale</p>
-        <p>Direction des Examens et Concours</p>
-      </div>
-      <div className="text-center">
-        <h2 className="text-3xl font-bold text-blue-800 mb-1">BULLETIN DE NOTES</h2>
-        <p className="text-lg font-semibold">
-          Année Scolaire: <span className="text-blue-700">
-            {anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId))?.libelle}
-          </span>
-        </p>
-        <p className="text-lg font-semibold">
-          Trimestre: <span className="text-blue-700">
-            {trimestres.find(t => t.id === parseInt(selectedTermId))?.nom}
-          </span>
-        </p>
-      </div>
-      <div className="text-right text-xs" dir="rtl">
-        <p>الجمهورية الإسلامية الموريتانية</p>
-        <p>وزارة التهذيب الوطني</p>
-        <p>مديرية الامتحانات والمباريات</p>
-      </div>
-    </div>
-
-    {/* Informations élève */}
-    {selectedReport && (
-      <div className="mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-sm">
-          <div>
-            <p><span className="font-semibold">Nom de l'établissement:</span> <span className="font-bold text-blue-600">École Sources des Sciences</span></p>
-            <p><span className="font-semibold">Nom de l'élève:</span> <span className="font-bold text-blue-600">{selectedReport.name}</span></p>
-            <p><span className="font-semibold">Matricule:</span> <span className="font-mono">123456</span></p>
-          </div>
-          <div>
-            <p><span className="font-semibold">Classe:</span> <span className="font-bold text-blue-600">{classes.find(c => c.id === parseInt(selectedClassId))?.nom}</span></p>
-            <p><span className="font-semibold">Nombre d'élèves:</span> <span>{selectedReport.totalElevesClasse}</span></p>
-            <p><span className="font-semibold">Absences:</span> <span>{selectedReport.absences} heures</span></p>
-          </div>
-        </div>
-        <div className="border-t border-b border-gray-300 py-2 text-right text-sm">
-          <span className="font-semibold">Date d'édition:</span> {new Date().toLocaleDateString('fr-FR')}
-        </div>
-      </div>
-    )}
-
-    {/* Tableau des notes */}
-    <div className="mb-8 overflow-x-auto">
-      <Table className="w-full border border-gray-300">
-        <TableHeader className="bg-blue-100">
-          <TableRow>
-            <TableHead className="border border-gray-300 px-3 py-2 text-left font-bold min-w-[180px]">Matière</TableHead>
-            <TableHead className="border border-gray-300 px-2 py-2 text-center font-bold w-16">Coeff</TableHead>
-            {dynamicEvaluationHeaders.map((header) => (
-              <TableHead key={header} className="border border-gray-300 px-2 py-2 text-center font-bold whitespace-nowrap">
-                {header}
-              </TableHead>
-            ))}
-            <TableHead className="border border-gray-300 px-3 py-2 text-center font-bold">Moy. Matière</TableHead>
-            <TableHead className="border border-gray-300 px-3 py-2 text-left font-bold min-w-[180px]">Observation</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {selectedReport?.notesParMatiere.map((matiere) => (
-            <TableRow key={matiere.matiere} className="hover:bg-gray-50">
-              <TableCell className="border border-gray-300 px-3 py-2 font-medium">{matiere.matiere}</TableCell>
-              <TableCell className="border border-gray-300 px-2 py-2 text-center">{matiere.coefficient}</TableCell>
-              {dynamicEvaluationHeaders.map((header) => {
-                const note = matiere.notesEvaluations.find(n => n.libelle === header);
-                return (
-                  <TableCell key={header} className="border border-gray-300 px-2 py-2 text-center">
-                    {note ? note.note : '00'}
-                  </TableCell>
-                );
-              })}
-              <TableCell className="border border-gray-300 px-3 py-2 text-center font-bold">
-                {matiere.moyenneMatiere.toFixed(2)}
-              </TableCell>
-              <TableCell className="border border-gray-300 px-3 py-2 italic">
-                {matiere.appreciation || '-'}
-              </TableCell>
-            </TableRow>
-          ))}
-          
-          {/* Ligne des totaux */}
           {selectedReport && (
-            <TableRow className="bg-gray-50">
-              <TableCell className="border border-gray-300 px-3 py-2 font-bold" colSpan={2}>
-                Totaux
-              </TableCell>
-              <TableCell className="border border-gray-300 px-2 py-2 text-center font-bold" colSpan={dynamicEvaluationHeaders.length}>
-                {/* Espace vide pour les colonnes des notes */}
-              </TableCell>
-              <TableCell className="border border-gray-300 px-3 py-2 text-center font-bold text-blue-700">
-                {selectedReport.avg}/20
-              </TableCell>
-              <TableCell className="border border-gray-300 px-3 py-2">
-                {/* Espace vide pour les observations */}
-              </TableCell>
-            </TableRow>
+            <div className="py-6 space-y-8">
+              <div className="bg-white border-2 border-blue-200 p-8 rounded-xl shadow-lg">
+                <div className="text-center mb-10">
+                  <h2 className="text-4xl font-extrabold text-blue-800 mb-2">Sources des Sciences</h2>
+                  <p className="text-2xl font-semibold text-gray-800">BULLETIN DE NOTES</p>
+                  <p className="text-xl text-gray-600 mt-1">Année Académique: <span className="font-bold text-blue-700">{anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId))?.libelle}</span></p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-lg mb-8 border-b pb-6 border-gray-200">
+                  <p><span className="font-semibold text-gray-700">Élève:</span> <span className="text-blue-600 font-bold">{selectedReport.name}</span></p>
+                  <p><span className="font-semibold text-gray-700">Classe:</span> <span className="text-blue-600 font-bold">{classes.find(c => c.id === parseInt(selectedClassId))?.nom}</span></p>
+                  <p><span className="font-semibold text-gray-700">Trimestre:</span> <span className="text-blue-600 font-bold">{trimestres.find(t => t.id === parseInt(selectedTermId))?.nom}</span></p>
+                  <p><span className="font-semibold text-gray-700">Date d'édition:</span> <span className="text-gray-600">{new Date().toLocaleDateString('fr-FR')}</span></p>
+                </div>
+
+                <div className="overflow-x-auto border border-gray-300 rounded-lg shadow-sm">
+                  <Table className="w-full">
+                    <TableHeader className="bg-blue-100">
+                      <TableRow>
+                        <TableHead className="px-4 py-2 text-left text-sm font-semibold text-gray-700 min-w-[150px]">Matière</TableHead>
+                        <TableHead className="px-4 py-2 text-center text-sm font-semibold text-gray-700 min-w-[70px]">Coeff</TableHead>
+                        {/* Headers dynamiques pour les évaluations (Devoirs, Compositions) */}
+                        {dynamicEvaluationHeaders.map((header) => (
+                          <TableHead key={header} className="px-4 py-2 text-center text-sm font-semibold text-gray-700 min-w-[100px]">
+                            {header}
+                          </TableHead>
+                        ))}
+                        <TableHead className="px-4 py-2 text-center text-sm font-semibold text-gray-700 min-w-[90px]">Moyenne</TableHead>
+                        <TableHead className="px-4 py-2 text-left text-sm font-semibold text-gray-700 min-w-[150px]">Appréciation</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="bg-white divide-y divide-gray-100">
+                      {selectedReport.notesParMatiere.map((matiereDetail, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="px-4 py-3 font-medium text-gray-800">{matiereDetail.matiere}</TableCell>
+                          <TableCell className="px-4 py-3 text-center">{matiereDetail.coefficient}</TableCell>
+                          {/* Affichage des notes pour chaque évaluation */}
+                          {dynamicEvaluationHeaders.map((headerLibelle) => {
+                            const noteDetail = matiereDetail.notesEvaluations.find(n => n.libelle === headerLibelle);
+                            return (
+                              <TableCell key={`${matiereDetail.matiere}-${headerLibelle}`} className="px-4 py-3 text-center">
+                                {noteDetail ? noteDetail.note : '00'}
+                              </TableCell>
+                            );
+                          })}
+                          <TableCell className="px-4 py-3 text-center font-semibold">{matiereDetail.moyenneMatiere.toFixed(2)}</TableCell>
+                          <TableCell className="px-4 py-3 text-left italic text-gray-600">{matiereDetail.appreciation || '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                      <TableRow className="bg-blue-50 font-bold">
+                        <TableCell colSpan={2} className="px-4 py-3 text-right text-base">Moyenne Générale</TableCell>
+                        <TableCell colSpan={dynamicEvaluationHeaders.length + 1} className="px-4 py-3 text-center text-blue-700 text-lg">
+                          {selectedReport.avg}/20
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-center text-lg">{selectedReport.rank}</TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <div className="mt-8 space-y-4">
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-800 mb-2">Commentaire du Professeur Principal:</h3>
+                    <p className="p-4 bg-gray-50 border border-gray-200 rounded-md text-gray-700 italic">
+                      {selectedReport.teacherComment}
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-800 mb-2">Commentaire du Directeur:</h3>
+                    <p className="p-4 bg-gray-50 border border-gray-200 rounded-md text-gray-700 italic">
+                      {selectedReport.principalComment}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-10 text-right text-gray-600 text-sm">
+                  <p>Fait à Nouakchott, le {new Date().toLocaleDateString('fr-FR')}</p>
+                </div>
+              </div>
+            </div>
           )}
-        </TableBody>
-      </Table>
-    </div>
 
-    {/* Résumé et mentions */}
-    {selectedReport && (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="border border-gray-300 rounded-lg p-4 bg-gray-50">
-          <h3 className="font-bold mb-2">Appréciation du Conseil de Classe:</h3>
-          <p className="italic">{selectedReport.teacherComment}</p>
-          <p className="text-right mt-4 text-sm">Signature du Professeur Principal</p>
-        </div>
-        <div className="border border-gray-300 rounded-lg p-4 bg-gray-50">
-          <h3 className="font-bold mb-2">Observations du Directeur:</h3>
-          <p className="italic">{selectedReport.principalComment}</p>
-          <p className="text-right mt-4 text-sm">Signature du Directeur</p>
-        </div>
-      </div>
-    )}
-
-    {/* Résultats finaux */}
-    {selectedReport && (
-      <div className="border border-gray-300 rounded-lg p-4 mb-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-          <div>
-            <p className="font-semibold">Moyenne Générale</p>
-            <p className="text-xl font-bold text-blue-700">{selectedReport.avg}/20</p>
+          <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
+            <Button variant="outline" onClick={exportReport}>
+              <FileDown className="h-4 w-4 mr-2" /> Exporter en PDF
+            </Button>
+            <Button onClick={printReport}>
+              <Printer className="h-4 w-4 mr-2" /> Imprimer
+            </Button>
           </div>
-          <div>
-            <p className="font-semibold">Classement</p>
-            <p className="text-xl font-bold">{selectedReport.rank}</p>
-          </div>
-          <div>
-            <p className="font-semibold">Mention</p>
-            <p className="text-xl font-bold">
-              {getMention(parseFloat(selectedReport.avg))}
-            </p>
-          </div>
-          <div>
-            <p className="font-semibold">Décision du Conseil</p>
-            <p className="text-xl font-bold">
-              {parseFloat(selectedReport.avg) >= 10 ? "Admis(e)" : "Non Admis(e)"}
-            </p>
-          </div>
-        </div>
-      </div>
-    )}
-
-    {/* Pied de page */}
-    <div className="text-center text-xs text-gray-500 mt-8">
-      <p>Date d'édition: {new Date().toLocaleDateString('fr-FR')}</p>
-      <p className="mt-2">Cachet et Signature de l'Administration</p>
-      <p className="mt-4">École Sources des Sciences - BP 1234 Nouakchott - Tél: 00 00 00 00</p>
-    </div>
-  </div>
-
-  {/* Boutons d'action */}
-  <div className="bg-gray-100 px-6 py-4 flex justify-end gap-4 rounded-b-lg">
-    <Button variant="outline" onClick={() => setPreviewOpen(false)}>
-      Fermer
-    </Button>
-    <Button onClick={exportReport} className="bg-green-600 hover:bg-green-700">
-      <FileDown className="mr-2 h-4 w-4" /> Exporter en PDF
-    </Button>
-    <Button onClick={printReport} className="bg-blue-600 hover:bg-blue-700">
-      <Printer className="mr-2 h-4 w-4" /> Imprimer
-    </Button>
-  </div>
-</DialogContent>
-</Dialog>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

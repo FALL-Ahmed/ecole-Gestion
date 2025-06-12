@@ -27,18 +27,35 @@ export class TrimestreService {
 
     return this.trimestreRepo.save(trimestre);
   }
+
   async findByDate(date: string, anneeId: number): Promise<Trimestre | null> {
-  return this.trimestreRepo
-    .createQueryBuilder('trimestre')
-    .leftJoinAndSelect('trimestre.anneeScolaire', 'annee')
-    .where('trimestre.date_debut <= :date', { date })
-    .andWhere('trimestre.date_fin >= :date', { date })
-    .andWhere('annee.id = :anneeId', { anneeId })
-    .getOne();
-}
+    return this.trimestreRepo
+      .createQueryBuilder('trimestre')
+      .leftJoinAndSelect('trimestre.anneeScolaire', 'annee')
+      .where('trimestre.date_debut <= :date', { date })
+      .andWhere('trimestre.date_fin >= :date', { date })
+      .andWhere('annee.id = :anneeId', { anneeId })
+      .getOne();
+  }
 
+  // MODIFICATION ICI : Ajout du paramètre anneeScolaireId optionnel
+  async findAll(anneeScolaireId?: number): Promise<Trimestre[]> {
+    const queryOptions: any = {
+      relations: ['anneeScolaire'],
+      order: {
+        date_debut: 'ASC', // Tri par date pour un affichage logique
+      }
+    };
 
-  findAll(): Promise<Trimestre[]> {
-    return this.trimestreRepo.find({ relations: ['anneeScolaire'] });
+    if (anneeScolaireId) {
+      // Si un anneeScolaireId est fourni, ajoutez la condition de filtrage
+      queryOptions.where = {
+        anneeScolaire: {
+          id: anneeScolaireId,
+        },
+      };
+    }
+
+    return this.trimestreRepo.find(queryOptions);
   }
 }

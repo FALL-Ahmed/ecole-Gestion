@@ -15,6 +15,8 @@ import { TrimestreModule } from './trimestre/trimestre.module';
 import { EvaluationModule } from './evaluation/evaluation.module';
 import { NoteModule } from './note/note.module';
 import { ConfigurationModule } from './configuration/configuration.module';
+import { EmploiDuTempsModule } from './emploidutemps/emploidutemps.module';
+import { ExceptionEmploiDuTempsModule } from './exceptionemploidutemps/exceptionemploidutemps.module'; // Nouvelle importation
 
 
 
@@ -42,7 +44,9 @@ import { ConfigurationModule } from './configuration/configuration.module';
     TrimestreModule,
     EvaluationModule,
     NoteModule,
-    ConfigurationModule
+    ConfigurationModule,
+    EmploiDuTempsModule,
+    ExceptionEmploiDuTempsModule
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -3,6 +3,7 @@ import { Controller, Post, Body, Get } from '@nestjs/common';
 import { TrimestreService } from './trimestre.service';
 import { CreateTrimestreDto } from './create-trimestre.dto';
 import { Query } from '@nestjs/common';
+import { Trimestre } from './trimestre.entity';
 
 @Controller('api/trimestres')
 export class TrimestreController {
@@ -13,9 +14,13 @@ export class TrimestreController {
     return this.trimestreService.create(dto);
   }
 
-  @Get()
-  findAll() {
-    return this.trimestreService.findAll();
+  
+
+   @Get()
+  async findAll(@Query('anneeScolaireId') anneeScolaireId?: string): Promise<Trimestre[]> {
+    // Convertir anneeScolaireId en nombre si elle est fournie
+    const parsedAnneeScolaireId = anneeScolaireId ? parseInt(anneeScolaireId, 10) : undefined;
+    return this.trimestreService.findAll(parsedAnneeScolaireId);
   }
 
   @Get('by-date')

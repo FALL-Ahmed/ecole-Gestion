@@ -10,16 +10,31 @@ export class InscriptionController {
   create(@Body() createDto: CreateInscriptionDto) {
     return this.inscriptionService.create(createDto);
   }
-  
-  // Ici on récupère les query params pour filtrer
+
   @Get()
-  findAll(@Query('classeId') classeId?: string, @Query('anneeScolaireId') anneeScolaireId?: string) {
-    if (classeId && anneeScolaireId) {
-      // Parse en number et appelle le service avec filtre
-      return this.inscriptionService.findByClasseAndAnnee(+classeId, +anneeScolaireId);
+  // Accepte maintenant utilisateurId, classeId et anneeScolaireId comme paramètres de requête.
+  // Ces noms correspondent directement aux noms des colonnes de votre table Inscription.
+  findAll(
+    @Query('utilisateurId') utilisateurId?: string,
+    @Query('classeId') classeId?: string,
+    @Query('anneeScolaireId') anneeScolaireId?: string
+  ) {
+    // Crée un objet de filtres qui sera passé au service.
+    // Convertit les chaînes en nombres si elles sont présentes.
+    const filters: { utilisateurId?: number; classeId?: number; anneeScolaireId?: number } = {};
+
+    if (utilisateurId) {
+      filters.utilisateurId = +utilisateurId;
     }
-    // Sinon retourne tout
-    return this.inscriptionService.findAll();
+    if (classeId) {
+      filters.classeId = +classeId;
+    }
+    if (anneeScolaireId) {
+      filters.anneeScolaireId = +anneeScolaireId;
+    }
+
+    // Appelle la méthode findAll du service qui est maintenant plus flexible
+    return this.inscriptionService.findAll(filters);
   }
 
   @Get(':id')

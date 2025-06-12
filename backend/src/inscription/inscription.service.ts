@@ -6,6 +6,7 @@ import { CreateInscriptionDto } from './dto/create-inscription.dto';
 import { User } from '../users/user.entity';
 import { Classe } from '../classe/classe.entity';
 import { anneescolaire } from '../annee-academique/annee-academique.entity';
+import { UserRole } from '../users/user.entity'; // Assurez-vous que le chemin et la valeur de UserRole sont corrects
 
 @Injectable()
 export class InscriptionService {
@@ -33,30 +34,52 @@ export class InscriptionService {
     const annee_scolaire = await this.anneeScolaireRepository.findOne({ where: { id: data.annee_scolaire_id } });
     if (!annee_scolaire) throw new NotFoundException('Année scolaire non trouvée');
 
+    // FIX: Utilise les IDs des entités liées pour créer l'inscription.
+    // TypeORM utilisera ces IDs pour remplir les colonnes de clés étrangères.
     const inscription = this.inscriptionRepository.create({
-      utilisateur,
-      classe,
-      annee_scolaire,
-      actif: data.actif ?? true,
+      utilisateurId: utilisateur.id,      // ID de l'utilisateur
+      classeId: classe.id,               // ID de la classe
+      anneeScolaireId: annee_scolaire.id, // ID de l'année scolaire
+      actif: data.actif ?? true,         // 'actif' est maintenant un boolean, utilise 'true' comme valeur par défaut
     });
+
+    // Optionnel: Si vous avez besoin de retourner l'objet 'inscription' avec les relations
+    // complètes immédiatement après la création (sans nouvelle requête DB), vous pouvez
+    // réassigner les objets de relation ici. Le .save() gérera la persistance des IDs.
+    inscription.utilisateur = utilisateur;
+    inscription.classe = classe;
+    inscription.annee_scolaire = annee_scolaire;
 
     return await this.inscriptionRepository.save(inscription);
   }
 
-  async findAll(): Promise<Inscription[]> {
-    return this.inscriptionRepository.find({
-      relations: ['utilisateur', 'classe', 'annee_scolaire'],
-    });
-  }
+  async findAll(filters?: { utilisateurId?: number; classeId?: number; anneeScolaireId?: number }): Promise<Inscription[]> {
+     const queryBuilder = this.inscriptionRepository.createQueryBuilder("inscription")
+      .leftJoinAndSelect("inscription.utilisateur", "utilisateur")
+      .leftJoinAndSelect("inscription.classe", "classe")
+      .leftJoinAndSelect("inscription.annee_scolaire", "annee_scolaire")
+      .where("inscription.actif = :actif", { actif: 1 });
 
-  async findByClasseAndAnnee(classeId: number, anneeScolaireId: number): Promise<Inscription[]> {
-    return this.inscriptionRepository.find({
-      where: {
-        classe: { id: classeId },
-        annee_scolaire: { id: anneeScolaireId },
-      },
-      relations: ['utilisateur', 'classe', 'annee_scolaire'],
-    });
+
+    if (filters?.utilisateurId) {
+       // Filtre directement sur la colonne utilisateurId de l'entité Inscription
+      queryBuilder.andWhere("inscription.utilisateurId = :utilisateurId", { utilisateurId: filters.utilisateurId });
+    } else {
+      // Si aucun utilisateurId spécifique n'est fourni, filtre par rôle sur l'entité User jointe
+      queryBuilder.andWhere("utilisateur.role = :role", { role: UserRole.ETUDIANT });
+    }
+
+    if (filters?.classeId) {
+     // Filtre directement sur la colonne classeId de l'entité Inscription
+      queryBuilder.andWhere("inscription.classeId = :classeId", { classeId: filters.classeId });
+    }
+    if (filters?.anneeScolaireId) {
+     // Filtre directement sur la colonne anneeScolaireId de l'entité Inscription
+      queryBuilder.andWhere("inscription.anneeScolaireId = :anneeScolaireId", { anneeScolaireId: filters.anneeScolaireId });
+    }
+
+        return queryBuilder.getMany();
+
   }
 
   async findOne(id: number): Promise<Inscription> {
