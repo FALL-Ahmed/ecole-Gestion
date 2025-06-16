@@ -1,7 +1,7 @@
 // src/components/MainContent.tsx
 import React from 'react';
 import { Dashboard } from './Dashboard';
-import UserManagement from "./admin/UserManagement";
+import UserMan from "./admin/UserManagement";
 import SchoolManagement from "./admin/SchoolManagement";
 import { CourseManagement } from './admin/CourseManagement';
 import { GradeManagement } from './admin/GradeManagement';
@@ -24,9 +24,11 @@ import { useAuth } from '@/contexts/AuthContext'; // Ensure this import is corre
 
 interface MainContentProps {
   activeSection: string;
+  onSectionChange: (section: string) => void; // Ajout de la prop pour la navigation
+
 }
 
-export function MainContent({ activeSection }: MainContentProps) {
+export function MainContent({ activeSection, onSectionChange }: MainContentProps) {
   // Destructure user, isAuthenticated, and isLoading from useAuth()
   const { user, isAuthenticated, isLoading } = useAuth();
 
@@ -60,9 +62,9 @@ export function MainContent({ activeSection }: MainContentProps) {
         case 'dashboard':
           return <Dashboard />;
         case 'users':
-          return <UserManagement />;
+          return <UserMan />; // Assurez-vous que UserMan accepte onNavigate si besoin similaire
         case 'scolaire':
-          return <SchoolManagement />; 
+          return <SchoolManagement onNavigate={onSectionChange} />; 
         case 'courses':
           return <CourseManagement />;
         case 'grades':
@@ -91,8 +93,7 @@ export function MainContent({ activeSection }: MainContentProps) {
           return <Dashboard />;
         case 'course-materials':
           return <CourseMaterials />;
-        case 'attendance-mgmt':
-          return <ProfessorAttendance />;
+       
         case 'schedule-view':
           return <ProfessorSchedule />;
         case 'grades-input':

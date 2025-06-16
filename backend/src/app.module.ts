@@ -17,6 +17,7 @@ import { NoteModule } from './note/note.module';
 import { ConfigurationModule } from './configuration/configuration.module';
 import { EmploiDuTempsModule } from './emploidutemps/emploidutemps.module';
 import { ExceptionEmploiDuTempsModule } from './exceptionemploidutemps/exceptionemploidutemps.module'; // Nouvelle importation
+import { AbsenceModule } from './absence/absence.module'; // Adaptez le chemin
 
 
 
@@ -46,7 +47,8 @@ import { ExceptionEmploiDuTempsModule } from './exceptionemploidutemps/exception
     NoteModule,
     ConfigurationModule,
     EmploiDuTempsModule,
-    ExceptionEmploiDuTempsModule
+    ExceptionEmploiDuTempsModule,
+    AbsenceModule 
   ],
   controllers: [AppController],
   providers: [AppService],

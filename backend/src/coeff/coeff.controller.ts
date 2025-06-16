@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, BadRequestException } from "@nestjs/common";
+import { Controller, Get, Post, Body, BadRequestException, Param, Put, Delete, NotFoundException, ParseIntPipe } from "@nestjs/common";
 import { CoefficientClasseService } from "./coeff.service";
 
 @Controller("api/coefficientclasse")
@@ -20,6 +20,18 @@ export class CoefficientClasseController {
 
     return this.coefficientClasseService.createMany(body);
   }
+
+  @Put(':id')
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { coefficient: number }
+  ) {
+    if (body.coefficient === undefined || typeof body.coefficient !== 'number') {
+      throw new BadRequestException("Le champ 'coefficient' est requis et doit être un nombre.");
+    }
+    return this.coefficientClasseService.update(id, body.coefficient);
+  }
+
 
   // Nouvelle route POST /api/coefficientclasse/clone
   @Post("clone")

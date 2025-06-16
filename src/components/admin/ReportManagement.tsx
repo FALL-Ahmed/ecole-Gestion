@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { FileDown, Printer, Search, Eye } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
+
 interface AnneeAcademique {
   id: number;
   libelle: string;
@@ -56,7 +57,11 @@ interface CoefficientClasse {
 
 interface Trimestre {
   id: number;
-  annee_scolaire_id: number;
+  anneeScolaire: { // Structure mise à jour pour correspondre aux données réelles
+    id: number;
+    libelle: string;
+    // Vous pouvez ajouter d'autres champs de anneeScolaire si nécessaire
+  };
   nom: string;
   date_debut: string;
   date_fin: string;
@@ -377,29 +382,39 @@ export function ReportManagement() {
   }, [selectedClassId, selectedTermId, selectedAnneeAcademiqueId]);
 
   useEffect(() => {
-    const canGenerateBulletins = eleves.length > 0 && matieres.length > 0 && coefficients.length > 0 &&
-                                 selectedClassId && selectedTermId && selectedAnneeAcademiqueId;
+     const generateAndSetBulletins = async () => {
+      const canGenerateBulletins = eleves.length > 0 && matieres.length > 0 && coefficients.length > 0 &&
+                                   selectedClassId && selectedTermId && selectedAnneeAcademiqueId;
 
-    if (canGenerateBulletins) {
-      const generatedBulletins: BulletinEleve[] = eleves.map(eleve => {
-        const bulletinMatiereDetails: MatiereDetailBulletin[] = matieres.map(matiere => {
+      if (!canGenerateBulletins) {
+        setBulletins([]);
+        return;
+      }
+
+      setIsLoading(true); // Indiquer le début de la génération
+
+      const classIdNum = parseInt(selectedClassId);
+      const anneeIdNum = parseInt(selectedAnneeAcademiqueId);
+
+      const generatedBulletinsPromises = eleves.map(async (eleve) => {
+        const bulletinMatiereDetailsPromises = matieres.map(async (matiere) => {
           const coefficient = coefficients.find(c => c.matiere_id === matiere.id)?.coefficient || 1;
-
-          const evaluationsForMatiere = allEvaluations.filter(e => e.matiere_id === matiere.id);
-
-          const eleveNotesForMatiere = allNotes.filter(note =>
+          
+          // Notes et évaluations du trimestre COURANT (déjà dans allEvaluations et allNotes)
+          const evaluationsForMatiereCurrentTerm = allEvaluations.filter(e => e.matiere_id === matiere.id);
+          const eleveNotesForMatiereCurrentTerm = allNotes.filter(note =>
             note.etudiant.id === eleve.id &&
-            evaluationsForMatiere.some(evalItem => evalItem.id === note.evaluation.id)
+            evaluationsForMatiereCurrentTerm.some(evalItem => evalItem.id === note.evaluation.id)
           );
 
           const notesEvaluations: EvaluationDetailBulletin[] = [];
           let totalPointsDevoirs = 0;
           let countDevoirs = 0;
-          let compositionNoteValue: number | null = null;
+          let compositionNoteValue: number | null = null; // Compo du trimestre courant
 
           dynamicEvaluationHeaders.forEach(headerLibelle => {
-            const evalItemForHeader = evaluationsForMatiere.find(e => e.libelle === headerLibelle);
-            const note = eleveNotesForMatiere.find(n => n.evaluation.id === evalItemForHeader?.id);
+            const evalItemForHeader = evaluationsForMatiereCurrentTerm.find(e => e.libelle === headerLibelle);
+            const note = eleveNotesForMatiereCurrentTerm.find(n => n.evaluation.id === evalItemForHeader?.id);
             const noteValue = note ? note.note : 0;
 
             notesEvaluations.push({
@@ -418,25 +433,109 @@ export function ReportManagement() {
           });
 
           notesEvaluations.sort((a, b) => {
-              const indexA = dynamicEvaluationHeaders.indexOf(a.libelle);
-              const indexB = dynamicEvaluationHeaders.indexOf(b.libelle);
-              return indexA - indexB;
+               const indexA = dynamicEvaluationHeaders.indexOf(a.libelle);
+            const indexB = dynamicEvaluationHeaders.indexOf(b.libelle);
+            return indexA - indexB;
           });
 
+          // --- Nouvelle logique de calcul de moyenneMatiere ---
           let moyenneMatiere = 0;
-          const avgDevoirs = countDevoirs > 0 ? totalPointsDevoirs / countDevoirs : 0;
+          const currentTrimestreObj = trimestres.find(t => t.id === parseInt(selectedTermId));
+          const currentTrimestreNumero = currentTrimestreObj ? parseInt(currentTrimestreObj.nom.replace('Trimestre ', '')) : 0;
 
-          const WEIGHT_DEVOIRS = 0.4;
-          const WEIGHT_COMPOSITION = 0.6;
+          // Les variables `countDevoirs` et `compositionNoteValue` sont celles du trimestre courant,
+          // calculées à partir de `dynamicEvaluationHeaders`.
+          const avgDevoirsCurrentTerm = countDevoirs > 0 ? totalPointsDevoirs / countDevoirs : 0;
 
-          if (countDevoirs > 0 && compositionNoteValue !== null) {
-              moyenneMatiere = (avgDevoirs * WEIGHT_DEVOIRS) + (compositionNoteValue * WEIGHT_COMPOSITION);
-          } else if (countDevoirs > 0) {
-              moyenneMatiere = avgDevoirs;
-          } else if (compositionNoteValue !== null) {
-              moyenneMatiere = compositionNoteValue;
+          let compoT1Note: number | null = null;
+          let compoT2Note: number | null = null;
+
+          // Récupération de la composition du Trimestre 1 si nécessaire
+          if (currentTrimestreNumero === 2 || currentTrimestreNumero === 3) {
+            const trimestre1Obj = trimestres.find(t => t.nom === "Trimestre 1" && t.anneeScolaire.id === anneeIdNum);
+            if (trimestre1Obj) {
+              const evalsT1 = await fetchEvaluationsForClassAndTerm(classIdNum, trimestre1Obj.id, anneeIdNum);
+              const compoT1Eval = evalsT1.find(e => e.matiere_id === matiere.id && e.type === 'Composition');
+              if (compoT1Eval) {
+                const notesT1 = await fetchNotesForEvaluations([compoT1Eval.id], eleve.id);
+                compoT1Note = notesT1.length > 0 ? notesT1[0].note : null;
+              } else {
+              }
+            }
+          }
+
+          // Récupération de la composition du Trimestre 2 si nécessaire
+          if (currentTrimestreNumero === 3) {
+            const trimestre2Obj = trimestres.find(t => t.nom === "Trimestre 2" && t.anneeScolaire.id === anneeIdNum);
+            if (trimestre2Obj) {
+              const evalsT2 = await fetchEvaluationsForClassAndTerm(classIdNum, trimestre2Obj.id, anneeIdNum);
+              const compoT2Eval = evalsT2.find(e => e.matiere_id === matiere.id && e.type === 'Composition');
+              if (compoT2Eval) {
+                const notesT2 = await fetchNotesForEvaluations([compoT2Eval.id], eleve.id);
+                compoT2Note = notesT2.length > 0 ? notesT2[0].note : null;
+              } else {
+              }
+            }
+          }
+
+
+          if (currentTrimestreNumero === 1) {
+            if (countDevoirs > 0 && compositionNoteValue !== null) {
+              moyenneMatiere = (avgDevoirsCurrentTerm * 3 + compositionNoteValue) / 4;
+            } else if (countDevoirs > 0) {
+              moyenneMatiere = avgDevoirsCurrentTerm;
+            } else if (compositionNoteValue !== null) {
+              moyenneMatiere = compositionNoteValue; // Note de compo si seule note
+            }
+          } else if (currentTrimestreNumero === 2) {
+            
+
+            if (countDevoirs > 0 && compositionNoteValue !== null && compoT1Note !== null) {
+              moyenneMatiere = (avgDevoirsCurrentTerm * 3 + compositionNoteValue + compoT1Note) / 5;
+            } else {
+              // Fallback: Calculer avec ce qui est disponible, en ajustant le diviseur.
+              // Ceci est une interprétation. Clarifiez la règle métier si une note est manquante.
+              let sommePonderee = 0;
+              let totalPoids = 0;
+              if (countDevoirs > 0) { sommePonderee += avgDevoirsCurrentTerm * 3; totalPoids += 3; }
+              if (compositionNoteValue !== null) { sommePonderee += compositionNoteValue; totalPoids += 1; }
+              if (compoT1Note !== null) { sommePonderee += compoT1Note; totalPoids += 1; }
+              moyenneMatiere = totalPoids > 0 ? sommePonderee / totalPoids : 0;
+            }
+          } else if (currentTrimestreNumero === 3) {
+           
+            if (countDevoirs > 0 && compositionNoteValue !== null && compoT1Note !== null && compoT2Note !== null) {
+              moyenneMatiere = (avgDevoirsCurrentTerm * 3 + compositionNoteValue + compoT1Note + compoT2Note) / 6;
+               if (matiere.nom === "Mathématiques") {
+              }
+            } else {
+              // Fallback
+              if (matiere.nom === "Mathématiques") {
+              }
+              let sommePonderee = 0;
+              let totalPoids = 0;
+              if (countDevoirs > 0) { sommePonderee += avgDevoirsCurrentTerm * 3; totalPoids += 3; }
+              if (compositionNoteValue !== null) { sommePonderee += compositionNoteValue; totalPoids += 1; }
+              if (compoT1Note !== null) { sommePonderee += compoT1Note; totalPoids += 1; }
+              if (compoT2Note !== null) { sommePonderee += compoT2Note; totalPoids += 1; }
+              moyenneMatiere = totalPoids > 0 ? sommePonderee / totalPoids : 0;
+                             
+            }
           } else {
-              moyenneMatiere = 0;
+              // Si ce n'est pas T1, T2, ou T3, ou si des données manquent pour le calcul standard,
+            // on utilise l'ancienne méthode de calcul comme fallback.
+            // Vous pourriez vouloir une autre logique ici.
+            const WEIGHT_DEVOIRS_FALLBACK = 0.4;
+            const WEIGHT_COMPOSITION_FALLBACK = 0.6;
+            if (countDevoirs > 0 && compositionNoteValue !== null) {
+                moyenneMatiere = (avgDevoirsCurrentTerm * WEIGHT_DEVOIRS_FALLBACK) + (compositionNoteValue * WEIGHT_COMPOSITION_FALLBACK);
+            } else if (countDevoirs > 0) {
+                moyenneMatiere = avgDevoirsCurrentTerm;
+            } else if (compositionNoteValue !== null) {
+                moyenneMatiere = compositionNoteValue;
+            } else {
+                moyenneMatiere = 0;
+            }
           }
 
           const appreciation = "";
@@ -450,17 +549,17 @@ export function ReportManagement() {
           };
         });
 
-        let totalPointsGeneraux = 0;
-        let totalCoefficients = 0;
+         const resolvedBulletinMatiereDetails = await Promise.all(bulletinMatiereDetailsPromises);
 
-        bulletinMatiereDetails.forEach(item => {
-            totalPointsGeneraux += item.moyenneMatiere * item.coefficient;
-            totalCoefficients += item.coefficient;
+        let totalPointsGeneraux = 0;
+        let totalCoefficientsGen = 0;
+
+        resolvedBulletinMatiereDetails.forEach(item => {
+          totalPointsGeneraux += item.moyenneMatiere * item.coefficient;
+          totalCoefficientsGen += item.coefficient;
         });
 
-        const overallAvg = totalCoefficients > 0 ? totalPointsGeneraux / totalCoefficients : 0;
-
-        // Ajout des informations supplémentaires pour le bulletin
+        const overallAvg = totalCoefficientsGen > 0 ? totalPointsGeneraux / totalCoefficientsGen : 0;
         return {
           id: eleve.id,
           name: `${eleve.prenom} ${eleve.nom}`,
@@ -468,22 +567,29 @@ export function ReportManagement() {
           rank: '',
           teacherComment: "Ce commentaire est une appréciation générale du professeur principal. Il doit être récupéré de l'API.",
           principalComment: "Ce commentaire est une appréciation du directeur. Il doit être récupéré de l'API.",
-          notesParMatiere: bulletinMatiereDetails,
+          notesParMatiere: resolvedBulletinMatiereDetails,
           absences: 0, // À remplacer par les données réelles
           totalElevesClasse: eleves.length,
         };
       });
 
-      generatedBulletins.sort((a, b) => parseFloat(b.avg) - parseFloat(a.avg));
-      generatedBulletins.forEach((bulletin, index) => {
-        bulletin.rank = `${index + 1}/${generatedBulletins.length}`;
+       const finalBulletins = await Promise.all(generatedBulletinsPromises);
+
+      finalBulletins.sort((a, b) => parseFloat(b.avg) - parseFloat(a.avg));
+      finalBulletins.forEach((bulletin, index) => {
+        bulletin.rank = `${index + 1}/${finalBulletins.length}`;
       });
 
-      setBulletins(generatedBulletins);
-    } else {
-      setBulletins([]);
+      setBulletins(finalBulletins);
+      setIsLoading(false); // Indiquer la fin de la génération
+    };
+
+    if (eleves.length > 0 && matieres.length > 0 && coefficients.length > 0 && selectedClassId && selectedTermId && selectedAnneeAcademiqueId) {
+      generateAndSetBulletins();
     }
-  }, [eleves, matieres, coefficients, allEvaluations, allNotes, selectedClassId, selectedTermId, selectedAnneeAcademiqueId, dynamicEvaluationHeaders]);
+
+ }, [eleves, matieres, coefficients, allEvaluations, allNotes, selectedClassId, selectedTermId, selectedAnneeAcademiqueId, dynamicEvaluationHeaders, trimestres]);
+ 
 
   const handlePreviewReport = (bulletin: BulletinEleve) => {
     setSelectedReport(bulletin);
@@ -501,25 +607,54 @@ export function ReportManagement() {
     });
   };
 
-  const exportReport = () => {
-    if (!selectedReport) return;
+  
+    // Pour le bouton "Exporter en PDF" DANS LA PREVISUALISATION
+  const exportPreviewedReport = () => {
+    if (!selectedReport) {
+        toast({ title: "Action impossible", description: "Aucun bulletin sélectionné pour l'export.", variant: "default" });
+        return;
+    }
     toast({
       title: "Export en PDF",
       description: `Le bulletin de ${selectedReport?.name} est en cours d'exportation en PDF.`,
     });
-    setPreviewOpen(false);
+  
   };
 
-  const printReport = () => {
-    if (!selectedReport) return;
-    toast({
-      title: "Impression",
-      description: `Le bulletin de ${selectedReport?.name} est envoyé à l'imprimante.`,
-    });
+   // setPreviewOpen(false); // Optionnel: fermer après export si l'utilisateur est dans la modale
+  
+
+  // Pour le bouton "Imprimer" DANS LA PREVISUALISATION
+  const printPreviewedReport = () => {
+    if (!selectedReport) {
+        toast({ title: "Action impossible", description: "Aucun bulletin sélectionné pour l'impression.", variant: "default" });
+        return;
+    }
+    
     window.print();
-    setPreviewOpen(false);
+  
+  };
+// --- Fonctions pour les boutons PDF/Imprimer DANS LES LIGNES DU TABLEAU ---
+  const exportReportFromRow = (bulletin: BulletinEleve) => {
+    setSelectedReport(bulletin);
+    setPreviewOpen(true); // Ouvre la prévisualisation
+    setTimeout(() => {
+      toast({ title: "Export en PDF", description: `Préparation de l'export PDF du bulletin de ${bulletin.name}.` });
+      // Logique d'exportation PDF ici, utilisant 'bulletin' ou 'selectedReport'
+      console.log("Logique d'export PDF pour (depuis ligne):", bulletin.name);
+      setPreviewOpen(false); // Ferme la prévisualisation automatiquement
+    }, 300); // Délai pour permettre le rendu de la prévisualisation
   };
 
+  const printReportFromRow = (bulletin: BulletinEleve) => {
+    setSelectedReport(bulletin);
+    setPreviewOpen(true); // Ouvre la prévisualisation
+    setTimeout(() => {
+      toast({ title: "Impression", description: `Préparation de l'impression du bulletin de ${bulletin.name}.` });
+      window.print();
+      setPreviewOpen(false); // Ferme la prévisualisation automatiquement
+    }, 300); // Délai pour permettre le rendu de la prévisualisation
+  };
   const filteredBulletins = bulletins.filter(bulletin =>
     bulletin.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -681,10 +816,10 @@ export function ReportManagement() {
                               >
                                 <Eye className="h-4 w-4 mr-1" /> Prévisualiser
                               </Button>
-                              <Button variant="outline" size="sm" onClick={exportReport} className="text-purple-600 hover:bg-purple-50 rounded-md">
+                              <Button variant="outline" size="sm" onClick={() => exportReportFromRow(bulletin)} className="text-purple-600 hover:bg-purple-50 rounded-md">
                                 <FileDown className="h-4 w-4 mr-1" /> PDF
                               </Button>
-                              <Button variant="outline" size="sm" onClick={printReport} className="text-red-600 hover:bg-red-50 rounded-md">
+                              <Button variant="outline" size="sm" onClick={() => printReportFromRow(bulletin)} className="text-red-600 hover:bg-red-50 rounded-md">
                                 <Printer className="h-4 w-4 mr-1" /> Imprimer
                               </Button>
                             </div>
@@ -700,7 +835,7 @@ export function ReportManagement() {
         </div>
       ) : (
         <div className="bg-white rounded-lg p-10 text-center shadow-lg border border-gray-200">
-          <p className="text-gray-600 text-lg font-medium">Veuillez sélectionner une **année scolaire**, une **classe** et un **trimestre** pour consulter les bulletins.</p>
+          <p className="text-gray-600 text-lg font-medium">Veuillez sélectionner une année scolaire, une classe et un trimestre pour consulter les bulletins.</p>
           <p className="text-gray-400 text-sm mt-2">Utilisez les menus déroulants ci-dessus pour commencer.</p>
         </div>
       )}
@@ -708,8 +843,21 @@ export function ReportManagement() {
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
        
 
-<DialogContent className="max-w-6xl overflow-y-auto max-h-[95vh] p-0 rounded-lg">
-  <div className="bg-white p-8">
+<DialogContent className="max-w-6xl overflow-y-auto max-h-[95vh] p-0 rounded-lg print-dialog-content">
+  
+          <DialogHeader className="p-6 border-b no-print"> {/* Ajout de no-print pour ne pas l'imprimer */}
+            <DialogTitle>Aperçu du Bulletin Scolaire</DialogTitle>
+            {selectedReport && ( // Afficher la description seulement si un bulletin est sélectionné
+            <DialogDescription>
+              Bulletin pour {selectedReport.name}
+              {selectedClassId && classes.find(c => c.id === parseInt(selectedClassId)) ? `, Classe: ${classes.find(c => c.id === parseInt(selectedClassId))?.nom}` : ''}
+              {selectedTermId && trimestres.find(t => t.id === parseInt(selectedTermId)) ? `, Trimestre: ${trimestres.find(t => t.id === parseInt(selectedTermId))?.nom}` : ''}
+              {selectedAnneeAcademiqueId && anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId)) ? ` (${anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId))?.libelle})` : ''}.
+            </DialogDescription>
+            )}
+          </DialogHeader>
+          
+  <div id="bulletin-preview-content-area" className="bg-white p-8"> {/* ID ajouté ici */}
     {/* En-tête administratif */}
     <div className="grid grid-cols-3 gap-4 mb-8 text-xs">
       <div className="text-left">
@@ -870,14 +1018,14 @@ export function ReportManagement() {
   </div>
 
   {/* Boutons d'action */}
-  <div className="bg-gray-100 px-6 py-4 flex justify-end gap-4 rounded-b-lg">
+  <div className="bg-gray-100 px-6 py-4 flex justify-end gap-4 rounded-b-lg bulletin-actions-footer no-print">
     <Button variant="outline" onClick={() => setPreviewOpen(false)}>
       Fermer
     </Button>
-    <Button onClick={exportReport} className="bg-green-600 hover:bg-green-700">
+    <Button onClick={exportPreviewedReport} className="bg-green-600 hover:bg-green-700">
       <FileDown className="mr-2 h-4 w-4" /> Exporter en PDF
     </Button>
-    <Button onClick={printReport} className="bg-blue-600 hover:bg-blue-700">
+    <Button onClick={printPreviewedReport} className="bg-blue-600 hover:bg-blue-700">
       <Printer className="mr-2 h-4 w-4" /> Imprimer
     </Button>
   </div>

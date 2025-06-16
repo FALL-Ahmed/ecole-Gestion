@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -22,89 +22,262 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Loader2, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from '@/hooks/use-toast';
+import { endOfYear, startOfYear } from 'date-fns';
 
-const terms = ['Trimestre 1', 'Trimestre 2', 'Trimestre 3', 'Année entière'];
+// --- API Configuration ---
+const API_BASE_URL = 'http://localhost:3000/api';
 
-// Données d'absence
-const absenceData = [
-  { 
-    date: '2023-09-15', 
-    dayOfWeek: 'Vendredi',
-    subject: 'Mathématiques',
-    period: '08:00 - 09:00',
-    teacher: 'M. Dubois',
-    justified: true,
-    justification: 'Rendez-vous médical',
-  },
-  { 
-    date: '2023-10-03', 
-    dayOfWeek: 'Mardi',
-    subject: 'Français',
-    period: '10:15 - 11:15',
-    teacher: 'Mme Bernard',
-    justified: true,
-    justification: 'Maladie',
-  },
-  { 
-    date: '2023-11-17', 
-    dayOfWeek: 'Vendredi',
-    subject: 'Histoire-Géographie',
-    period: '13:30 - 14:30',
-    teacher: 'M. Robert',
-    justified: false,
-    justification: '',
-  },
-  { 
-    date: '2024-01-22', 
-    dayOfWeek: 'Lundi',
-    subject: 'Anglais',
-    period: '09:00 - 10:00',
-    teacher: 'Mme Petit',
-    justified: true,
-    justification: 'Problèmes familiaux',
-  },
-  { 
-    date: '2024-02-08', 
-    dayOfWeek: 'Jeudi',
-    subject: 'Sciences',
-    period: '10:15 - 11:15',
-    teacher: 'M. Thomas',
-    justified: false,
-    justification: '',
-  },
-];
+// --- Interfaces for API Data ---
+interface AnneeAcademique {
+  id: number;
+  libelle: string;
+  date_debut: string;
+  date_fin: string;
+}
 
-// Statistiques des absences
-const attendanceStats = {
-  daysTotal: 100, // jours d'école total sur l'année
-  daysPresent: 95,
-  daysAbsent: 5,
-  daysJustified: 3,
-  daysUnjustified: 2,
+interface Trimestre {
+  id: number;
+  nom: string; // Ex: "Trimestre 1"
+  date_debut: string;
+  date_fin: string;
+  anneeScolaire?: AnneeAcademique; // Assuming relation is expanded
+}
+
+interface AbsenceAPI {
+  id: number;
+  date: string;
+  heure_debut: string;
+  heure_fin: string;
+  justifie: boolean;
+  justification: string;
+  etudiant?: { id: number; nom: string; prenom: string };
+  matiere?: { id: number; nom: string };
+  classe?: { id: number; nom: string };
+  anneeScolaire?: { id: number; libelle: string };
+}
+
+// Interface for processed absence records for the table
+interface AbsenceRecord {
+  id: number;
+  date: string;
+  dayOfWeek: string;
+  subject: string;
+  period: string;
+  justified: boolean;
+  justification: string;
+}
+
+// Interface for attendance statistics
+interface AttendanceStats {
+  totalAbsences: number;
+  justifiedAbsences: number;
+  unjustifiedAbsences: number;
+  // Note: Calculating total school days/presence percentage is complex
+  // without a full school calendar API. We'll stick to absence counts for now.
+}
+
+// Initial stats state
+const initialAttendanceStats: AttendanceStats = {
+  totalAbsences: 0,
+  justifiedAbsences: 0,
+  unjustifiedAbsences: 0,
 };
 
+
+
 export function StudentAttendance() {
-  const [selectedTerm, setSelectedTerm] = useState<string>('Année entière');
-  const [date, setDate] = useState<Date>(new Date());
+  const { user } = useAuth(); // Get logged-in user
 
-  const absencesByTerm = (term: string) => {
-    if (term === 'Année entière') {
-      return absenceData;
-    }
-    
-    // Dans une vraie application, il faudrait filtrer par date selon le trimestre
-    // Pour l'exemple, on retourne un sous-ensemble des données
-    const filterMap = {
-      'Trimestre 1': absenceData.slice(0, 2),
-      'Trimestre 2': absenceData.slice(2, 3),
-      'Trimestre 3': absenceData.slice(3),
+  const [anneesAcademiques, setAnneesAcademiques] = useState<AnneeAcademique[]>([]);
+  const [selectedSchoolYearId, setSelectedSchoolYearId] = useState<string>('');
+  const [trimestres, setTrimestres] = useState<Trimestre[]>([]);
+  const [selectedTermId, setSelectedTermId] = useState<string>(''); // Use ID for terms
+
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+
+  const [absenceRecords, setAbsenceRecords] = useState<AbsenceRecord[]>([]);
+  const [currentAttendanceStats, setCurrentAttendanceStats] = useState<AttendanceStats>(initialAttendanceStats);
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // Fetch academic years on mount
+  useEffect(() => {
+    const fetchYears = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/annees-academiques`);
+        if (!response.ok) throw new Error("Impossible de charger les années académiques.");
+        const data: AnneeAcademique[] = await response.json();
+        setAnneesAcademiques(data);
+
+        // Attempt to select the current or latest year
+        if (data.length > 0) {
+          const currentYear = new Date().getFullYear();
+          const defaultYear = data.find(a => new Date(a.date_debut).getFullYear() <= currentYear && new Date(a.date_fin).getFullYear() >= currentYear) || data[data.length - 1];
+          setSelectedSchoolYearId(defaultYear.id.toString());
+        }
+      } catch (err) {
+        console.error("Error fetching academic years:", err);
+        toast({ title: "Erreur", description: "Impossible de charger les années académiques.", variant: "destructive" });
+        setError("Impossible de charger les années académiques.");
+      }
     };
-    
-    return filterMap[term] || [];
-  };
+    fetchYears();
+  }, []);
 
-  const filteredAbsences = absencesByTerm(selectedTerm);
+  // Fetch trimestres when academic year changes
+  useEffect(() => {
+    const yearId = parseInt(selectedSchoolYearId);
+    if (!yearId) {
+      setTrimestres([]);
+      setSelectedTermId('');
+      return;
+    }
+    const fetchTrimestres = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/trimestres?anneeScolaireId=${yearId}`);
+        if (!response.ok) throw new Error("Impossible de charger les trimestres.");
+        const data: Trimestre[] = await response.json();
+        setTrimestres(data);
+        // Select the first term by default if available
+        if (data.length > 0) {
+          setSelectedTermId(data[0].id.toString());
+        } else {
+          setSelectedTermId('');
+        }
+      } catch (err) {
+        console.error("Error fetching trimestres:", err);
+        toast({ title: "Erreur", description: "Impossible de charger les trimestres.", variant: "destructive" });
+        setTrimestres([]);
+        setSelectedTermId('');
+      }
+    };
+    fetchTrimestres();
+  }, [selectedSchoolYearId]);
+
+  // Set date range based on selected term or year
+  useEffect(() => {
+    const year = anneesAcademiques.find(a => a.id.toString() === selectedSchoolYearId);
+    const term = trimestres.find(t => t.id.toString() === selectedTermId);
+
+    if (term) {
+      setStartDate(new Date(term.date_debut));
+      setEndDate(new Date(term.date_fin));
+    } else if (year) {
+      // "Année entière" or no term selected, use year dates
+      setStartDate(new Date(year.date_debut));
+      setEndDate(new Date(year.date_fin));
+    } else {
+      // No year selected, clear dates
+      setStartDate(undefined);
+      setEndDate(undefined);
+    }
+  }, [selectedTermId, selectedSchoolYearId, anneesAcademiques, trimestres]);
+
+  // Fetch absences when filters or user change
+  useEffect(() => {
+    const studentId = user?.id;
+    const yearId = parseInt(selectedSchoolYearId);
+    
+
+    // --- API Fetching Logic ---
+    if (!studentId || !yearId || !startDate || !endDate) {
+      setAbsenceRecords([]);
+      setCurrentAttendanceStats(initialAttendanceStats);
+      setIsLoading(false);
+      return;
+    }
+
+    const fetchAbsences = async () => {
+      setIsLoading(true);
+      setError(null);
+      setAbsenceRecords([]);
+      setCurrentAttendanceStats(initialAttendanceStats);
+
+      try {
+        const params = new URLSearchParams({
+          etudiant_id: studentId.toString(),
+          annee_scolaire_id: yearId.toString(),
+          date_debut: format(startDate, 'yyyy-MM-dd'),
+          date_fin: format(endDate, 'yyyy-MM-dd'),
+        });
+
+        const response = await fetch(`${API_BASE_URL}/absences?${params.toString()}`);
+
+        if (!response.ok) {
+          if (response.status === 404 || response.status === 204) {
+            // No absences found is not an error, just empty data
+            setAbsenceRecords([]);
+            setCurrentAttendanceStats(initialAttendanceStats);
+            return;
+          }
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data: AbsenceAPI[] = await response.json();
+
+        // Map API data to AbsenceRecord interface
+        const mappedData: AbsenceRecord[] = data.map(item => ({
+          id: item.id,
+          date: item.date,
+          dayOfWeek: format(new Date(item.date), 'EEEE', { locale: fr }).charAt(0).toUpperCase() + format(new Date(item.date), 'EEEE', { locale: fr }).slice(1),
+          subject: item.matiere?.nom || 'Matière inconnue',
+          period: `${item.heure_debut?.substring(0, 5) || 'N/A'} - ${item.heure_fin?.substring(0, 5) || 'N/A'}`,
+          justified: item.justifie && !!item.justification, // Le statut est justifié SEULEMENT si l'API l'indique ET qu'il y a une justification textuelle.
+          justification: item.justification || 'Non fournie',
+        }));
+
+        setAbsenceRecords(mappedData);
+
+        // Calculate basic stats
+        const total = mappedData.length;
+        const justified = mappedData.filter(abs => abs.justified).length;
+        setCurrentAttendanceStats({ totalAbsences: total, justifiedAbsences: justified, unjustifiedAbsences: total - justified });
+
+      } catch (err) {
+        console.error("Error fetching absences:", err);
+        toast({ title: "Erreur", description: "Impossible de charger vos absences.", variant: "destructive" });
+        setError("Impossible de charger vos absences.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAbsences();
+
+  }, [user?.id, selectedSchoolYearId, startDate, endDate]); // Dependencies for fetching absences
+
+  
+  // Determine the currently selected year and term names for display
+  const currentYearName = anneesAcademiques.find(a => a.id.toString() === selectedSchoolYearId)?.libelle || 'Année inconnue';
+  const currentTermName = trimestres.find(t => t.id.toString() === selectedTermId)?.nom || 'Année entière';
+
+  if (!user) {
+    return (
+      <div className="p-6 text-center text-red-500">
+        <h2 className="text-xl font-semibold mb-2">Accès refusé.</h2>
+        <p>Veuillez vous connecter pour voir vos absences.</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+       <div className="p-6 text-center text-red-500">
+        <h2 className="text-xl font-semibold mb-2">Erreur de chargement.</h2>
+        <p>{error}</p>
+      </div>
+      );
+  
+  };
+// Calculate stats from fetched data
+  const totalAbsences = absenceRecords.length;
+  // Utiliser les stats calculées depuis l'état
+  const justifiedAbsences = currentAttendanceStats.justifiedAbsences;
+  const unjustifiedAbsences = currentAttendanceStats.unjustifiedAbsences;
 
   return (
     <div className="p-6">
@@ -113,24 +286,24 @@ export function StudentAttendance() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <Card>
           <CardContent className="p-6">
-            <h3 className="font-semibold text-lg mb-2">Taux de présence</h3>
-            <p className="text-3xl font-bold text-blue-600">{(attendanceStats.daysPresent / attendanceStats.daysTotal * 100).toFixed(1)}%</p>
-            <p className="text-sm text-gray-600">{attendanceStats.daysPresent} jours sur {attendanceStats.daysTotal}</p>
+             <h3 className="font-semibold text-lg mb-2">Absences totales ({currentTermName})</h3>
++            <p className="text-3xl font-bold text-red-600">{totalAbsences}</p>
+            <p className="text-sm text-gray-600">absences enregistrées</p>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="p-6">
-            <h3 className="font-semibold text-lg mb-2">Absences totales</h3>
-            <p className="text-3xl font-bold text-amber-600">{attendanceStats.daysAbsent}</p>
-            <p className="text-sm text-gray-600">jours d'absence</p>
+            <h3 className="font-semibold text-lg mb-2">Absences justifiées ({currentTermName})</h3>
+            <p className="text-3xl font-bold text-green-600">{justifiedAbsences}</p>
+            <p className="text-sm text-gray-600">absences justifiées</p>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="p-6">
             <h3 className="font-semibold text-lg mb-2">Absences non justifiées</h3>
-            <p className="text-3xl font-bold text-red-600">{attendanceStats.daysUnjustified}</p>
++            <p className="text-3xl font-bold text-red-600">{unjustifiedAbsences}</p>
             <p className="text-sm text-gray-600">jours sans justification</p>
           </CardContent>
         </Card>
@@ -139,20 +312,20 @@ export function StudentAttendance() {
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Filtres</CardTitle>
-          <CardDescription>Sélectionnez la période et la date</CardDescription>
+          <CardDescription>Sélectionnez le trimestre</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <p className="text-sm font-medium text-gray-600 mb-2">Période</p>
-              <Select value={selectedTerm} onValueChange={setSelectedTerm}>
+               <p className="text-sm font-medium text-gray-600 mb-2">Année Scolaire</p>
+              <Select value={selectedSchoolYearId} onValueChange={setSelectedSchoolYearId} disabled={true}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Sélectionner une période" />
+                  <SelectValue placeholder="Sélectionner une année" />
                 </SelectTrigger>
                 <SelectContent>
-                  {terms.map((term) => (
-                    <SelectItem key={term} value={term}>
-                      {term}
+                   {anneesAcademiques.map((annee) => (
+                    <SelectItem key={annee.id} value={annee.id.toString()}>
+                      {annee.libelle}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -160,30 +333,26 @@ export function StudentAttendance() {
             </div>
             
             <div>
-              <p className="text-sm font-medium text-gray-600 mb-2">Date</p>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant={"outline"}
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !date && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? format(date, "PPP", { locale: fr }) : "Sélectionner une date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={date}
-                    onSelect={(date) => date && setDate(date)}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+               <p className="text-sm font-medium text-gray-600 mb-2">Période (Trimestre)</p>
+              <Select value={selectedTermId} onValueChange={setSelectedTermId} disabled={trimestres.length === 0}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Sélectionner un trimestre" />
+                </SelectTrigger>
+                <SelectContent>
+                  {/* Option for the entire year */}
+                  {anneesAcademiques.find(a => a.id.toString() === selectedSchoolYearId) && (
+                     <SelectItem value="Année entière">Année entière</SelectItem>
+                  )}
+                  {trimestres.map((term) => (
+                    <SelectItem key={term.id} value={term.id.toString()}>
+                      {term.nom}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+            
+            
           </div>
         </CardContent>
       </Card>
@@ -194,8 +363,12 @@ export function StudentAttendance() {
           <CardDescription>Liste de toutes vos absences</CardDescription>
         </CardHeader>
         <CardContent>
-          {filteredAbsences.length > 0 ? (
-            <div className="overflow-x-auto">
+{isLoading ? (
+            <div className="text-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-4" />
+              <p className="text-gray-600">Chargement des absences...</p>
+            </div>
+          ) : absenceRecords.length > 0 ? (            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -203,26 +376,24 @@ export function StudentAttendance() {
                     <TableHead>Jour</TableHead>
                     <TableHead>Matière</TableHead>
                     <TableHead>Horaire</TableHead>
-                    <TableHead>Professeur</TableHead>
                     <TableHead>Statut</TableHead>
                     <TableHead>Justification</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAbsences.map((absence, index) => (
-                    <TableRow key={index}>
+                   {absenceRecords.map((absence) => ( // Use absenceRecords directly
+                    <TableRow key={absence.id}> {/* Use absence ID as key */}
                       <TableCell>
-                        {format(new Date(absence.date), 'dd/MM/yyyy')}
+                        {format(new Date(absence.date), 'dd/MM/yyyy', { locale: fr })}
                       </TableCell>
                       <TableCell>{absence.dayOfWeek}</TableCell>
                       <TableCell>{absence.subject}</TableCell>
                       <TableCell>{absence.period}</TableCell>
-                      <TableCell>{absence.teacher}</TableCell>
                       <TableCell>
                         {absence.justified ? (
-                          <Badge className="bg-amber-500">Justifiée</Badge>
+                          <Badge className="bg-green-100 text-green-700 border-green-300">Justifiée</Badge>
                         ) : (
-                          <Badge className="bg-red-500">Non justifiée</Badge>
+                          <Badge className="bg-red-100 text-red-700 border-red-300">Non justifiée</Badge>
                         )}
                       </TableCell>
                       <TableCell>
@@ -232,8 +403,8 @@ export function StudentAttendance() {
                   ))}
                 </TableBody>
               </Table>
-            </div>
-          ) : (
+             </div> // End overflow-x-auto
+          ) : ( // If absenceRecords is empty after loading
             <div className="text-center py-8 text-gray-600">
               <p>Aucune absence pour la période sélectionnée.</p>
             </div>

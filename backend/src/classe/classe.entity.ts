@@ -2,6 +2,8 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany, ManyToOne, JoinColumn } from 'typeorm';
 import { Inscription } from '../inscription/inscription.entity';
 import { anneescolaire } from '../annee-academique/annee-academique.entity';
+import { Absence } from '../absence/absence.entity'; // Adaptez le chemin
+
 
 export enum Niveau {
   PRIMAIRE = 'primaire',
@@ -31,4 +33,7 @@ export class Classe {
   @ManyToOne(() => anneescolaire, (anneeScolaire) => anneeScolaire.classes)
   @JoinColumn({ name: 'annee_scolaire_id' })
   anneeScolaire: anneescolaire;
+  
+  @OneToMany(() => Absence, (absence) => absence.classe)
+absences: Absence[];
 }

@@ -1,6 +1,9 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+
 import { Classe } from '../classe/classe.entity';
 import { anneescolaire } from '../annee-academique/annee-academique.entity';
+import { Absence } from '../absence/absence.entity'; // Adaptez le chemin
+
  // Assure-toi d'avoir cette entité importée
 
 export enum UserRole {
@@ -72,5 +75,7 @@ export class User {
   @Column({ default: true })
   actif: boolean;
 
+  @OneToMany(() => Absence, (absence: Absence) => absence.etudiant) // Typer le paramètre absence
+  absences: Absence[];
   
 }

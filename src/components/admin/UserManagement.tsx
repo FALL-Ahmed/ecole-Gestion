@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 import {
   Dialog,
   DialogContent,
@@ -17,13 +17,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Plus, Search, Check, X, ChevronDown, ChevronUp, Loader2, Shield, User, GraduationCap, BookOpen, Upload, Info, Eye, EyeOff } from 'lucide-react';
-import { Badge } from '../../components/ui/badge';
-import { Skeleton } from '../../components/ui/skeleton';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../components/ui/tooltip';
-import { Label } from '../../components/ui/label';
-import { Switch } from '../../components/ui/switch';
+import { Badge } from '../ui/badge';
+import { Skeleton } from '../ui/skeleton';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
+import { Label } from '../ui/label';
+import { Switch } from '../ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '../../lib/utils'; // Assuming cn utility is for conditional classes
 
@@ -49,6 +49,8 @@ interface Classe {
   id: number;
   nom: string;
   niveau: 'primaire' | 'collège' | 'lycée';
+  annee_scolaire_id: number; // Ajout de la clé pour lier à l'année scolaire
+
   inscriptions?: Inscription[];
 }
 
@@ -115,7 +117,7 @@ const PasswordReveal: React.FC<{ password: string }> = ({ password }) => {
   );
 };
 
-export default function ManagementDashboard() {
+export default function UserManagement() {
   const [activeTab, setActiveTab] = useState<'users' | 'inscriptions'>('users');
 
   const [inscriptions, setInscriptions] = useState<Inscription[]>([]);
@@ -554,6 +556,29 @@ setUsers(usersWithInscriptions);
     return sortableInscriptions;
   }, [inscriptions, sortConfigInscriptions]);
 // ...existing code...
+// Hook useMemo pour filtrer les classes en fonction de l'année scolaire sélectionnée dans le formulaire utilisateur
+  const availableClassesForSelectedYear = useMemo(() => {
+    if (!userFormData.annee_scolaire_id) {
+      // Si aucune année scolaire n'est sélectionnée, retourner toutes les classes
+      // ou un tableau vide si vous voulez forcer la sélection de l'année d'abord.
+      // Pour l'instant, retournons toutes les classes pour ne pas bloquer l'UI.
+      return classes;
+    }
+    const selectedYearId = parseInt(userFormData.annee_scolaire_id, 10);
+    return classes.filter(classe => classe.annee_scolaire_id === selectedYearId);
+  }, [classes, userFormData.annee_scolaire_id]);
+
+  // useEffect pour réinitialiser la classe si l'année scolaire change et que la classe n'est plus valide
+  useEffect(() => {
+    if (userFormData.annee_scolaire_id && userFormData.classe_id) {
+      const selectedYearId = parseInt(userFormData.annee_scolaire_id, 10);
+      const currentSelectedClass = availableClassesForSelectedYear.find(c => c.id === parseInt(userFormData.classe_id, 10));
+      if (!currentSelectedClass || currentSelectedClass.annee_scolaire_id !== selectedYearId) {
+        setUserFormData(prev => ({ ...prev, classe_id: '' }));
+      }
+    }
+  }, [userFormData.annee_scolaire_id, userFormData.classe_id, availableClassesForSelectedYear]);
+
 const [filterClasseId, setFilterClasseId] = useState<string>('');
 const [filterAnneeId, setFilterAnneeId] = useState<string>('');
 // ...existing code...
@@ -613,7 +638,23 @@ useEffect(() => {
 }, [sortedInscriptions, searchTermInscriptions, filterClasseId, filterAnneeId]);
 
   const availableStudents = useMemo(() => users.filter(user => user.role === 'eleve'), [users]);
+  // Memoized list of classes for the inscription filter, dependent on the selected academic year filter
+  const availableClassesForInscriptionFilter = useMemo(() => {
+    if (!filterAnneeId || filterAnneeId === 'all') {
+      return classes; // Show all classes if no year is selected or "all years"
+    }
+    const selectedYearIdNum = parseInt(filterAnneeId, 10);
+    return classes.filter(classe => classe.annee_scolaire_id === selectedYearIdNum);
+  }, [classes, filterAnneeId]);
 
+  // Effect to reset class filter if the selected year changes and the current class is no longer valid
+  useEffect(() => {
+    if (filterAnneeId && filterAnneeId !== 'all' && filterClasseId && filterClasseId !== 'all') {
+      if (!availableClassesForInscriptionFilter.some(c => String(c.id) === filterClasseId)) {
+        setFilterClasseId('all'); // Reset to "all classes"
+      }
+    }
+  }, [filterAnneeId, filterClasseId, availableClassesForInscriptionFilter]);
 
   return (
     <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
@@ -848,48 +889,7 @@ useEffect(() => {
                     </Select>
                   </div>
             
-                  {/* Classe */}
-            {/* Classe */}
-<div className="space-y-2">
-  <Label className="text-gray-700 dark:text-gray-200 text-sm font-medium">Classe</Label>
-  {(() => {
-    const availableClasses = classes;
-    // Determine if the class select should be disabled
-    const isClasseDisabled = userFormData.role !== 'eleve';
-    return (
-      <Select
-        value={userFormData.classe_id}
-        onValueChange={(value) => {
-          setUserFormData({
-            ...userFormData,
-            classe_id: value,
-          });
-        }}
-        // Add the disabled prop here
-        disabled={isClasseDisabled}
-      >
-        <SelectTrigger className={`h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm ${isClasseDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-          <SelectValue placeholder="Sélectionner une classe" />
-        </SelectTrigger>
-        <SelectContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg animate-fade-in-down">
-          {availableClasses.length === 0 ? (
-            <SelectItem value="no-classes-available" disabled>
-              Aucune classe disponible
-            </SelectItem>
-          ) : (
-            availableClasses.map((classe) => (
-              <SelectItem key={classe.id} value={String(classe.id)}>
-                {classe.nom}
-              </SelectItem>
-            ))
-          )}
-        </SelectContent>
-      </Select>
-    );
-  })()}
-</div>
-            
-                  {/* Année Scolaire */}
+            {/* Année Scolaire */}
             <div className="space-y-2">
               <Label className="text-gray-700 dark:text-gray-200 text-sm font-medium">Année Scolaire</Label>
              <Select
@@ -919,6 +919,49 @@ useEffect(() => {
              </SelectContent>
            </Select>
             </div>
+
+                  {/* Classe */}
+            {/* Classe */}
+<div className="space-y-2">
+  <Label className="text-gray-700 dark:text-gray-200 text-sm font-medium">Classe</Label>
+  {(() => {
+    const classesToDisplay = availableClassesForSelectedYear;
+    // Determine if the class select should be disabled
+    const isClasseDisabled = userFormData.role !== 'eleve' || !userFormData.annee_scolaire_id;
+    return (
+      <Select
+        value={userFormData.classe_id}
+        onValueChange={(value) => {
+          setUserFormData({
+            ...userFormData,
+            classe_id: value,
+          });
+        }}
+        // Add the disabled prop here
+        disabled={isClasseDisabled}
+      >
+        <SelectTrigger className={`h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm ${isClasseDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+          <SelectValue placeholder="Sélectionner une classe" />
+        </SelectTrigger>
+        <SelectContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg animate-fade-in-down">
+          {classesToDisplay.length === 0 ? (
+            <SelectItem value="no-classes-available" disabled>
+              {userFormData.annee_scolaire_id ? "Aucune classe pour cette année" : "Sélectionnez une année d'abord"}
+            </SelectItem>
+          ) : (
+            classesToDisplay.map((classe) => (
+              <SelectItem key={classe.id} value={String(classe.id)}>
+                {classe.nom}
+              </SelectItem>
+            ))
+          )}
+        </SelectContent>
+      </Select>
+    );
+  })()}
+</div>
+            
+                  
 
             {/* Date inscription */}
             <div className="space-y-2">
@@ -1330,22 +1373,6 @@ useEffect(() => {
     />
   </div>
   <Select
-  value={filterClasseId}
-  onValueChange={setFilterClasseId}
->
-  <SelectTrigger className="w-44">
-    <SelectValue placeholder="Filtrer par classe" />
-  </SelectTrigger>
-  <SelectContent>
-    <SelectItem value="all">Toutes les classes</SelectItem>
-    {classes.map((classe) => (
-      <SelectItem key={classe.id} value={String(classe.id)}>
-        {classe.nom}
-      </SelectItem>
-    ))}
-  </SelectContent>
-</Select>
-<Select
   value={filterAnneeId}
   onValueChange={setFilterAnneeId}
 >
@@ -1361,6 +1388,23 @@ useEffect(() => {
     ))}
   </SelectContent>
 </Select>
+  <Select
+  value={filterClasseId}
+  onValueChange={setFilterClasseId}
+>
+  <SelectTrigger className="w-44">
+    <SelectValue placeholder="Filtrer par classe" />
+  </SelectTrigger>
+  <SelectContent>
+     <SelectItem value="all">Toutes les classes</SelectItem> {/* Ensure "all" is a string */}
+    {availableClassesForInscriptionFilter.map((classe) => (
+      <SelectItem key={classe.id} value={String(classe.id)}>
+        {classe.nom}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+
 </div>
                 
                 

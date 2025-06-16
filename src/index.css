@@ -110,3 +110,41 @@
 .btn-primary {
   @apply bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg hover:scale-105 transition;
 }
+
+@media print {
+  /* Masquer les éléments avec la classe 'no-print' */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Forcer le contenu principal à occuper toute la page */
+  body, html {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: visible; /* S'assurer que rien n'est coupé */
+  }
+
+  /* Ciblez votre conteneur A3 principal.
+     Remplacez '.votre-conteneur-a3' par le sélecteur réel de votre conteneur. */
+  .votre-conteneur-a3 {
+    width: 100% !important;
+            height: auto !important; 
+                min-height: 99vh; /* S'assurer que le contenu essaie de remplir la hauteur de la page */
+
+    margin: 0 !important;
+            padding: 0.5cm !important; /* Marge interne réduite pour A3 pour un effet pleine page */
+    border: none !important; /* Supprimer les bordures si nécessaire */
+    box-shadow: none !important; /* Supprimer les ombres si nécessaire */
+    page-break-before: auto; /* Gérer les sauts de page */
+    page-break-after: auto;
+    page-break-inside: avoid;
+    
+  }
+
+  /* Masquer les autres éléments de la page qui ne sont pas le contenu A3 */
+  header, footer, nav, aside {
+    display: none !important;
+  }
+}

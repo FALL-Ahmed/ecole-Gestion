@@ -50,7 +50,7 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
       case 'professeur':
         return [
           ...commonItems,
-          { id: 'attendance-mgmt', label: 'Gestion Absences', icon: UserCheck },
+        
           { id: 'schedule-view', label: 'Emploi du Temps', icon: Calendar },
           { id: 'grades-input', label: 'Saisie des Notes', icon: GraduationCap },
           { id: 'course-materials', label: 'Supports de Cours', icon: Upload },
@@ -61,7 +61,7 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
           ...commonItems,
           { id: 'schedule-view', label: 'Emploi du Temps', icon: Calendar },
           { id: 'my-courses', label: 'Mes Cours', icon: BookOpen },
-          { id: 'my-grades', label: 'Notes & Bulletins', icon: GraduationCap },
+          { id: 'my-grades', label: 'Notes', icon: GraduationCap },
           { id: 'my-attendance', label: 'Mes Absences', icon: Clock },
         ];
       default:

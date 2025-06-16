@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm"; // Assurez-vous que c'est le bon import pour TypeORM
 import { Repository } from "typeorm";
 import { CoefficientClasse } from "./coeff.entity";
 import { Classe } from "../classe/classe.entity";
@@ -46,7 +46,15 @@ async cloneCoefficients(fromClasseId: number, toClasseId: number) {
   return this.createMany(newCoefficients);
 }
 
+ async update(id: number, newCoefficient: number): Promise<CoefficientClasse> {
+    const coefficientToUpdate = await this.repo.findOneBy({ id });
+    if (!coefficientToUpdate) {
+      throw new NotFoundException(`Coefficient avec l'ID ${id} non trouvé.`);
+    }
 
+    coefficientToUpdate.coefficient = newCoefficient;
+    return this.repo.save(coefficientToUpdate);
+  }
 
 
   async createMany(

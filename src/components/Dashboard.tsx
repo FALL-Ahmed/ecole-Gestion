@@ -296,7 +296,7 @@ export function Dashboard() {
 
       } catch (err) {
         console.error('ERROR during student notes fetch:', err);
-        setErrorNotes(`Failed to load recent notes. Error: ${axios.isAxiosError(err) ? err.message : 'Unknown error'}. Please check your backend server logs.`);
+        setErrorNotes(`Échec du chargement des notes récentes. Erreur : ${axios.isAxiosError(err) ? err.message : 'Erreur inconnue'}. Veuillez vérifier les journaux du serveur backend.`);
         setLatestNotes([]);
       } finally {
         setLoadingNotes(false);

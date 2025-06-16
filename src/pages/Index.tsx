@@ -19,7 +19,8 @@ const Index = () => {
         activeSection={activeSection} 
         onSectionChange={setActiveSection} 
       />
-      <MainContent activeSection={activeSection} />
+      <MainContent activeSection={activeSection} onSectionChange={setActiveSection} />
+
     </div>
   );
 };

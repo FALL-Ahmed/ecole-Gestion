@@ -1,13 +1,26 @@
-import React, { useState, useEffect, ReactNode } from "react";
+import React, { useState, useEffect, ReactNode, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Users, Award, Calendar, User, ArrowRightIcon, SaveIcon, ClipboardListIcon } from "lucide-react";
-import { toast } from "sonner";
 
-export default function SchoolManagement() {
-  const [activeTab, setActiveTab] = useState("classes");
+import { Plus, Users, Award, Calendar, User, ArrowRightIcon, SaveIcon, ClipboardListIcon, Pencil } from "lucide-react";
+import { toast, Toaster } from "sonner";
+import { Input } from "@/components/ui/input"; // Assurez-vous que Input est importé
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription, // Import DialogDescription if you're using it
+  DialogFooter,      // Import DialogFooter if you're using it
+} from "@/components/ui/dialog"; 
+
+interface SchoolManagementProps {
+  onNavigate: (sectionId: string) => void;
+}
+
+export default function SchoolManagement({ onNavigate }: SchoolManagementProps) {
+  const [activeTab, setActiveTab] = useState("annees");
   const [isAddClasseOpen, setIsAddClasseOpen] = useState(false);
   const [isAddCoeffOpen, setIsAddCoeffOpen] = useState(false);
   const [isAffectProfOpen, setIsAffectProfOpen] = useState(false);
@@ -23,7 +36,25 @@ export default function SchoolManagement() {
   const [coeffData, setCoeffData] = useState<{ [matiereId: string]: number }>({});
   const [anneeScolaireId, setAnneeScolaireId] = useState(''); // ✅ PAS null
   const [anneeScolaireFiltre, setAnneeScolaireFiltre] = useState(""); // ou null
+  const [currentConfiguredAcademicYearId, setCurrentConfiguredAcademicYearId] = useState<string | null>(null);
   const [anneeSelectionnee, setAnneeSelectionnee] = useState<string | null>(null);
+  const [isConfirmAnneeOpen, setIsConfirmAnneeOpen] = useState(false);
+const [anneeToConfirm, setAnneeToConfirm] = useState<{ libelle: string; debut: string; fin: string } | null>(null);
+const [isConfirmTrimestresOpen, setIsConfirmTrimestresOpen] = useState(false);
+const [trimestresToConfirm, setTrimestresToConfirm] = useState<Array<{ nom: string; date_debut: string; date_fin: string }>>([]);
+  
+  const [isEditCoeffDialogOpen, setIsEditCoeffDialogOpen] = useState(false);
+
+  const [currentEditingCoeff, setCurrentEditingCoeff] = useState<{
+    
+  id: number;
+  classeNom: string;
+  matiereNom: string;
+  coefficient: number;
+  classeId?: number;
+  matiereId?: number;
+} | null>(null);
+
 
 
   // States pour les formulaires
@@ -137,6 +168,23 @@ useEffect(() => {
       // Charger les coefficients
       refreshCoefficients();
 
+      // Fetch current academic year configuration
+      const configRes = await fetch("http://localhost:3000/api/configuration");
+      if (configRes.ok) {
+        const configData = await configRes.json(); // Correction: utiliser configRes.json()
+        if (configData && configData.annee_scolaire && configData.annee_scolaire.id) {
+          setCurrentConfiguredAcademicYearId(String(configData.annee_scolaire.id));
+        } else {
+          setCurrentConfiguredAcademicYearId(null);
+        }
+      } else if (configRes.status === 404) {
+        setCurrentConfiguredAcademicYearId(null);
+        // Optionnel: toast.info("Configuration de l'année scolaire non trouvée. Les classes ne seront pas filtrées par défaut pour les coefficients.");
+      } else {
+        console.error("Erreur chargement configuration année: " + configRes.status);
+        setCurrentConfiguredAcademicYearId(null);
+      }
+
     } catch (error) {
       console.error("Erreur fetch global :", error);
       // Tu peux ici setter des états vides ou afficher un message d'erreur global
@@ -152,6 +200,17 @@ useEffect(() => {
       setAnneeScolaireId("");
     }
   }, [isAddClasseOpen]);
+
+  const classesForCoeffDialog = useMemo(() => {
+    if (!currentConfiguredAcademicYearId) {
+      // Si aucune année scolaire actuelle n'est configurée globalement,
+      // on affiche toutes les classes pour ne pas bloquer.
+      return classes;
+    }
+    return classes.filter(c => String(c.annee_scolaire_id) === currentConfiguredAcademicYearId);
+  }, [classes, currentConfiguredAcademicYearId]);
+
+
 
   function sortAnnees(annees) {
   // Trie les années numérotées, puis "4ème année (Brevet)", puis "Terminale", puis "Autre"
@@ -235,6 +294,101 @@ function groupCoefficientsByAnnee() {
   });
   return grouped;
 }
+const handleOpenEditCoefficientDialog = (coeffEntry: any) => {
+  setCurrentEditingCoeff({
+    id: coeffEntry.id,
+    classeNom: coeffEntry.classe.nom,
+    matiereNom: coeffEntry.matiere.nom,
+    coefficient: coeffEntry.coefficient,
+    classeId: coeffEntry.classe.id, 
+    matiereId: coeffEntry.matiere.id, 
+  });
+  setIsEditCoeffDialogOpen(true);
+};
+
+const handleConfirmSaveTrimestres = async () => {
+  // Reconstruire les données complètes des trimestres à envoyer
+  const trimestresPayload = [
+    { nom: "Trimestre 1", date_debut: trimestre1Debut, date_fin: trimestre1Fin, annee_scolaire_id: parseInt(anneeScolaireId) },
+    { nom: "Trimestre 2", date_debut: trimestre2Debut, date_fin: trimestre2Fin, annee_scolaire_id: parseInt(anneeScolaireId) },
+    { nom: "Trimestre 3", date_debut: trimestre3Debut, date_fin: trimestre3Fin, annee_scolaire_id: parseInt(anneeScolaireId) }
+  ].filter(t => t.date_debut && t.date_fin); // S'assurer que les dates sont remplies
+
+  if (trimestresPayload.length !== 3) {
+    toast.error("Veuillez renseigner les dates pour les 3 trimestres.");
+    setIsConfirmTrimestresOpen(false); // Fermer le dialogue de confirmation
+    return;
+  }
+
+  const nouveauxTrimestresPromises = trimestresPayload.map(trimestre =>
+    fetch("http://localhost:3000/api/trimestres", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(trimestre)
+    }).then(res => {
+      if (!res.ok) return res.json().then(err => Promise.reject(err));
+      return res.json();
+    })
+  );
+
+  try {
+    const results = await Promise.all(nouveauxTrimestresPromises);
+    setTrimestres(prev => [...prev, ...results]);
+    toast.success("Trimestres ajoutés avec succès !");
+    
+    // Réinitialiser les champs du formulaire des trimestres
+    setTrimestre1Debut("");
+    setTrimestre1Fin("");
+    setTrimestre2Debut("");
+    setTrimestre2Fin("");
+    setTrimestre3Debut("");
+    setTrimestre3Fin("");
+    setAnneeLibelle(""); // Aussi réinitialiser les champs de l'année
+    setAnneeDebut("");
+    setAnneeFin("");
+
+
+  } catch (error: any) {
+    toast.error(`Erreur lors de l'ajout des trimestres: ${error.message || 'Erreur inconnue'}`);
+  } finally {
+    setIsConfirmTrimestresOpen(false);
+    setIsAddTrimestreOpen(false); // Ferme le dialogue principal des trimestres
+    setTrimestresToConfirm([]);
+  }
+};
+
+const handleConfirmSaveAnnee = async () => {
+  if (!anneeToConfirm) return;
+
+  try {
+    const response = await fetch("http://localhost:3000/api/annees-academiques", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ libelle: anneeToConfirm.libelle, date_debut: anneeToConfirm.debut, date_fin: anneeToConfirm.fin })
+    });
+
+    if (response.ok) {
+      const newAnnee = await response.json();
+      setAnnees(prev => [...prev, newAnnee]);
+      setAnneeScolaireId(String(newAnnee.id)); // Assurez-vous que anneeScolaireId attend un string si l'ID est un nombre
+      
+      toast.success("Année ajoutée avec succès ! Passage à l'étape des trimestres.");
+      
+      // Passer à l'étape suivante
+      setIsAddAnneeOpen(false); // Ferme le dialogue de l'étape 1
+      setIsAddTrimestreOpen(true); // Ouvre le dialogue de l'étape 2
+    } else {
+      const errorData = await response.json();
+      toast.error(`Erreur lors de l'ajout de l'année: ${errorData.message || response.statusText}`);
+    }
+  } catch (error: any) {
+    toast.error(`Erreur lors de l'ajout de l'année: ${error.message}`);
+  } finally {
+    setIsConfirmAnneeOpen(false);
+    setAnneeToConfirm(null);
+  }
+};
+
 
 function getCoefficientsByClasse(classeId) {
   return coefficients
@@ -322,7 +476,7 @@ function getCoefficientsByClasse(classeId) {
           onChange={(e) => setAnneeScolaireFiltre(e.target.value)}
           className="block w-full appearance-none rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 pr-10 text-gray-800 dark:text-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-400"
         >
-          <option value="">Toutes les années</option>
+          <option value="">Choisir une année</option>
           {annees.map((a) => (
             <option key={a.id} value={String(a.id)}>
               {a.libelle}
@@ -507,6 +661,17 @@ return matieresUniques.map(c => (
     <span className="px-3 py-1 rounded-full bg-yellow-200 dark:bg-yellow-700 text-yellow-900 dark:text-yellow-100 text-xs font-bold shadow">
       Coefficient&nbsp;{c.coefficient}
     </span>
+    <div className="ml-auto flex items-center gap-1">
+    <Button
+      variant="ghost"
+      size="sm"
+      className="p-1 h-7 w-7 text-blue-600 hover:bg-blue-100 dark:text-blue-300 dark:hover:bg-blue-700"
+      onClick={(e) => { e.stopPropagation(); handleOpenEditCoefficientDialog(c); }}
+    >
+      <Pencil className="h-4 w-4" />
+    </Button>
+    
+    </div>
   </li>
 ));
 
@@ -1072,7 +1237,18 @@ if (isNaN(classeId)) {
         <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-200 mb-3 flex items-center">
           Sélection de la classe
         </h3>
-        
+        {!currentConfiguredAcademicYearId && (
+          <div className="mb-3 p-2 bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 rounded-md text-xs">
+            Aucune année scolaire actuelle n'est configurée dans les Paramètres généraux.
+            La liste affiche donc toutes les classes. Pour filtrer, veuillez
+            <button
+              type="button"
+              onClick={() => onNavigate('settings')} // Utilisation de la prop onNavigate
+              className="underline font-semibold ml-1 text-blue-600 hover:text-blue-800 cursor-pointer"
+            >
+              configurer l'année actuelle
+            </button>.          </div>
+        )}
         <select
           value={coeffClasse}
           onChange={(e) => setCoeffClasse(e.target.value)}
@@ -1080,9 +1256,15 @@ if (isNaN(classeId)) {
           required
         >
           <option value="">-- Choisir une classe --</option>
-          {classes.map((classe) => (
-            <option key={classe.id} value={classe.id}>{classe.nom}</option>
-          ))}
+          {currentConfiguredAcademicYearId && classesForCoeffDialog.length === 0 ? (
+            <option value="" disabled>Aucune classe pour l'année scolaire actuelle</option>
+          ) : (
+            classesForCoeffDialog.map((classe) => (
+              <option key={classe.id} value={classe.id}>
+                {classe.nom} ({annees.find(a => a.id === classe.annee_scolaire_id)?.libelle || 'Année inconnue'})
+              </option>
+            ))
+          )}
         </select>
       </div>
 
@@ -1096,52 +1278,73 @@ if (isNaN(classeId)) {
           Cliquez sur une matière pour l'ajouter, puis renseignez le coefficient
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {matieres.map((matiere) => {
-            const isSelected = coeffData[matiere.id] !== undefined;
+        {coeffClasse && ( // Afficher les matières seulement si une classe est sélectionnée
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {(() => {
+              const existingCoeffsForSelectedClass = coefficients.filter(
+                (c: any) => String(c.classe?.id) === String(coeffClasse)
+              );
+              const existingMatiereIdsForSelectedClass = existingCoeffsForSelectedClass.map(
+                (c: any) => String(c.matiere.id)
+              );
+              
+              const availableMatieresForAdding = matieres.filter(
+                (m) => !existingMatiereIdsForSelectedClass.includes(String(m.id))
+              );
 
-            return (
-              <div
-                key={matiere.id}
-                className={`border-2 p-3 rounded-xl transition-all duration-200 ease-in-out flex items-center justify-between
-                  ${
-                    isSelected
-                      ? "border-blue-500 bg-blue-100 dark:bg-blue-800 shadow-md"
-                      : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-blue-400"
-                  }`}
-                onClick={() => {
-                  if (isSelected) {
-                    const updated = { ...coeffData };
-                    delete updated[matiere.id];
-                    setCoeffData(updated);
-                  } else {
-                    setCoeffData({ ...coeffData, [matiere.id]: 1 });
-                  }
-                }}
-              >
-                <div className="flex items-center">
-                  <div className={`w-3 h-3 rounded-full mr-3 ${isSelected ? 'bg-blue-600' : 'bg-gray-400'}`} />
-                  <span className="font-medium text-gray-900 dark:text-gray-100">{matiere.nom}</span>
-                </div>
-                {isSelected && (
-                  <div className="flex items-center">
-                    <span className="text-sm text-gray-600 dark:text-gray-400 mr-2">Coeff:</span>
-                    <input
-                      type="number"
-                      value={coeffData[matiere.id]}
-                      onChange={(e) =>
-                        setCoeffData({ ...coeffData, [matiere.id]: parseInt(e.target.value) || 1 })
+           if (availableMatieresForAdding.length === 0 && coeffClasse) {
+                return <p className="col-span-full text-center text-sm text-gray-500 dark:text-gray-400 p-4">Toutes les matières ont déjà un coefficient pour cette classe. Vous pouvez les modifier depuis l'onglet "Coefficients".</p>;
+              }
+
+              return availableMatieresForAdding.map((matiere) => {
+                const isSelected = coeffData[matiere.id] !== undefined;
+                return (
+                  <div
+                    key={matiere.id}
+                    className={`border-2 p-3 rounded-xl transition-all duration-200 ease-in-out flex items-center justify-between cursor-pointer
+                      ${
+                        isSelected
+                          ? "border-blue-500 bg-blue-100 dark:bg-blue-800 shadow-md"
+                          : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-blue-400"
+                      }`}
+                    onClick={() => {
+                      if (isSelected) {
+                        const updated = { ...coeffData };
+                        delete updated[matiere.id];
+                        setCoeffData(updated);
+                      } else {
+                        setCoeffData({ ...coeffData, [matiere.id]: 1 });
                       }
-                      className="w-16 border border-blue-300 dark:border-blue-700 rounded-md px-2 py-1 text-center text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      min="1"
-                      onClick={(e) => e.stopPropagation()}
-                    />
+                    }}
+                  >
+                    <div className="flex items-center">
+                      <div className={`w-3 h-3 rounded-full mr-3 ${isSelected ? 'bg-blue-600' : 'bg-gray-400'}`} />
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{matiere.nom}</span>
+                    </div>
+                    {isSelected && (
+                      <div className="flex items-center">
+                        <span className="text-sm text-gray-600 dark:text-gray-400 mr-2">Coeff:</span>
+                        <input
+                          type="number"
+                          value={coeffData[matiere.id]}
+                          onChange={(e) =>
+                            setCoeffData({ ...coeffData, [matiere.id]: parseInt(e.target.value) || 1 })
+                          }
+                          className="w-16 border border-blue-300 dark:border-blue-700 rounded-md px-2 py-1 text-center text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          min="1"
+                          onClick={(e) => e.stopPropagation()} // Important pour ne pas déclencher le onClick du div parent
+                        />
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              });
+            })()}
+          </div>
+        )}
+        {!coeffClasse && (
+          <p className="text-center text-sm text-gray-500 dark:text-gray-400 p-4">Veuillez d'abord sélectionner une classe.</p>
+        )}
       </div>
 
       <div className="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -1163,6 +1366,68 @@ if (isNaN(classeId)) {
     </form>
   </DialogContent>
 </Dialog>
+
+{/* Dialog Modifier Coefficient */}
+    <Dialog open={isEditCoeffDialogOpen} onOpenChange={setIsEditCoeffDialogOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Modifier le Coefficient</DialogTitle>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Classe: {currentEditingCoeff?.classeNom} <br />
+            Matière: {currentEditingCoeff?.matiereNom}
+          </p>
+        </DialogHeader>
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!currentEditingCoeff) return;
+            try {
+              const response = await fetch(`http://localhost:3000/api/coefficientclasse/${currentEditingCoeff.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ coefficient: currentEditingCoeff.coefficient }),
+              });
+              if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || "Erreur lors de la mise à jour.");
+              }
+              toast.success("Coefficient mis à jour !");
+              refreshCoefficients(); // Assurez-vous que cette fonction est définie et recharge les coefficients
+              setIsEditCoeffDialogOpen(false);
+              setCurrentEditingCoeff(null);
+            } catch (error: any) {
+              toast.error(error.message || "Une erreur est survenue.");
+            }
+          }}
+          className="space-y-4"
+        >
+          <div>
+            <label htmlFor="editCoefficientValue" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+              Nouveau Coefficient
+            </label>
+            <Input
+              id="editCoefficientValue"
+              type="number"
+              value={currentEditingCoeff?.coefficient || 1}
+              onChange={(e) =>
+                setCurrentEditingCoeff(prev => prev ? { ...prev, coefficient: parseFloat(e.target.value) || 1 } : null)
+              }
+              className="mt-1 block w-full"
+              min="0.5"
+              step="0.5"
+              required
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setIsEditCoeffDialogOpen(false)}>
+              Annuler
+            </Button>
+            <Button type="submit">Enregistrer</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+
 
 
 
@@ -1389,23 +1654,9 @@ if (isNaN(classeId)) {
   <form
     onSubmit={async e => {
       e.preventDefault();
-      const response = await fetch("http://localhost:3000/api/annees-academiques", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ libelle: anneeLibelle, date_debut: anneeDebut, date_fin: anneeFin })
-      });
-
-      if (response.ok) {
-        const newAnnee = await response.json();
-        setAnnees(prev => [...prev, newAnnee]);
-        setAnneeScolaireId(newAnnee.id);
-        setIsAddAnneeOpen(false);
-        setSuccessMsg("Année ajoutée avec succès !");
-        setTimeout(() => setSuccessMsg(""), 3000);
-        setIsAddTrimestreOpen(true);
-      } else {
-        alert("Erreur lors de l'ajout de l'année.");
-      }
+    // Ouvrir le dialogue de confirmation au lieu d'envoyer directement
+      setAnneeToConfirm({ libelle: anneeLibelle, debut: anneeDebut, fin: anneeFin });
+      setIsConfirmAnneeOpen(true);  
     }}
     className="space-y-6"
   >
@@ -1470,34 +1721,14 @@ if (isNaN(classeId)) {
     onSubmit={async e => {
       e.preventDefault();
       const allTrimestres = [
-        { nom: "Trimestre 1", date_debut: trimestre1Debut, date_fin: trimestre1Fin },
-        { nom: "Trimestre 2", date_debut: trimestre2Debut, date_fin: trimestre2Fin },
-        { nom: "Trimestre 3", date_debut: trimestre3Debut, date_fin: trimestre3Fin }
+                { nom: "Trimestre 1", date_debut: trimestre1Debut, date_fin: trimestre1Fin, annee_scolaire_id: anneeScolaireId },
+        { nom: "Trimestre 2", date_debut: trimestre2Debut, date_fin: trimestre2Fin, annee_scolaire_id: anneeScolaireId },
+        { nom: "Trimestre 3", date_debut: trimestre3Debut, date_fin: trimestre3Fin, annee_scolaire_id: anneeScolaireId }
       ];
 
-      const nouveauxTrimestres = [];
 
-for (const trimestre of allTrimestres) {
-  const res = await fetch("http://localhost:3000/api/trimestres", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...trimestre, annee_scolaire_id: anneeScolaireId })
-  });
-
-  if (res.ok) {
-    const newTrimestre = await res.json();
-    nouveauxTrimestres.push(newTrimestre);
-  }
-}
-
-// Met à jour l'état local des trimestres affichés
-setTrimestres(prev => [...prev, ...nouveauxTrimestres]);
-
-// Ferme le formulaire et affiche un message
-setIsAddTrimestreOpen(false);
-setSuccessMsg("Trimestres ajoutés avec succès !");
-setTimeout(() => setSuccessMsg(""), 3000);
-
+      setTrimestresToConfirm(allTrimestres.map(t => ({ nom: t.nom, date_debut: t.date_debut, date_fin: t.date_fin }))); // Ne stockez que ce qui est nécessaire pour l'affichage de confirmation
+      setIsConfirmTrimestresOpen(true);
     }}
     className="space-y-6"
   >
@@ -1548,9 +1779,74 @@ setTimeout(() => setSuccessMsg(""), 3000);
 
   </DialogContent>
 </Dialog>
+ 
+ {/* Dialogue de Confirmation pour l'Année Scolaire */}
+ <Dialog open={isConfirmAnneeOpen} onOpenChange={setIsConfirmAnneeOpen}>
+  <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden rounded-xl animate-fade-in-up"> {/* Wow 1, 2, 3 */}
+    <DialogHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 pb-4"> {/* Wow 4 */}
+      <DialogTitle className="text-2xl font-extrabold tracking-tight">Confirmer l'Année Scolaire</DialogTitle> {/* Wow 5 */}
+      
+    </DialogHeader>
 
+    {anneeToConfirm && (
+      <div className="p-6 space-y-4 text-gray-800 dark:text-gray-200">
+        
+
+        <p className="mt-6 text-sm text-orange-700 bg-orange-100 dark:bg-orange-900/30 p-3 rounded-lg border border-orange-300 dark:border-orange-700 font-medium"> {/* Wow 7 */}
+          <span className="mr-2">⚠️</span> Assurez-vous que ces détails sont parfaitement exacts.
+        </p>
+      </div>
+    )}
+
+    <DialogFooter className="flex justify-end gap-3 p-6 bg-gray-50 dark:bg-gray-900 border-t"> {/* Wow 8 */}
+      <Button variant="outline" onClick={() => setIsConfirmAnneeOpen(false)} className="px-5 py-2.5 text-base rounded-md transition-all duration-200 hover:scale-105">Annuler</Button> {/* Wow 9 */}
+      <Button onClick={handleConfirmSaveAnnee} className="px-5 py-2.5 text-base rounded-md bg-green-600 hover:bg-green-700 transition-all duration-200 hover:scale-105">Confirmer et Continuer</Button> {/* Wow 9 */}
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
+<Dialog open={isConfirmTrimestresOpen} onOpenChange={setIsConfirmTrimestresOpen}>
+  <DialogContent className="max-w-lg">
+    <DialogHeader>
+      <DialogTitle className="text-lg font-semibold">Confirmer les Informations des Trimestres</DialogTitle>
+      <DialogDescription className="text-sm text-gray-500 dark:text-gray-400">
+        Vérifiez attentivement les détails de chaque trimestre avant d'enregistrer.
+      </DialogDescription>
+    </DialogHeader>
+    {trimestresToConfirm.length > 0 && (
+      <div className="space-y-4 py-4 max-h-96 overflow-y-auto pr-2"> {/* Added pr-2 for scrollbar spacing */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> {/* Increased gap for better separation */}
+          {trimestresToConfirm.map((trim, index) => (
+            <div
+              key={index}
+              className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-800 shadow-sm hover:shadow-md transition-shadow duration-200" // Rounded corners, shadow, hover effect
+            >
+              <h3 className="font-bold text-blue-700 dark:text-blue-400 mb-2 text-md">{trim.nom}</h3> {/* Slightly larger name */}
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                <strong className="font-medium">Début:</strong> {trim.date_debut}
+              </p>
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                <strong className="font-medium">Fin:</strong> {trim.date_fin}
+              </p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-4 text-sm text-orange-600 bg-orange-50 dark:bg-orange-900/20 p-2 rounded-md border border-orange-200 dark:border-orange-800">
+          <span className="font-semibold">Attention:</span> Assurez-vous que les dates sont correctes pour chaque période.
+        </p>
+      </div>
+    )}
+    <DialogFooter className="flex justify-end gap-3 pt-4">
+      <Button variant="outline" onClick={() => setIsConfirmTrimestresOpen(false)} className="px-4 py-2">Annuler</Button>
+      <Button onClick={handleConfirmSaveTrimestres} className="px-4 py-2">Confirmer et Enregistrer</Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+      {/* Assurez-vous d'avoir Toaster pour afficher les notifications */}
+      <Toaster richColors position="top-right" />
 
     </div>
   );
+
 }
 

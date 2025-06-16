@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { BookOpen, FileDown, Printer, Save,  Info, AlertCircle } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
+
 // Define types for API data
 interface AnneeAcademique {
   id: number;
@@ -600,12 +601,7 @@ export function GradeManagement() {
                 </div>
               )
             )}
-            <div className="mt-6 flex flex-wrap gap-4">
-              <Button onClick={saveGrades} disabled={eleves.length === 0 || evaluationsToDisplay.length === 0 || isLoading}>
-                <Save className="mr-2 h-4 w-4" /> Enregistrer les notes modifiées
-              </Button>
-             
-            </div>
+            
           </CardContent>
         </Card>
       ) : (
