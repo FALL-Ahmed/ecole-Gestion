@@ -21,6 +21,8 @@ import { StudentGrades } from './student/StudentGrades';
 import { StudentAttendance } from './student/StudentAttendance';
 import { ChapterPlanning } from './professor/ChapterPlanning';
 import { useAuth } from '@/contexts/AuthContext'; // Ensure this import is correct
+import { NotificationBell } from '@/components/layout/NotificationBell'; // Importer NotificationBell ici
+
 
 interface MainContentProps {
   activeSection: string;
@@ -31,6 +33,7 @@ interface MainContentProps {
 export function MainContent({ activeSection, onSectionChange }: MainContentProps) {
   // Destructure user, isAuthenticated, and isLoading from useAuth()
   const { user, isAuthenticated, isLoading } = useAuth();
+  const showNotificationBell = isAuthenticated && user && activeSection === 'dashboard';
 
   const renderContent = () => {
     // 1. Handle loading state: Show a loading message while AuthContext initializes
@@ -116,7 +119,9 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
           return <StudentCourses />;
         case 'my-grades':
           // Pass the userId to StudentGrades here!
-          return <StudentGrades userId={user.id} />; 
+                console.log(`[MainContent] Rendering StudentGrades. User ID for key and prop: ${user.id}`);
+
+          return <StudentGrades key={user.id} userId={user.id} />;
         case 'my-attendance':
           return <StudentAttendance />;
         default:
@@ -138,6 +143,12 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
   return (
     <div className="flex-1 overflow-auto bg-gray-50">
       {renderContent()}
+      {/* Afficher la cloche de notification si les conditions sont remplies */}
+      {showNotificationBell && (
+        <div className="fixed top-4 right-4 z-50">
+          <NotificationBell />
+        </div>
+      )}
     </div>
   );
 }

@@ -18,6 +18,7 @@ import { ConfigurationModule } from './configuration/configuration.module';
 import { EmploiDuTempsModule } from './emploidutemps/emploidutemps.module';
 import { ExceptionEmploiDuTempsModule } from './exceptionemploidutemps/exceptionemploidutemps.module'; // Nouvelle importation
 import { AbsenceModule } from './absence/absence.module'; // Adaptez le chemin
+import { ChapitreModule } from './chapitre/chapitre.module'; // Assurez-vous que le chemin est correct
 
 
 
@@ -48,7 +49,8 @@ import { AbsenceModule } from './absence/absence.module'; // Adaptez le chemin
     ConfigurationModule,
     EmploiDuTempsModule,
     ExceptionEmploiDuTempsModule,
-    AbsenceModule 
+    AbsenceModule,
+    ChapitreModule 
   ],
   controllers: [AppController],
   providers: [AppService],

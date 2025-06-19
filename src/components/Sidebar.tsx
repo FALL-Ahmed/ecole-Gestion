@@ -61,7 +61,7 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
           ...commonItems,
           { id: 'schedule-view', label: 'Emploi du Temps', icon: Calendar },
           { id: 'my-courses', label: 'Mes Cours', icon: BookOpen },
-          { id: 'my-grades', label: 'Notes', icon: GraduationCap },
+          { id: 'my-grades', label: 'Mes Notes', icon: GraduationCap },
           { id: 'my-attendance', label: 'Mes Absences', icon: Clock },
         ];
       default:

@@ -13,10 +13,10 @@ export class NoteService {
     private noteRepository: Repository<Note>,
 
     @InjectRepository(Evaluation)
-    private evaluationRepository: Repository<Evaluation>,
+    private evaluationRepository: Repository<Evaluation>, // Gardé pour la validation, même si non utilisé pour l'expansion directe ici
 
     @InjectRepository(User)
-    private userRepository: Repository<User>,
+    private userRepository: Repository<User>, // Gardé pour la validation
   ) {}
 
   async createMultiple(createNoteDtos: CreateNoteDto[]): Promise<Note[]> {
@@ -37,19 +37,25 @@ export class NoteService {
         throw new NotFoundException(`Étudiant avec l'ID ${dto.etudiant_id} non trouvé.`);
       }
 
+      // Note: TypeORM gère la création de la relation via les IDs.
+      // L'objet evaluation et etudiant n'ont besoin que de leur 'id' pour la création.
       const notePartial: DeepPartial<Note> = {
         note: dto.note,
-        evaluation: { id: dto.evaluation_id } as Evaluation,
-        etudiant: { id: dto.etudiant_id } as User,
+        evaluation: { id: dto.evaluation_id } as Evaluation, // Assigne l'ID de l'évaluation
+        etudiant: { id: dto.etudiant_id } as User,       // Assigne l'ID de l'étudiant
       };
       notesToSave.push(this.noteRepository.create(notePartial));
     }
 
     try {
+      // La méthode save s'occupera d'insérer les notes avec les relations.
+      // Les entités retournées par save peuvent ne pas avoir toutes les relations étendues par défaut.
+      // Si vous avez besoin des relations étendues immédiatement après la création,
+      // vous devrez les récupérer à nouveau avec les options de relations appropriées.
       return await this.noteRepository.save(notesToSave);
     } catch (error) {
       console.error("Erreur lors de la sauvegarde de plusieurs notes:", error);
-      if (error.code === 'ER_NO_REFERENCED_ROW_2' || error.code === '23503') {
+      if (error.code === 'ER_NO_REFERENCED_ROW_2' || error.code === '23503') { // Codes d'erreur pour MySQL et PostgreSQL
           throw new BadRequestException('Erreur de référence: un des IDs (évaluation ou étudiant) fournis n\'existe pas.');
       }
       throw new InternalServerErrorException('Erreur serveur lors de la création des notes.');
@@ -61,6 +67,7 @@ export class NoteService {
       relations: {
         evaluation: {
           matiere: true,
+          classe: true, // Assure que l'entité Classe est chargée avec l'Évaluation
         },
         etudiant: true,
       },
@@ -76,6 +83,7 @@ export class NoteService {
       relations: {
         evaluation: {
           matiere: true,
+          classe: true, // Assure que l'entité Classe est chargée
         },
         etudiant: true,
       },
@@ -91,6 +99,7 @@ export class NoteService {
       relations: {
         evaluation: {
           matiere: true,
+          classe: true, // Assure que l'entité Classe est chargée
         },
         etudiant: true,
       },
@@ -106,6 +115,7 @@ export class NoteService {
       relations: {
         evaluation: {
           matiere: true,
+          classe: true, // Assure que l'entité Classe est chargée
         },
         etudiant: true,
       },
@@ -116,7 +126,6 @@ export class NoteService {
     return note;
   }
 
-  // Anciennement findOneByEvaluationAndStudent, maintenant adapté pour accepter un tableau d'IDs
   async findNotesByEvaluationIdsAndStudentId(evaluationIds: number[], etudiantId: number): Promise<Note[] | null> {
     if (!evaluationIds || evaluationIds.length === 0 || isNaN(etudiantId)) {
       throw new BadRequestException('Les IDs d\'évaluation doivent être un tableau non vide et l\'ID de l\'étudiant doit être un nombre valide.');
@@ -130,6 +139,7 @@ export class NoteService {
       relations: {
         evaluation: {
           matiere: true,
+          classe: true, // Assure que l'entité Classe est chargée
         },
         etudiant: true,
       },
@@ -141,21 +151,49 @@ export class NoteService {
     if (isNaN(id)) {
       throw new BadRequestException('L\'ID de la note à mettre à jour doit être un nombre valide.');
     }
-
+  
+    // Vérifier si la note existe
     const noteToUpdate = await this.noteRepository.findOneBy({ id });
     if (!noteToUpdate) {
       throw new NotFoundException(`Note avec l'ID ${id} non trouvée pour la mise à jour.`);
     }
-
-    const updatedNote = this.noteRepository.create({ ...noteToUpdate, ...data, id });
-
-    try {
-      return await this.noteRepository.save(updatedNote);
-    } catch (error) {
-      console.error(`Erreur lors de la mise à jour de la note ${id}:`, error);
-      throw new InternalServerErrorException('Erreur serveur lors de la mise à jour de la note.');
+  
+    // Si evaluation_id ou etudiant_id sont fournis dans data, il faut les traiter comme des relations
+    const updatePayload: DeepPartial<Note> = { ...data };
+  
+    if (data.evaluation && typeof (data.evaluation as any).id === 'number') {
+      const evaluationExists = await this.evaluationRepository.findOneBy({ id: (data.evaluation as any).id });
+      if (!evaluationExists) {
+        throw new NotFoundException(`Évaluation avec l'ID ${(data.evaluation as any).id} non trouvée.`);
+      }
+      updatePayload.evaluation = { id: (data.evaluation as any).id } as Evaluation;
+    } else if (data.evaluation) { // Si evaluation est un objet sans id, ou autre chose, c'est potentiellement une erreur
+        delete updatePayload.evaluation; // Ne pas essayer de mettre à jour la relation de manière incorrecte
     }
+  
+    if (data.etudiant && typeof (data.etudiant as any).id === 'number') {
+      const etudiantExists = await this.userRepository.findOneBy({ id: (data.etudiant as any).id });
+      if (!etudiantExists) {
+        throw new NotFoundException(`Étudiant avec l'ID ${(data.etudiant as any).id} non trouvé.`);
+      }
+      updatePayload.etudiant = { id: (data.etudiant as any).id } as User;
+    } else if (data.etudiant) {
+        delete updatePayload.etudiant;
+    }
+  
+    // Appliquer les modifications à l'entité chargée
+    // TypeORM gère la mise à jour des champs simples et des relations si les IDs sont fournis
+    await this.noteRepository.update(id, updatePayload);
+  
+    // Récupérer la note mise à jour avec toutes les relations souhaitées
+    const updatedNoteWithRelations = await this.findOne(id);
+    if (!updatedNoteWithRelations) {
+        // Cela ne devrait pas arriver si la mise à jour a réussi et que findOne est correct
+        throw new InternalServerErrorException('Impossible de récupérer la note après la mise à jour.');
+    }
+    return updatedNoteWithRelations;
   }
+  
 
   async remove(id: number): Promise<void> {
     if (isNaN(id)) {

@@ -23,9 +23,14 @@ export class Evaluation {
   @JoinColumn({ name: 'matiere_id' })
   matiere: Matiere;
 
-  @ManyToOne(() => Classe)
-  @JoinColumn({ name: 'classe_id' })
-  classe: Classe;
+  // Relation vers Classe
+  @ManyToOne(() => Classe, (classe) => classe.evaluations, { eager: false })
+  @JoinColumn({ name: 'classe_id' }) // Nom de la colonne clé étrangère
+  classe: Classe; // Propriété pour l'objet Classe lié (utile si vous avez besoin d'autres infos de la classe)
+
+  @Column({ name: 'classe_id' }) // Colonne pour stocker l'ID de la classe directement
+  classeId: number; // Correspond à l'attente du frontend pour un accès direct
+
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'professeur_id' })

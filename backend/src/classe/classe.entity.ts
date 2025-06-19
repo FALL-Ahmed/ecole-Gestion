@@ -3,6 +3,10 @@ import { Entity, PrimaryGeneratedColumn, Column, OneToMany, ManyToOne, JoinColum
 import { Inscription } from '../inscription/inscription.entity';
 import { anneescolaire } from '../annee-academique/annee-academique.entity';
 import { Absence } from '../absence/absence.entity'; // Adaptez le chemin
+import { Evaluation } from '../evaluation/evaluation.entity'; // Ajustez le chemin si nécessaire
+import { Chapitre } from '../chapitre/chapitre.entity'; // Assurez-vous que le chemin est correct
+
+
 
 
 export enum Niveau {
@@ -36,4 +40,13 @@ export class Classe {
   
   @OneToMany(() => Absence, (absence) => absence.classe)
 absences: Absence[];
+
+@OneToMany(() => Chapitre, chapitre => chapitre.matiere)
+  chapitres: Chapitre[];
+
+
+@OneToMany(() => Evaluation, (evaluation) => evaluation.classe)
+  // 'evaluation.classe' est la propriété dans l'entité Evaluation qui mappe vers cette classe
+  evaluations: Evaluation[]; // Une classe peut avoir plusieurs évaluations
 }
+

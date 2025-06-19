@@ -79,6 +79,17 @@ interface Evaluation {
   libelle: string;
   annee_scolaire_id: number;
 }
+interface AbsenceAPI {
+  id: number;
+  etudiant_id: number;
+  date: string; // format YYYY-MM-DD
+  heure_debut: string; // format HH:MM:SS
+  heure_fin: string; // format HH:MM:SS
+  justifie: boolean;
+  justification: string | null;
+  // Inclure d'autres champs si nécessaire, par exemple matiere_id, classe_id
+  annee_scolaire_id: number;
+}
 
 interface Note {
   id: number;
@@ -99,6 +110,8 @@ interface MatiereDetailBulletin {
   coefficient: number;
   notesEvaluations: EvaluationDetailBulletin[];
   moyenneMatiere: number;
+    moyenneDevoirsPonderee?: number; // Nouvelle colonne
+
   appreciation: string;
 }
 
@@ -110,7 +123,7 @@ interface BulletinEleve {
   teacherComment: string;
   principalComment: string;
   notesParMatiere: MatiereDetailBulletin[];
-  absences?: number;
+  absencesNonJustifieesHeures?: number; // Modifié pour stocker les heures
   totalElevesClasse?: number;
 }
 
@@ -143,7 +156,10 @@ const fetchClasses = async (anneeAcademiqueId: number): Promise<Classe[]> => {
 
 const fetchElevesByClasse = async (classeId: number, anneeScolaireId: number): Promise<Eleve[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/inscriptions?classeId=${classeId}&anneeScolaireId=${anneeScolaireId}`);
+const response = await fetch(
+      `${API_BASE_URL}/inscriptions?classeId=${classeId}&anneeScolaireId=${anneeScolaireId}`,
+      { cache: 'no-store' } // Ajout pour désactiver le cache
+    );
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const inscriptions = await response.json();
     return inscriptions
@@ -248,6 +264,38 @@ const fetchNotesForEvaluations = async (evaluationIds: number[], etudiantId?: nu
     return [];
   }
 };
+
+const fetchAbsencesForStudent = async (
+  etudiantId: number,
+  anneeScolaireId: number,
+  dateDebut: string, // YYYY-MM-DD
+  dateFin: string    // YYYY-MM-DD
+): Promise<AbsenceAPI[]> => {
+  if (!etudiantId || !anneeScolaireId || !dateDebut || !dateFin) return [];
+  try {
+    const params = new URLSearchParams({
+      etudiant_id: etudiantId.toString(),
+      annee_scolaire_id: anneeScolaireId.toString(),
+      date_debut: dateDebut,
+      date_fin: dateFin,
+    });
+    const response = await fetch(`${API_BASE_URL}/absences?${params.toString()}`);
+    if (!response.ok) {
+      if (response.status === 404 || response.status === 204) return [];
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error(`Error fetching absences for student ${etudiantId}:`, error);
+    toast({
+      title: "Erreur de chargement des absences",
+      description: `Impossible de charger les absences pour l'élève ID ${etudiantId}.`,
+      variant: "destructive"
+    });
+    return [];
+  }
+};
+
 
 export function ReportManagement() {
   const [anneesAcademiques, setAnneesAcademiques] = useState<AnneeAcademique[]>([]);
@@ -385,7 +433,21 @@ export function ReportManagement() {
      const generateAndSetBulletins = async () => {
       const canGenerateBulletins = eleves.length > 0 && matieres.length > 0 && coefficients.length > 0 &&
                                    selectedClassId && selectedTermId && selectedAnneeAcademiqueId;
-
+// Fonction utilitaire pour calculer la durée en heures
+      const calculateDurationInHours = (heureDebutStr?: string, heureFinStr?: string): number => {
+        if (!heureDebutStr || !heureFinStr) return 0;
+        try {
+          const [hD, mD] = heureDebutStr.split(':').map(Number);
+          const [hF, mF] = heureFinStr.split(':').map(Number);
+          const debutMinutes = hD * 60 + mD;
+          const finMinutes = hF * 60 + mF;
+          if (finMinutes < debutMinutes) return 0; // Gérer le cas où l'heure de fin est avant le début
+          return (finMinutes - debutMinutes) / 60;
+        } catch (e) {
+          console.error("Error parsing time for duration calculation:", e);
+          return 0;
+        }
+      };
       if (!canGenerateBulletins) {
         setBulletins([]);
         return;
@@ -395,8 +457,16 @@ export function ReportManagement() {
 
       const classIdNum = parseInt(selectedClassId);
       const anneeIdNum = parseInt(selectedAnneeAcademiqueId);
+      const currentTrimestre = trimestres.find(t => t.id === parseInt(selectedTermId));
 
-      const generatedBulletinsPromises = eleves.map(async (eleve) => {
+      const classIdNumForFilter = parseInt(selectedClassId);
+      if (isNaN(classIdNumForFilter)) {
+          setBulletins([]); // Si selectedClassId n'est pas valide, pas de bulletins
+          return;
+      }
+      const generatedBulletinsPromises = eleves.filter(e => e.classeId === classIdNumForFilter).map(async (eleve) => {
+                                let totalHeuresAbsenceNonJustifiees = 0;
+
         const bulletinMatiereDetailsPromises = matieres.map(async (matiere) => {
           const coefficient = coefficients.find(c => c.matiere_id === matiere.id)?.coefficient || 1;
           
@@ -446,6 +516,7 @@ export function ReportManagement() {
           // Les variables `countDevoirs` et `compositionNoteValue` sont celles du trimestre courant,
           // calculées à partir de `dynamicEvaluationHeaders`.
           const avgDevoirsCurrentTerm = countDevoirs > 0 ? totalPointsDevoirs / countDevoirs : 0;
+          const moyenneDevoirsPondereeCalc = avgDevoirsCurrentTerm * 3;
 
           let compoT1Note: number | null = null;
           let compoT2Note: number | null = null;
@@ -545,9 +616,22 @@ export function ReportManagement() {
             coefficient: coefficient,
             notesEvaluations: notesEvaluations,
             moyenneMatiere: parseFloat(moyenneMatiere.toFixed(2)),
+            moyenneDevoirsPonderee: parseFloat(moyenneDevoirsPondereeCalc.toFixed(2)), // Ajout de la valeur calculée
+
             appreciation: appreciation,
           };
         });
+// Récupérer et calculer les absences pour l'élève et le trimestre
+        if (currentTrimestre) {
+          const absencesEleve = await fetchAbsencesForStudent(
+            eleve.id, anneeIdNum, currentTrimestre.date_debut, currentTrimestre.date_fin
+          );
+          absencesEleve.forEach(absence => {
+            if (!absence.justification) {
+              totalHeuresAbsenceNonJustifiees += calculateDurationInHours(absence.heure_debut, absence.heure_fin);
+            }
+          });
+        }
 
          const resolvedBulletinMatiereDetails = await Promise.all(bulletinMatiereDetailsPromises);
 
@@ -568,7 +652,7 @@ export function ReportManagement() {
           teacherComment: "Ce commentaire est une appréciation générale du professeur principal. Il doit être récupéré de l'API.",
           principalComment: "Ce commentaire est une appréciation du directeur. Il doit être récupéré de l'API.",
           notesParMatiere: resolvedBulletinMatiereDetails,
-          absences: 0, // À remplacer par les données réelles
+          absencesNonJustifieesHeures: parseFloat(totalHeuresAbsenceNonJustifiees.toFixed(1)),
           totalElevesClasse: eleves.length,
         };
       });
@@ -587,6 +671,20 @@ export function ReportManagement() {
     if (eleves.length > 0 && matieres.length > 0 && coefficients.length > 0 && selectedClassId && selectedTermId && selectedAnneeAcademiqueId) {
       generateAndSetBulletins();
     }
+     // Fonction utilitaire pour calculer la durée en heures
+    const calculateDurationInHours = (heureDebutStr?: string, heureFinStr?: string): number => {
+      if (!heureDebutStr || !heureFinStr) return 0;
+      try {
+        const [hD, mD] = heureDebutStr.split(':').map(Number);
+        const [hF, mF] = heureFinStr.split(':').map(Number);
+        const debutMinutes = hD * 60 + mD;
+        const finMinutes = hF * 60 + mF;
+        if (finMinutes < debutMinutes) return 0;
+        return (finMinutes - debutMinutes) / 60;
+      } catch (e) {
+        return 0;
+      }
+    };
 
  }, [eleves, matieres, coefficients, allEvaluations, allNotes, selectedClassId, selectedTermId, selectedAnneeAcademiqueId, dynamicEvaluationHeaders, trimestres]);
  
@@ -840,197 +938,260 @@ export function ReportManagement() {
         </div>
       )}
 
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-       
+     <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+  <DialogContent
+    className="
+      max-w-6xl w-full p-0 rounded-lg overflow-hidden
+      h-[calc(100vh-2rem)]
+      print:h-[297mm] print:max-h-[297mm]
+      print:rounded-none print:shadow-none print:border-none
+            [&>button.absolute.right-4.top-4]:hidden /* Masque le bouton X par défaut */
 
-<DialogContent className="max-w-6xl overflow-y-auto max-h-[95vh] p-0 rounded-lg print-dialog-content">
-  
-          <DialogHeader className="p-6 border-b no-print"> {/* Ajout de no-print pour ne pas l'imprimer */}
-            <DialogTitle>Aperçu du Bulletin Scolaire</DialogTitle>
-            {selectedReport && ( // Afficher la description seulement si un bulletin est sélectionné
-            <DialogDescription>
-              Bulletin pour {selectedReport.name}
-              {selectedClassId && classes.find(c => c.id === parseInt(selectedClassId)) ? `, Classe: ${classes.find(c => c.id === parseInt(selectedClassId))?.nom}` : ''}
-              {selectedTermId && trimestres.find(t => t.id === parseInt(selectedTermId)) ? `, Trimestre: ${trimestres.find(t => t.id === parseInt(selectedTermId))?.nom}` : ''}
-              {selectedAnneeAcademiqueId && anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId)) ? ` (${anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId))?.libelle})` : ''}.
-            </DialogDescription>
-            )}
-          </DialogHeader>
-          
-  <div id="bulletin-preview-content-area" className="bg-white p-8"> {/* ID ajouté ici */}
-    {/* En-tête administratif */}
-    <div className="grid grid-cols-3 gap-4 mb-8 text-xs">
-      <div className="text-left">
-        <p>République Islamique de Mauritanie</p>
-        <p>Ministère de l'Éducation Nationale</p>
-        <p>Direction des Examens et Concours</p>
-      </div>
-      <div className="text-center">
-        <h2 className="text-3xl font-bold text-blue-800 mb-1">BULLETIN DE NOTES</h2>
-        <p className="text-lg font-semibold">
-          Année Scolaire: <span className="text-blue-700">
-            {anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId))?.libelle}
-          </span>
-        </p>
-        <p className="text-lg font-semibold">
-          Trimestre: <span className="text-blue-700">
-            {trimestres.find(t => t.id === parseInt(selectedTermId))?.nom}
-          </span>
-        </p>
-      </div>
-      <div className="text-right text-xs" dir="rtl">
-        <p>الجمهورية الإسلامية الموريتانية</p>
-        <p>وزارة التهذيب الوطني</p>
-        <p>مديرية الامتحانات والمباريات</p>
-      </div>
-    </div>
-
-    {/* Informations élève */}
-    {selectedReport && (
-      <div className="mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-sm">
-          <div>
-            <p><span className="font-semibold">Nom de l'établissement:</span> <span className="font-bold text-blue-600">École Sources des Sciences</span></p>
-            <p><span className="font-semibold">Nom de l'élève:</span> <span className="font-bold text-blue-600">{selectedReport.name}</span></p>
-            <p><span className="font-semibold">Matricule:</span> <span className="font-mono">123456</span></p>
-          </div>
-          <div>
-            <p><span className="font-semibold">Classe:</span> <span className="font-bold text-blue-600">{classes.find(c => c.id === parseInt(selectedClassId))?.nom}</span></p>
-            <p><span className="font-semibold">Nombre d'élèves:</span> <span>{selectedReport.totalElevesClasse}</span></p>
-            <p><span className="font-semibold">Absences:</span> <span>{selectedReport.absences} heures</span></p>
-          </div>
+    "
+  >
+    {/* Contenu imprimable */}
+    <div
+      id="bulletin-preview-content-area"
+      className="
+        bg-white
+        h-full overflow-y-auto
+        px-8 pt-8 pb-8
+        print:p-[8mm] print:overflow-visible print:h-auto
+        print:border print:border-gray-300 print:shadow-md print:rounded-md
+      "
+    >
+      {/* En-tête */}
+      <div className="grid grid-cols-3 gap-4 text-xs mb-6 print:mb-4">
+        <div className="text-left">
+          <p>République Islamique de Mauritanie</p>
+          <p>Ministère de l'Éducation Nationale</p>
+          <p>Direction des Examens et Concours</p>
         </div>
-        <div className="border-t border-b border-gray-300 py-2 text-right text-sm">
-          <span className="font-semibold">Date d'édition:</span> {new Date().toLocaleDateString('fr-FR')}
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-blue-800 mb-1">BULLETIN DE NOTES</h2>
+          <p className="font-semibold text-sm">
+            Année Scolaire:{" "}
+            <span className="text-blue-700">
+              {anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId))?.libelle}
+            </span>
+          </p>
+          <p className="font-semibold text-sm">
+            Trimestre:{" "}
+            <span className="text-blue-700">
+              {trimestres.find(t => t.id === parseInt(selectedTermId))?.nom}
+            </span>
+          </p>
+        </div>
+        <div className="text-right text-xs" dir="rtl">
+          <p>الجمهورية الإسلامية الموريتانية</p>
+          <p>وزارة التهذيب الوطني</p>
+          <p>مديرية الامتحانات والمباريات</p>
         </div>
       </div>
+
+      {/* Info élève */}
+      {selectedReport && (
+        <div className="mb-6 text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
+  <div>
+    <p><strong>Établissement:</strong> École Sources des Sciences</p>
+    <p><strong>Élève:</strong> {selectedReport.name}</p>
+    <p><strong>Matricule:</strong> 123456</p>
+  </div>
+  <div className="text-right md:pl-8">
+    <p><strong>Classe:</strong> {classes.find(c => c.id === parseInt(selectedClassId))?.nom}</p>
+    <p><strong>Nombre d'élèves:</strong> {selectedReport.totalElevesClasse}</p>
+    <p>
+      <strong>Absences (non justifiées):</strong>{" "}
+      <span className="text-red-600">{selectedReport.absencesNonJustifieesHeures ?? 0} h</span>
+    </p>
+  </div>
+</div>
+
+          <div className="border-t border-gray-300 pt-2 text-right text-xs print:text-xs">
+            Date d'édition: {new Date().toLocaleDateString("fr-FR")}
+          </div>
+        </div>
+      )}
+
+      {/* Tableau des notes */}
+      <div className="mb-6 overflow-x-auto text-xs print:text-xs">
+        <Table className="w-full border border-gray-300 print:border print:border-gray-400 print:border-collapse">
+          <TableHeader className="bg-blue-100 print:bg-gray-100">
+  <TableRow>
+    <TableHead className="min-w-[150px]">
+      Matière<br />
+      <span className="text-sm">المادة</span>
+    </TableHead>
+    <TableHead className="text-center">
+      Coeff<br />
+      <span className="text-sm">المعامل</span>
+    </TableHead>
+    
+    {dynamicEvaluationHeaders
+      .filter(header => header.toLowerCase().includes('devoir'))
+      .map(header => (
+        <TableHead key={header} className="text-center">
+          {header}<br />
+          <span className="text-sm">
+            {header.toLowerCase().includes('devoir') ? 'الاختبار' : ''}
+          </span>
+        </TableHead>
+      ))}
+      
+    {dynamicEvaluationHeaders.some(header => header.toLowerCase().includes('devoir')) && (
+      <TableHead key="moy-dev-pond-header" className="text-center">
+        Moy. devoir *3<br />
+        <span className="text-sm">معدل الاختبارات *3</span>
+      </TableHead>
     )}
+    
+    {dynamicEvaluationHeaders
+      .filter(header => header.toLowerCase().includes('compo') && !header.toLowerCase().includes('devoir'))
+      .map(header => (
+        <TableHead key={header} className="text-center min-w-[120px]"> {/* Ajout de min-w pour un meilleur affichage */}
+          {header.toLowerCase().startsWith('compo')
+            ? `Compo. ${header.replace(/composition\s*/i, '')}`
+            : header}
+          <br />
+         {header.toLowerCase().startsWith('compo')
+              ? `امتحان ${header.replace(/composition\s*/i, '')}` // Ajustement pour la traduction
+              : ''}
 
-    {/* Tableau des notes */}
-    <div className="mb-8 overflow-x-auto">
-      <Table className="w-full border border-gray-300">
-        <TableHeader className="bg-blue-100">
-          <TableRow>
-            <TableHead className="border border-gray-300 px-3 py-2 text-left font-bold min-w-[180px]">Matière</TableHead>
-            <TableHead className="border border-gray-300 px-2 py-2 text-center font-bold w-16">Coeff</TableHead>
-            {dynamicEvaluationHeaders.map((header) => (
-              <TableHead key={header} className="border border-gray-300 px-2 py-2 text-center font-bold whitespace-nowrap">
-                {header}
-              </TableHead>
-            ))}
-            <TableHead className="border border-gray-300 px-3 py-2 text-center font-bold">Moy. Matière</TableHead>
-            <TableHead className="border border-gray-300 px-3 py-2 text-left font-bold min-w-[180px]">Observation</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {selectedReport?.notesParMatiere.map((matiere) => (
-            <TableRow key={matiere.matiere} className="hover:bg-gray-50">
-              <TableCell className="border border-gray-300 px-3 py-2 font-medium">{matiere.matiere}</TableCell>
-              <TableCell className="border border-gray-300 px-2 py-2 text-center">{matiere.coefficient}</TableCell>
-              {dynamicEvaluationHeaders.map((header) => {
-                const note = matiere.notesEvaluations.find(n => n.libelle === header);
-                return (
-                  <TableCell key={header} className="border border-gray-300 px-2 py-2 text-center">
-                    {note ? note.note : '00'}
+        </TableHead>
+      ))}
+      
+    <TableHead className="text-center">
+      Moy. Matiere<br />
+      <span className="text-sm">معدل المادة</span>
+    </TableHead>
+    <TableHead className="min-w-[150px]">
+      Observation<br />
+      <span className="text-sm">ملاحظة</span>
+    </TableHead>
+  </TableRow>
+</TableHeader>
+
+          <TableBody>
+            {selectedReport?.notesParMatiere.map(matiere => (
+              <TableRow key={matiere.matiere} className="even:bg-gray-50 print:even:bg-white">
+                <TableCell>{matiere.matiere}</TableCell>
+                <TableCell className="text-center">{matiere.coefficient}</TableCell>
+                {dynamicEvaluationHeaders.filter(header => header.toLowerCase().includes('devoir')).map(header => {
+                  const note = matiere.notesEvaluations.find(n => n.libelle === header);
+                  return (
+                    <TableCell key={`${matiere.matiere}-${header}-devoir`} className="text-center">{note ? note.note : "00"}</TableCell>
+                  );
+                })}
+                                                                {/* Moy. Dev. *3 Cell - S'affiche seulement s'il y a des devoirs */}
+                {dynamicEvaluationHeaders.some(header => header.toLowerCase().includes('devoir')) && (
+                  <TableCell key={`${matiere.matiere}-moy-dev-pond`} className="text-center">
+                    {matiere.moyenneDevoirsPonderee !== undefined ? matiere.moyenneDevoirsPonderee.toFixed(2) : '-'}
                   </TableCell>
-                );
-              })}
-              <TableCell className="border border-gray-300 px-3 py-2 text-center font-bold">
-                {matiere.moyenneMatiere.toFixed(2)}
-              </TableCell>
-              <TableCell className="border border-gray-300 px-3 py-2 italic">
-                {matiere.appreciation || '-'}
-              </TableCell>
-            </TableRow>
-          ))}
-          
-          {/* Ligne des totaux */}
-          {selectedReport && (
-            <TableRow className="bg-gray-50">
-              <TableCell className="border border-gray-300 px-3 py-2 font-bold" colSpan={2}>
-                Totaux
-              </TableCell>
-              <TableCell className="border border-gray-300 px-2 py-2 text-center font-bold" colSpan={dynamicEvaluationHeaders.length}>
-                {/* Espace vide pour les colonnes des notes */}
-              </TableCell>
-              <TableCell className="border border-gray-300 px-3 py-2 text-center font-bold text-blue-700">
-                {selectedReport.avg}/20
-              </TableCell>
-              <TableCell className="border border-gray-300 px-3 py-2">
-                {/* Espace vide pour les observations */}
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </div>
+                )}
+                {/* Composition Notes */}
+                {dynamicEvaluationHeaders.filter(header => header.toLowerCase().includes('compo') && !header.toLowerCase().includes('devoir')).map(header => {
+                  const note = matiere.notesEvaluations.find(n => n.libelle === header);
+                  return (
+                    <TableCell key={`${matiere.matiere}-${header}-compo`} className="text-center">{note ? note.note : "00"}</TableCell>
+                  );
+                })}
 
-    {/* Résumé et mentions */}
-    {selectedReport && (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="border border-gray-300 rounded-lg p-4 bg-gray-50">
-          <h3 className="font-bold mb-2">Appréciation du Conseil de Classe:</h3>
-          <p className="italic">{selectedReport.teacherComment}</p>
-          <p className="text-right mt-4 text-sm">Signature du Professeur Principal</p>
+
+                <TableCell className="text-center font-bold">{matiere.moyenneMatiere.toFixed(2)}</TableCell>
+{/* Ici la colonne Observation */}
+  <TableCell 
+  className="observation-column" 
+  style={{ textAlign: 'left', paddingLeft: '16px' }}
+>
+ 
+</TableCell>
+
+                </TableRow>
+            ))}
+            {selectedReport && (
+             <TableRow className="bg-gray-50 font-bold print:bg-gray-100"> {(() => {
+                  const numDevoirHeaders = dynamicEvaluationHeaders.filter(h => h.toLowerCase().includes('devoir')).length;
+                  const numCompoHeaders = dynamicEvaluationHeaders.filter(h => h.toLowerCase().includes('compo') && !h.toLowerCase().includes('devoir')).length;
+                  const hasDevoirSpecificColumn = numDevoirHeaders > 0;
+                  return <>
+                    <TableCell colSpan={2 + (hasDevoirSpecificColumn ? 1 : 0)}>Totaux</TableCell>
+                    <TableCell colSpan={numDevoirHeaders + numCompoHeaders}></TableCell> {/* Espace pour les notes Devoir/Compo */}
+                  </>;
+                })()}
+                <TableCell className="text-blue-700 text-center">{selectedReport.avg}/20</TableCell>
+                <TableCell></TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Observations & Résultats */}
+      <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm print:text-sm">
+        <div className="border rounded-lg p-4 bg-gray-50 print:bg-white print:border print:border-gray-300 print:rounded-md">
+          <h3 className="font-bold mb-2">Appréciation du Conseil de Classe</h3>
+          <p className="italic">{selectedReport?.teacherComment}</p>
+          <p className="text-right mt-4 text-xs">Signature du Professeur Principal</p>
         </div>
-        <div className="border border-gray-300 rounded-lg p-4 bg-gray-50">
-          <h3 className="font-bold mb-2">Observations du Directeur:</h3>
-          <p className="italic">{selectedReport.principalComment}</p>
-          <p className="text-right mt-4 text-sm">Signature du Directeur</p>
+        <div className="border rounded-lg p-4 bg-gray-50 print:bg-white print:border print:border-gray-300 print:rounded-md">
+          <h3 className="font-bold mb-2">Observations du Directeur</h3>
+          <p className="italic">{selectedReport?.principalComment}</p>
+          <p className="text-right mt-4 text-xs">Signature du Directeur</p>
         </div>
       </div>
-    )}
 
     {/* Résultats finaux */}
-    {selectedReport && (
-      <div className="border border-gray-300 rounded-lg p-4 mb-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-          <div>
-            <p className="font-semibold">Moyenne Générale</p>
-            <p className="text-xl font-bold text-blue-700">{selectedReport.avg}/20</p>
-          </div>
-          <div>
-            <p className="font-semibold">Classement</p>
-            <p className="text-xl font-bold">{selectedReport.rank}</p>
-          </div>
-          <div>
-            <p className="font-semibold">Mention</p>
-            <p className="text-xl font-bold">
-              {getMention(parseFloat(selectedReport.avg))}
-            </p>
-          </div>
-          <div>
-            <p className="font-semibold">Décision du Conseil</p>
-            <p className="text-xl font-bold">
-              {parseFloat(selectedReport.avg) >= 10 ? "Admis(e)" : "Non Admis(e)"}
-            </p>
-          </div>
-        </div>
-      </div>
-    )}
-
-    {/* Pied de page */}
-    <div className="text-center text-xs text-gray-500 mt-8">
-      <p>Date d'édition: {new Date().toLocaleDateString('fr-FR')}</p>
-      <p className="mt-2">Cachet et Signature de l'Administration</p>
-      <p className="mt-4">École Sources des Sciences - BP 1234 Nouakchott - Tél: 00 00 00 00</p>
+<div className="mb-6 text-center grid grid-cols-2 md:grid-cols-4 gap-6 print:text-sm bg-gray-50 p-5 rounded-lg shadow-md">
+  {[{
+    label: "Moyenne Générale",
+    value: selectedReport?.avg ? parseFloat(selectedReport.avg).toFixed(2) + "/20" : "--",
+    textColor: "text-blue-700"
+  }, {
+    label: "Rang",
+    value: selectedReport?.rank ?? "--",
+    textColor: "text-gray-900"
+  }, {
+    label: "Mention",
+    value: selectedReport?.avg ? getMention(parseFloat(selectedReport.avg)) : "--",
+    textColor: "text-indigo-600"
+  }, {
+    label: "Décision",
+    value: selectedReport?.avg
+      ? (parseFloat(selectedReport.avg) >= 10 ? "Admis(e)" : "Non Admis(e)")
+      : "--",
+    textColor: selectedReport?.avg && parseFloat(selectedReport.avg) >= 10 ? "text-green-600" : "text-red-600"
+  }].map(({label, value, textColor}) => (
+    <div key={label} className="flex flex-col items-center">
+      <p className="font-semibold text-gray-700 mb-1 uppercase tracking-wide">{label}</p>
+      <p className={`text-2xl font-extrabold ${textColor}`}>{value}</p>
     </div>
-  </div>
+  ))}
+</div>
 
-  {/* Boutons d'action */}
-  <div className="bg-gray-100 px-6 py-4 flex justify-end gap-4 rounded-b-lg bulletin-actions-footer no-print">
-    <Button variant="outline" onClick={() => setPreviewOpen(false)}>
-      Fermer
-    </Button>
-    <Button onClick={exportPreviewedReport} className="bg-green-600 hover:bg-green-700">
-      <FileDown className="mr-2 h-4 w-4" /> Exporter en PDF
-    </Button>
-    <Button onClick={printPreviewedReport} className="bg-blue-600 hover:bg-blue-700">
-      <Printer className="mr-2 h-4 w-4" /> Imprimer
-    </Button>
-  </div>
-</DialogContent>
-</Dialog>
+
+
+      {/* Pied de page */}
+      <div className="text-center text-xs text-gray-500 pt-2 pb-6 print:pb-0 print:text-xs">
+        
+        <p className="mt-2">Cachet et Signature de l'Administration</p>
+        <p className="mt-2">École Sources des Sciences - BP 1234 Nouakchott - Tél: 00 00 00 00</p>
+      </div>
+    </div>
+
+    {/* Actions non imprimables */}
+    <div className="bg-gray-100 px-6 py-4 flex justify-end gap-4 rounded-b-lg no-print">
+      <Button variant="outline" onClick={() => setPreviewOpen(false)}>Fermer</Button>
+      <Button onClick={exportPreviewedReport} className="bg-green-600 hover:bg-green-700 text-white">
+        <FileDown className="mr-2 h-4 w-4" /> Exporter en PDF
+      </Button>
+      <Button onClick={printPreviewedReport} className="bg-blue-600 hover:bg-blue-700 text-white">
+        <Printer className="mr-2 h-4 w-4" /> Imprimer
+      </Button>
+    </div>
+  </DialogContent>
+</Dialog> 
+
     </div>
   );
 }

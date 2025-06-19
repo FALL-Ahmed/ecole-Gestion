@@ -25,6 +25,8 @@ import { fr } from 'date-fns/locale';
 import { CalendarIcon, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
+import { useNotifications } from '@/contexts/NotificationContext'; // Importer le hook de notifications
+
 import { endOfYear, startOfYear } from 'date-fns';
 
 // --- API Configuration ---
@@ -90,6 +92,8 @@ const initialAttendanceStats: AttendanceStats = {
 
 export function StudentAttendance() {
   const { user } = useAuth(); // Get logged-in user
+    const { addNotification } = useNotifications(); // Récupérer la fonction d'ajout de notification
+
 
   const [anneesAcademiques, setAnneesAcademiques] = useState<AnneeAcademique[]>([]);
   const [selectedSchoolYearId, setSelectedSchoolYearId] = useState<string>('');
@@ -98,6 +102,7 @@ export function StudentAttendance() {
 
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [notifiedAbsenceIds, setNotifiedAbsenceIds] = useState<Set<number>>(new Set());
 
   const [absenceRecords, setAbsenceRecords] = useState<AbsenceRecord[]>([]);
   const [currentAttendanceStats, setCurrentAttendanceStats] = useState<AttendanceStats>(initialAttendanceStats);
@@ -191,6 +196,19 @@ export function StudentAttendance() {
       return;
     }
 
+    // Charger les IDs des absences déjà notifiées depuis localStorage
+    const storageKey = `notified_absence_ids_${user.id}`;
+    const storedNotifiedIds = localStorage.getItem(storageKey);
+    let initialNotifiedIdsFromStorage = new Set<number>();
+    if (storedNotifiedIds) {
+      try {
+        initialNotifiedIdsFromStorage = new Set(JSON.parse(storedNotifiedIds).map(Number));
+      } catch (e) {
+        console.error("Failed to parse notified absence IDs from localStorage", e);
+      }
+    }
+    setNotifiedAbsenceIds(initialNotifiedIdsFromStorage);
+
     const fetchAbsences = async () => {
       setIsLoading(true);
       setError(null);
@@ -236,7 +254,28 @@ export function StudentAttendance() {
         const total = mappedData.length;
         const justified = mappedData.filter(abs => abs.justified).length;
         setCurrentAttendanceStats({ totalAbsences: total, justifiedAbsences: justified, unjustifiedAbsences: total - justified });
+// Logique de notification pour les nouvelles absences
+        if (user?.id && mappedData.length > 0) {
+          const idsKnownAtStartOfEffect = initialNotifiedIdsFromStorage;
+          const newIdsAddedThisCycle = new Set<number>();
 
+          mappedData.forEach(absence => {
+            if (absence.id && !idsKnownAtStartOfEffect.has(absence.id)) {
+              addNotification(
+                `Nouvelle absence enregistrée le ${format(new Date(absence.date), 'dd/MM/yyyy', { locale: fr })} en ${absence.subject} (${absence.period}).`,
+                'absence',
+                '/student/my-attendance' // Lien vers la page des absences
+              );
+              newIdsAddedThisCycle.add(absence.id);
+            }
+          });
+
+          if (newIdsAddedThisCycle.size > 0) {
+            const allNotifiedIdsNow = new Set([...Array.from(idsKnownAtStartOfEffect), ...Array.from(newIdsAddedThisCycle)]);
+            setNotifiedAbsenceIds(allNotifiedIdsNow); // Mettre à jour l'état React
+            localStorage.setItem(storageKey, JSON.stringify(Array.from(allNotifiedIdsNow))); // Mettre à jour localStorage
+          }
+        }
       } catch (err) {
         console.error("Error fetching absences:", err);
         toast({ title: "Erreur", description: "Impossible de charger vos absences.", variant: "destructive" });
@@ -248,7 +287,7 @@ export function StudentAttendance() {
 
     fetchAbsences();
 
-  }, [user?.id, selectedSchoolYearId, startDate, endDate]); // Dependencies for fetching absences
+  }, [user?.id, selectedSchoolYearId, startDate, endDate, addNotification]); // Ajout de addNotification aux dépendances
 
   
   // Determine the currently selected year and term names for display
@@ -371,30 +410,20 @@ export function StudentAttendance() {
           ) : absenceRecords.length > 0 ? (            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Jour</TableHead>
-                    <TableHead>Matière</TableHead>
-                    <TableHead>Horaire</TableHead>
-                    <TableHead>Statut</TableHead>
-                    <TableHead>Justification</TableHead>
-                  </TableRow>
+                  <TableRow><TableHead>Date</TableHead><TableHead>Jour</TableHead><TableHead>Matière</TableHead><TableHead>Horaire</TableHead><TableHead>Statut</TableHead><TableHead>Justification</TableHead></TableRow>
+
                 </TableHeader>
                 <TableBody>
                    {absenceRecords.map((absence) => ( // Use absenceRecords directly
-                    <TableRow key={absence.id}> {/* Use absence ID as key */}
-                      <TableCell>
-                        {format(new Date(absence.date), 'dd/MM/yyyy', { locale: fr })}
-                      </TableCell>
+                       <TableRow key={absence.id}>{/* Use absence ID as key */}
+                      <TableCell>{format(new Date(absence.date), 'dd/MM/yyyy', { locale: fr })}</TableCell>
+                 
                       <TableCell>{absence.dayOfWeek}</TableCell>
                       <TableCell>{absence.subject}</TableCell>
                       <TableCell>{absence.period}</TableCell>
                       <TableCell>
-                        {absence.justified ? (
-                          <Badge className="bg-green-100 text-green-700 border-green-300">Justifiée</Badge>
-                        ) : (
-                          <Badge className="bg-red-100 text-red-700 border-red-300">Non justifiée</Badge>
-                        )}
+                                                {absence.justified ? <Badge className="bg-green-100 text-green-700 border-green-300">Justifiée</Badge> : <Badge className="bg-red-100 text-red-700 border-red-300">Non justifiée</Badge>}
+
                       </TableCell>
                       <TableCell>
                         {absence.justification || 'Non fournie'}

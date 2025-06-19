@@ -4,7 +4,11 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { useAuth } from '@/contexts/AuthContext'; // **Vérifiez bien ce chemin d'importation**
 import { Users, BookOpen, GraduationCap, TrendingUp, Calendar as CalendarIcon } from 'lucide-react'; // **Assurez-vous que 'lucide-react' est installé**
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import axios from 'axios';
+import { format } from 'date-fns'; // Pour formater les dates pour l'API et les notifications
+import { fr } from 'date-fns/locale'; // Pour les dates en français
+import axios from 'axios'; // Assurez-vous qu'axios est installé si vous l'utilisez réellement pour d'autres appels
+import { useNotifications } from '@/contexts/NotificationContext'; // Importer le hook de notifications
+import { cn } from '@/lib/utils';
 
 // --- Interface Definitions for Type Safety ---
 
@@ -17,7 +21,8 @@ interface User {
 interface NoteApiData {
   id: string;
   note: number | null; // Peut être null ou undefined
-  etudiant?: { id: string };
+  etudiant?: { id: string }; // Structure où l'étudiant est un objet imbriqué
+  etudiant_id?: string;      // Structure où l'ID de l'étudiant est directement sur la note
   evaluation?: { id: string };
 }
 
@@ -28,6 +33,29 @@ interface EvaluationApiData {
   matiere?: { id: string };
   anneeScolaire?: { id: string };
 }
+
+interface AnneeAcademiqueDetails { // Pour stocker les détails de l'année académique active
+  id: string;
+  libelle: string;
+  date_debut: string;
+  date_fin: string;
+}
+
+interface AbsenceAPI { // Interface pour les données d'absence brutes de l'API
+  id: number;
+  date: string;
+  heure_debut: string;
+  heure_fin: string;
+  justifie: boolean;
+  justification: string;
+  etudiant?: { id: number; nom: string; prenom: string };
+  matiere?: { id: number; nom: string };
+  classe?: { id: number; nom: string };
+  anneeScolaire?: { id: number; libelle: string };
+}
+
+const API_BASE_URL_NOTIF = 'http://localhost:3000/api'; // Préfixe pour les appels API liés aux absences
+const NOTIFIED_ABSENCE_IDS_KEY_PREFIX = 'notified_absence_ids_';
 
 interface MatiereApiData {
   id: string;
@@ -45,7 +73,7 @@ interface EnrichedNote {
   subject: string;
   type: string;
   score: number | null; // Peut être null si la note n'est pas présente
-  date: string; // La date brute de l'évaluation, pour affichage
+  date: string; // La date brute de l'évaluation
 }
 
 // --- Mock Data (à adapter si vous les fetcher réellement) ---
@@ -77,11 +105,16 @@ interface StudentDistributionItem {
 
 export function Dashboard() {
   const { user } = useAuth();
+  const { addNotification } = useNotifications(); // Utiliser addNotification
+
+  const [notifiedNoteIds, setNotifiedNoteIds] = useState<Set<string>>(new Set());
   const [selectedClass, setSelectedClass] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>('2023-2024');
   const [latestNotes, setLatestNotes] = useState<EnrichedNote[]>([]);
   const [loadingNotes, setLoadingNotes] = useState<boolean>(true);
   const [errorNotes, setErrorNotes] = useState<string | null>(null);
+    const [currentAcademicYearDetails, setCurrentAcademicYearDetails] = useState<AnneeAcademiqueDetails | null>(null);
+
 
   const professorClasses = ['6ème A', '6ème B', '5ème A', '4ème B', '3ème A'];
   const academicYears = ['2022-2023', '2023-2024', '2024-2025'];
@@ -168,11 +201,31 @@ export function Dashboard() {
 
   // --- useEffect pour récupérer les dernières notes de l'élève ---
   useEffect(() => {
+    // Ne rien faire si user ou user.id n'est pas encore défini.
+    if (!user || !user.id) {
+      setNotifiedNoteIds(new Set<string>()); // S'assurer que l'état est propre
+      setLatestNotes([]);
+      setLoadingNotes(false);
+      return;
+    }
+
+    const storageKey = `notified_note_ids_${user.id}`; // Clé de stockage spécifique à l'utilisateur
+
+    const storedNotifiedIds = localStorage.getItem(storageKey);
+    let initialNotifiedIdsFromStorage = new Set<string>();
+    if (storedNotifiedIds) {
+      try {
+        initialNotifiedIdsFromStorage = new Set(JSON.parse(storedNotifiedIds));
+      } catch (e) {
+        console.error("Failed to parse notified note IDs from localStorage", e);
+      }
+    }
+    // Mettre à jour l'état React. Important pour les rendus suivants.
+    setNotifiedNoteIds(initialNotifiedIdsFromStorage);
+
     const fetchLatestNotes = async () => {
       setLoadingNotes(true);
       setErrorNotes(null);
-
-      // Vérification du rôle et de l'ID de l'utilisateur
       if (user?.role !== 'eleve' || !user?.id) {
         console.log('--- NOTES FETCH SKIPPED (Not an "eleve" or missing ID) ---');
         setLatestNotes([]);
@@ -187,14 +240,19 @@ export function Dashboard() {
         // 1. Récupération de la configuration de l'année scolaire
         console.log('Fetching configuration from: http://localhost:3000/api/configuration');
         const configResponse = await axios.get<ConfigurationApiData>('http://localhost:3000/api/configuration');
-        const currentAcademicYearId = configResponse.data?.annee_scolaire?.id;
+        const activeYearId = configResponse.data?.annee_scolaire?.id;
 
         console.log('Config response data:', configResponse.data);
 
-        if (!currentAcademicYearId) {
+         if (!activeYearId) {
           console.warn("WARN: Academic year ID is UNDEFINED/NULL from configuration API. This might affect evaluation filtering.");
         } else {
-          console.log(`Current academic year ID: ${currentAcademicYearId}`);
+          console.log(`Current active academic year ID: ${activeYearId}`);
+          // Fetch details of the active academic year
+          const yearDetailsResponse = await axios.get<AnneeAcademiqueDetails>(`${API_BASE_URL_NOTIF}/annees-academiques/${activeYearId}`);
+          if (yearDetailsResponse.data) {
+            setCurrentAcademicYearDetails(yearDetailsResponse.data);
+          }
         }
 
         // 2. Récupération des données brutes (notes, évaluations, matières) en parallèle
@@ -216,9 +274,17 @@ export function Dashboard() {
         // console.log('DEBUG: All Matieres:', allMatieres);
 
         // 3. Filtrage des notes pour l'élève connecté
-        const studentNotes = allNotes.filter(
-          (note: NoteApiData) => String(note.etudiant?.id) === String(user.id)
-        );
+        const studentNotes = allNotes.filter((note: NoteApiData) => {
+          // Vérifier la structure note.etudiant.id
+          if (note.etudiant && typeof note.etudiant.id !== 'undefined') {
+            return String(note.etudiant.id) === String(user.id);
+          }
+          // Vérifier la structure note.etudiant_id (fallback)
+          if (typeof note.etudiant_id !== 'undefined') {
+            return String(note.etudiant_id) === String(user.id);
+          }
+          return false; // La note ne peut pas être associée à l'utilisateur
+        });
         console.log(`Found ${studentNotes.length} notes for student ID: ${user.id}.`);
         // console.log('DEBUG: Student Notes:', studentNotes);
 
@@ -237,11 +303,11 @@ export function Dashboard() {
               (evalItem: EvaluationApiData) =>
                 String(evalItem.id) === String(noteEvaluationId) &&
                 // Filtrer par année scolaire UNIQUEMENT si currentAcademicYearId est défini
-                (currentAcademicYearId ? String(evalItem.anneeScolaire?.id) === String(currentAcademicYearId) : true)
+                (activeYearId ? String(evalItem.anneeScolaire?.id) === String(activeYearId) : true)
             );
 
             if (!evaluation) {
-              console.warn(`SKIP: No evaluation found for note ID ${note.id} (Evaluation ID: ${noteEvaluationId}, Academic Year ID: ${currentAcademicYearId || 'N/A'}).`, { note, allEvaluations });
+              console.warn(`SKIP: No evaluation found for note ID ${note.id} (Evaluation ID: ${noteEvaluationId}, Academic Year ID: ${currentAcademicYearDetails || 'N/A'}).`, { note, allEvaluations });
               return null;
             }
 
@@ -262,6 +328,8 @@ export function Dashboard() {
 
             // Assigner la note et la date avec des valeurs par défaut si null/undefined
             const score = note.note !== undefined && note.note !== null ? note.note : null;
+            const dateEval = evaluation.date_eval && evaluation.date_eval.trim() !== '' ? evaluation.date_eval : 'Date inconnue';
+
            
 
             console.log(`SUCCESS: Enriched Note for Note ID ${note.id}: Type='${evaluation.type}', Subject='${matiere.nom}', Score=${score}`);
@@ -272,6 +340,9 @@ export function Dashboard() {
               subject: matiere.nom,
               type: evaluation.type,
               score: score,
+              date: dateEval,
+
+              
              
             };
           })
@@ -294,6 +365,31 @@ export function Dashboard() {
         console.log('Final latest notes for display (sorted by evaluation ID, top 5):', sortedLatestNotes);
         setLatestNotes(sortedLatestNotes);
 
+        // Logique de notification pour les nouvelles notes
+        if (user?.role === 'eleve' && sortedLatestNotes.length > 0) {
+          // Utiliser initialNotifiedIdsFromStorage comme base pour ce cycle de fetch.
+          const idsKnownAtStartOfEffect = initialNotifiedIdsFromStorage;
+          const newIdsAddedThisCycle = new Set<string>();
+
+          sortedLatestNotes.forEach(note => {
+            // Vérifier par rapport aux IDs connus au début de cet effet.
+            if (note.id && !idsKnownAtStartOfEffect.has(note.id)) {
+              addNotification(
+                `Nouvelle note en ${note.subject} (${note.type}): ${note.score !== null ? note.score + '/20' : 'N/A'}`,
+                'grade',
+                '/student/my-grades' // Lien vers la page des notes
+              );
+              newIdsAddedThisCycle.add(note.id);
+            }
+          });
+
+          if (newIdsAddedThisCycle.size > 0) {
+            const allNotifiedIdsNow = new Set([...Array.from(idsKnownAtStartOfEffect), ...Array.from(newIdsAddedThisCycle)]);
+            setNotifiedNoteIds(allNotifiedIdsNow); // Mettre à jour l'état React
+            localStorage.setItem(storageKey, JSON.stringify(Array.from(allNotifiedIdsNow))); // Mettre à jour localStorage
+          }
+        }
+
       } catch (err) {
         console.error('ERROR during student notes fetch:', err);
         setErrorNotes(`Échec du chargement des notes récentes. Erreur : ${axios.isAxiosError(err) ? err.message : 'Erreur inconnue'}. Veuillez vérifier les journaux du serveur backend.`);
@@ -303,8 +399,81 @@ export function Dashboard() {
       }
     };
 
-    fetchLatestNotes();
-  }, [user?.id, user?.role]); // Dépendances du hook
+    // Exécuter fetchLatestNotes seulement si c'est un élève (user.id est déjà garanti non-nul ici)
+    if (user.role === 'eleve') {
+        fetchLatestNotes();
+    } else {
+        setLoadingNotes(false);
+        setLatestNotes([]); // S'assurer que les notes sont vides pour les autres rôles
+    }
+  // Dépendances : user.id et user.role pour s'assurer que l'effet se relance
+  // si l'utilisateur connecté change. addNotification est stable.
+  }, [user?.id, user?.role, addNotification]);
+   // --- useEffect pour récupérer les absences de l'élève et notifier ---
+  useEffect(() => {
+    if (user?.role !== 'eleve' || !user?.id || !currentAcademicYearDetails) {
+      return;
+    }
+
+    const studentId = user.id;
+    const yearId = currentAcademicYearDetails.id;
+    const storageKey = `${NOTIFIED_ABSENCE_IDS_KEY_PREFIX}${studentId}`;
+
+    const fetchAndNotifyAbsences = async () => {
+      try {
+        const storedNotifiedIds = localStorage.getItem(storageKey);
+        let notifiedAbsenceIdsSet = new Set<number>();
+        if (storedNotifiedIds) {
+          try {
+            notifiedAbsenceIdsSet = new Set(JSON.parse(storedNotifiedIds).map(Number));
+          } catch (e) {
+            console.error("Failed to parse notified absence IDs from localStorage for dashboard", e);
+          }
+        }
+
+        const params = new URLSearchParams({
+          etudiant_id: String(studentId),
+          annee_scolaire_id: yearId,
+          date_debut: format(new Date(currentAcademicYearDetails.date_debut), 'yyyy-MM-dd'),
+          date_fin: format(new Date(currentAcademicYearDetails.date_fin), 'yyyy-MM-dd'),
+        });
+
+        const response = await axios.get<AbsenceAPI[]>(`${API_BASE_URL_NOTIF}/absences?${params.toString()}`);
+        
+        if (response.data && response.data.length > 0) {
+          const newAbsencesToNotify = new Set<number>();
+
+          response.data.forEach(absence => {
+            if (absence.id && !notifiedAbsenceIdsSet.has(absence.id)) {
+              addNotification(
+                `Nouvelle absence enregistrée le ${format(new Date(absence.date), 'dd/MM/yyyy', { locale: fr })} en ${absence.matiere?.nom || 'N/A'} (${absence.heure_debut?.substring(0,5)}-${absence.heure_fin?.substring(0,5)}).`,
+                'absence',
+                '/student/my-attendance'
+              );
+              newAbsencesToNotify.add(absence.id);
+            }
+          });
+
+          if (newAbsencesToNotify.size > 0) {
+            const allNotifiedIdsNow = new Set([...Array.from(notifiedAbsenceIdsSet), ...Array.from(newAbsencesToNotify)]);
+            localStorage.setItem(storageKey, JSON.stringify(Array.from(allNotifiedIdsNow)));
+            // No need to call setNotifiedAbsenceIds here as Dashboard doesn't display absences directly
+          }
+        }
+      } catch (err) {
+        if (axios.isAxiosError(err) && err.response?.status === 404) {
+          // No absences found, not an error for notifications.
+        } else {
+          console.error('ERROR during student absence fetch for dashboard notifications:', err);
+          // Optionally, inform the user if fetching absences fails, though it's a background task.
+          // toast({ title: "Erreur", description: "Impossible de vérifier les nouvelles absences.", variant: "default" });
+        }
+      }
+    };
+
+    fetchAndNotifyAbsences();
+  }, [user?.id, user?.role, addNotification, currentAcademicYearDetails]);
+
 
   const renderDashboardContent = () => {
     switch (user?.role) {
@@ -628,8 +797,14 @@ export function Dashboard() {
                       <p className="text-gray-600">Aucune note récente disponible.</p>
                     )}
                     {!loadingNotes && !errorNotes && latestNotes.length > 0 && (
-                      latestNotes.map((note: EnrichedNote) => (
-                        <div key={note.id} className="flex flex-col p-2 border rounded-lg">
+                      latestNotes.map((note: EnrichedNote, index: number) => (
+                        <div 
+                          key={note.id} 
+                          className={cn(
+                            "flex flex-col p-3 border rounded-lg shadow-sm transition-all duration-200",
+                            index === 0 ? "bg-blue-50 border-blue-200 ring-2 ring-blue-300" : "bg-white hover:shadow-md" // Style pour la note la plus récente
+                          )}
+                        >
                           <div className="flex justify-between items-center">
                             <span className="font-medium">
                               {note.type} de {note.subject}
@@ -639,16 +814,9 @@ export function Dashboard() {
                               {note.score !== null ? `${note.score}/20` : 'N/A'}
                             </span>
                           </div>
-                          <span className="text-sm text-gray-600">
+                          <span className={cn("text-xs mt-1", index === 0 ? "text-blue-700" : "text-gray-500")}>
                             {/* Afficher la date brute ou "Date inconnue" */}
-                            {note.date && note.date !== 'Date inconnue'
-                                ? new Date(note.date).toLocaleDateString('fr-FR', {
-                                    year: 'numeric',
-                                    month: 'long',
-                                    day: 'numeric',
-                                  })
-                                : note.date // Fallback to "Date inconnue" or actual invalid string
-                            }
+                            
                           </span>
                         </div>
                       ))

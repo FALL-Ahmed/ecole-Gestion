@@ -110,41 +110,199 @@
 .btn-primary {
   @apply bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg hover:scale-105 transition;
 }
-
+/* Pour l'écran */
+.observation-column {
+  width: 30% !important;
+  text-align: left !important;
+  padding-left: 16px !important;
+}
 @media print {
-  /* Masquer les éléments avec la classe 'no-print' */
+  /* --- General Print Overrides --- */
   .no-print {
     display: none !important;
   }
 
-  /* Forcer le contenu principal à occuper toute la page */
   body, html {
-    width: 100%;
-    height: 100%;
+    width: 210mm;   /* A4 Width */
+    height: 297mm;  /* A4 Height */
     margin: 0;
     padding: 0;
-    overflow: visible; /* S'assurer que rien n'est coupé */
-  }
-
-  /* Ciblez votre conteneur A3 principal.
-     Remplacez '.votre-conteneur-a3' par le sélecteur réel de votre conteneur. */
-  .votre-conteneur-a3 {
-    width: 100% !important;
-            height: auto !important; 
-                min-height: 99vh; /* S'assurer que le contenu essaie de remplir la hauteur de la page */
-
-    margin: 0 !important;
-            padding: 0.5cm !important; /* Marge interne réduite pour A3 pour un effet pleine page */
-    border: none !important; /* Supprimer les bordures si nécessaire */
-    box-shadow: none !important; /* Supprimer les ombres si nécessaire */
-    page-break-before: auto; /* Gérer les sauts de page */
-    page-break-after: auto;
+    overflow: hidden; /* Prevent scrollbars */
+    page-break-after: avoid;
+    page-break-before: avoid;
     page-break-inside: avoid;
-    
   }
 
-  /* Masquer les autres éléments de la page qui ne sont pas le contenu A3 */
-  header, footer, nav, aside {
+  #bulletin-preview-content-area {
+    width: 100%; /* Occupy full width of the A4 page */
+    height: auto; /* Let height adjust to content */
+    margin: 0 auto !important; /* Center the content horizontally, crucial for right offset */
+    padding: 8mm 8mm 20mm 8mm !important; /* Top, Right, Bottom (increased), Left padding */
+    box-sizing: border-box; /* Include padding in total width/height */
+
+    page-break-inside: avoid;
+    page-break-after: avoid; 
+
+    background-color: #fff !important;
+    color: #000 !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* --- Typography for Print --- */
+  #bulletin-preview-content-area p,
+  #bulletin-preview-content-area span,
+  #bulletin-preview-content-area div {
+    font-size: 9pt !important;
+    line-height: 1.2 !important;
+  }
+  #bulletin-preview-content-area h2 {
+    font-size: 20pt !important;
+    margin-bottom: 5mm !important;
+  }
+  #bulletin-preview-content-area p.font-semibold.text-sm {
+    font-size: 10pt !important;
+  }
+  #bulletin-preview-content-area .text-xl {
+    font-size: 14pt !important;
+    line-height: 1.2 !important;
+  }
+  #bulletin-preview-content-area .text-sm {
+    font-size: 8.5pt !important;
+  }
+  #bulletin-preview-content-area .text-xs {
+    font-size: 7.5pt !important;
+  }
+
+  /* --- Spacing for Print --- */
+  #bulletin-preview-content-area .mb-6 { margin-bottom: 6mm !important; }
+  #bulletin-preview-content-area .mb-4 { margin-bottom: 4mm !important; }
+  #bulletin-preview-content-area .mt-2 { margin-top: 2mm !important; }
+  #bulletin-preview-content-area .pt-2 { padding-top: 2mm !important; }
+  .grid.grid-cols-1.md\:grid-cols-2.gap-4 { gap: 4mm !important; }
+  .border.rounded-lg.p-4.bg-gray-50 {
+    padding: 3mm !important;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    background-color: #f9f9f9 !important;
+  }
+
+  /* --- Table Specific Overrides for Print --- */
+  table {
+    border-collapse: collapse !important;
+    border-spacing: 0 !important;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+    font-size: 8.5pt !important;
+    color: #000 !important;
+    table-layout: fixed !important; /* Crucial for controlling column widths */
+    width: 100% !important; /* Ensure table fills available space */
+  }
+
+  th, td {
+    padding: 1.5mm 2mm !important;
+    vertical-align: middle !important;
+    text-align: center !important;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background-clip: padding-box !important;
+    word-wrap: break-word !important; /* Allows long words to break to fit */
+  }
+
+  /* --- Header (thead th) specific adjustments to reduce height --- */
+  thead th {
+    background: #e0e0e0 !important;
+    color: #333 !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: normal !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    
+    /* MODIFIED: Reduce vertical padding for header cells */
+    padding-top: 1mm !important; /* Was 2mm */
+    padding-bottom: 1mm !important; /* Was 2mm */
+    line-height: 1.1 !important; /* Explicitly set a tighter line height */
+    
+    border: 1px solid #999 !important;
+  }
+
+  tbody tr:nth-child(even) td {
+    background-color: #f9f9f9 !important;
+  }
+
+  tbody tr:hover td {
+    background-color: transparent !important; /* Prevent hover effects in print */
+  }
+
+  /* --- Column Width Adjustments --- */
+
+  /* First Column: MATIÈRE */
+  td:first-child,
+  th:first-child {
+    text-align: left !important;
+    width: 20% !important; 
+    min-width: 20% !important;
+    max-width: 20% !important;
+    padding-left: 3mm !important;
+  }
+
+  /* If min-w-[150px] is the class applied to the MATIERE column, ensure it's set correctly */
+  .min-w-\[150px\] {
+    width: 20% !important;
+    min-width: 20% !important;
+    max-width: 20% !important;
+  }
+
+  /* Second Column: COEFF */
+  td:nth-child(2),
+  th:nth-child(2) {
+    width: 7% !important;
+    min-width: 7% !important;
+    max-width: 7% !important;
+  }
+
+  /* Last Column: OBSERVATION */
+  td:last-child,
+  th:last-child {
+    width: 25% !important;
+    max-width: 25% !important;
+    text-align: left !important;
+    padding-left: 4mm !important;
+  }
+
+  /* Intermediate Columns (Devoir 5, Devoir 6, Moy. Devoir, Composition, Moy. Matière) */
+  td:nth-child(3), th:nth-child(3),
+  td:nth-child(4), th:nth-child(4),
+  td:nth-child(5), th:nth-child(5),
+  td:nth-child(6), th:nth-child(6),
+  td:nth-child(7), th:nth-child(7) {
+    width: 9.6% !important; 
+    min-width: 9.6% !important;
+    max-width: 9.6% !important;
+  }
+
+  /* Total (row at the bottom) */
+  td.font-bold:first-child {
+    width: 20% !important;
+    text-align: left !important;
+    padding-left: 3mm !important;
+  }
+  td.font-bold:last-child {
+      width: 9.6% !important;
+  }
+
+
+  /* --- Footer Specific Adjustments --- */
+  .text-gray-500 {
+    color: #555 !important;
+  }
+  .pt-2.pb-6 {
+    padding-bottom: 0 !important;
+    margin-top: 10mm !important;
+  }
+   .close-btn {
     display: none !important;
   }
 }

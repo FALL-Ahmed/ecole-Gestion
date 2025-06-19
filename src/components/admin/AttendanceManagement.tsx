@@ -22,7 +22,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { CalendarIcon, Save, Search } from 'lucide-react'; // Removed unused UserCheck, UserX
+import { CalendarIcon, Save, Search } from 'lucide-react';
 import { toast as sonnerToast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fr } from 'date-fns/locale';
@@ -46,7 +46,7 @@ interface Matiere {
   nom: string;
 }
 
-interface Utilisateur { // Utilisé pour l'élève dans l'inscription
+interface Utilisateur {
   id: number;
   nom: string;
   prenom: string;
@@ -60,15 +60,15 @@ interface Inscription {
 
 interface StudentAttendanceEntry {
   etudiant_id: number;
-  nom: string; // prenom + nom
+  nom: string;
   present: boolean;
   justified: boolean;
   justification: string;
-  existingAbsenceId?: number | null; // Pour savoir si on update ou crée une absence
+  existingAbsenceId?: number | null;
 }
 
 interface AbsenceRecord {
-  id: number; // ID de l'enregistrement d'absence
+  id: number;
   etudiant_id: number;
   etudiant_nom: string;
   etudiant_classe_nom: string;
@@ -81,7 +81,6 @@ interface AbsenceRecord {
   justification: string;
 }
 
-// Interface pour correspondre à la structure des données de l'emploi du temps de base
 interface EmploiDuTempsEntry {
   id: number;
   jour: 'Lundi' | 'Mardi' | 'Mercredi' | 'Jeudi' | 'Vendredi' | 'Samedi' | 'Dimanche';
@@ -92,9 +91,23 @@ interface EmploiDuTempsEntry {
   professeur_id: number;
 }
 
-const timeSlots = ["08:00-10:00", "10:15-12:00", "12:15-14:00"]; // Exemple
+const timeSlots = ["08:00-10:00", "10:15-12:00", "12:15-14:00"];
 
-// --- Composant Principal de Gestion d'Absence avec choix de vue ---
+const fetchData = async (url: string) => {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error(`Error fetching data from ${url}:`, error);
+    sonnerToast.error((error as Error).message);
+    return [];
+  }
+};
+
 export function AttendanceManagement() {
   const [anneesAcademiques, setAnneesAcademiques] = useState<AnneeAcademique[]>([]);
   const [selectedSchoolYearId, setSelectedSchoolYearId] = useState<string>('');
@@ -104,33 +117,28 @@ export function AttendanceManagement() {
     const fetchAnnees = async () => {
       setIsLoadingYears(true);
       try {
-        const response = await fetch(`${API_BASE_URL}/annees-academiques`);
-        if (!response.ok) throw new Error("Impossible de charger la liste des années académiques.");
-        const data: AnneeAcademique[] = await response.json();
+        const data = await fetchData(`${API_BASE_URL}/annees-academiques`);
         setAnneesAcademiques(data);
-        // Essayer de charger l'année scolaire configurée
+
         try {
           const configResponse = await fetch(`${API_BASE_URL}/configuration`);
           if (configResponse.ok) {
             const configData = await configResponse.json();
-            if (configData && configData.annee_scolaire && configData.annee_scolaire.id) {
+            if (configData?.annee_scolaire?.id) {
               const configuredYearId = configData.annee_scolaire.id.toString();
-              // Vérifier si l'année configurée existe dans la liste des années chargées
               if (data.some(annee => annee.id.toString() === configuredYearId)) {
                 setSelectedSchoolYearId(configuredYearId);
-                return; // Sortir si l'année configurée est trouvée et définie
+                return;
               }
             }
-          } else if (configResponse.status !== 404) { // Ne pas considérer 404 comme une erreur bloquante
-            console.warn("Avertissement: Impossible de charger la configuration de l'année scolaire actuelle.", configResponse.statusText);
+          } else if (configResponse.status !== 404) {
+            console.warn("Warning: Unable to load current academic year configuration.", configResponse.statusText);
           }
         } catch (configError) {
-          console.warn("Avertissement: Erreur lors du chargement de la configuration de l'année scolaire.", configError);
+          console.warn("Warning: Error loading academic year configuration.", configError);
         }
 
-        // Logique de fallback si aucune année configurée n'est trouvée ou valide
         if (data.length > 0) {
-          // Essayer de trouver l'année actuelle ou la plus récente
           const currentYear = new Date().getFullYear();
           const defaultYear = data.find(a => a.libelle.startsWith(currentYear.toString())) || data[data.length - 1];
           setSelectedSchoolYearId(defaultYear.id.toString());
@@ -176,13 +184,13 @@ export function AttendanceManagement() {
           <TabsContent value="dailyAttendance">
             <ProfessorAttendance
               selectedSchoolYearId={selectedSchoolYearId}
-              anneesAcademiques={anneesAcademiques} // Pass down for display
+              anneesAcademiques={anneesAcademiques}
             />
           </TabsContent>
           <TabsContent value="absenceTracking">
             <AttendanceTracking
               selectedSchoolYearId={selectedSchoolYearId}
-              anneesAcademiques={anneesAcademiques} // Pass down for display
+              anneesAcademiques={anneesAcademiques}
             />
           </TabsContent>
         </Tabs>
@@ -210,7 +218,6 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('');
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
 
-  // Fetch classes when school year changes
   useEffect(() => {
     if (!selectedSchoolYearId) {
       setClasses([]);
@@ -221,11 +228,8 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
     const fetchClasses = async () => {
       setIsLoadingClasses(true);
       try {
-        const response = await fetch(`${API_BASE_URL}/classes?annee_scolaire_id=${selectedSchoolYearId}`);
-        if (!response.ok) throw new Error("Impossible de charger les classes.");
-        const allClassesForYear: Classe[] = await response.json();
-        // Filtrage explicite côté client pour s'assurer que seules les classes de l'année sélectionnée sont affichées.
-        const filteredClasses = allClassesForYear.filter(cls => cls.annee_scolaire_id === parseInt(selectedSchoolYearId));
+        const allClassesForYear = await fetchData(`${API_BASE_URL}/classes?annee_scolaire_id=${selectedSchoolYearId}`);
+        const filteredClasses = allClassesForYear.filter((cls: Classe) => cls.annee_scolaire_id === parseInt(selectedSchoolYearId));
         setClasses(filteredClasses);
       } catch (error) {
         sonnerToast.error((error as Error).message);
@@ -234,19 +238,16 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
       }
     };
     fetchClasses();
-    setSelectedClass(''); // Reset class on year change
-    setSelectedSubject(''); // Cascade reset
+    setSelectedClass('');
+    setSelectedSubject('');
     setSelectedTimeSlot('');
     setAttendanceData([]);
   }, [selectedSchoolYearId]);
 
-  // Fetch matieres (could be dependent on class or all matieres)
-  // Fetch matieres
   useEffect(() => {
     if (!selectedClass || !selectedSchoolYearId || !date) {
       setMatieres([]);
       setSelectedSubject('');
-      // Cascading resets for dependent states
       setAvailableSessions([]);
       setSelectedTimeSlot('');
       setAttendanceData([]);
@@ -255,33 +256,17 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
 
     const fetchMatieresForDay = async () => {
       setIsLoadingMatieres(true);
-      setMatieres([]); // Clear previous matieres
-      setSelectedSubject(''); // Reset subject selection
+      setMatieres([]);
+      setSelectedSubject('');
 
       try {
-        const dayOfWeekNameUncapitalized = format(date, 'EEEE', { locale: fr });
-        const dayOfWeekName = dayOfWeekNameUncapitalized.charAt(0).toUpperCase() + dayOfWeekNameUncapitalized.slice(1);
+        const dayOfWeekName = format(date, 'EEEE', { locale: fr }).charAt(0).toUpperCase() + format(date, 'EEEE', { locale: fr }).slice(1);
 
-        // 1. Fetch all subjects for the selected class
-        const matieresResponse = await fetch(`${API_BASE_URL}/coefficientclasse?classeId=${selectedClass}`);
-        if (!matieresResponse.ok) throw new Error("Impossible de charger les matières de la classe.");
-        const coefficientClasses = await matieresResponse.json();
-        const allClassMatieres: Matiere[] = coefficientClasses.map((cc: any) => cc.matiere).filter(Boolean);
+        const matieresResponse = await fetchData(`${API_BASE_URL}/coefficientclasse?classeId=${selectedClass}`);
+        const allClassMatieres = matieresResponse.map((cc: any) => cc.matiere).filter(Boolean);
 
-        // 2. Fetch timetable entries for the selected class and school year
-        const emploiDuTempsResponse = await fetch(`${API_BASE_URL}/emploi-du-temps?classe_id=${selectedClass}&annee_scolaire_id=${selectedSchoolYearId}`);
-        if (!emploiDuTempsResponse.ok) {
-          if (emploiDuTempsResponse.status === 404) {
-            setMatieres([]);
-            sonnerToast.info("Aucun emploi du temps de base trouvé pour cette classe et année scolaire.");
-            return;
-          }
-          throw new Error("Impossible de charger l'emploi du temps.");
-        }
-        const allTimetableEntries: EmploiDuTempsEntry[] = await emploiDuTempsResponse.json();
-
-        // 3. Filter timetable entries for the specific day of the week
-        const timetableEntriesForDay = allTimetableEntries.filter(entry => entry.jour === dayOfWeekName);
+        const emploiDuTempsResponse = await fetchData(`${API_BASE_URL}/emploi-du-temps?classe_id=${selectedClass}&annee_scolaire_id=${selectedSchoolYearId}`);
+        const timetableEntriesForDay = emploiDuTempsResponse.filter((entry: EmploiDuTempsEntry) => entry.jour === dayOfWeekName);
 
         if (timetableEntriesForDay.length === 0) {
           setMatieres([]);
@@ -289,24 +274,24 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
           return;
         }
 
-        const subjectIdsForDay = [...new Set(timetableEntriesForDay.map(entry => entry.matiere_id))];
-        const subjectsScheduledToday = allClassMatieres.filter(matiere => subjectIdsForDay.includes(matiere.id));
+        const subjectIdsForDay = [...new Set(timetableEntriesForDay.map((entry: EmploiDuTempsEntry) => entry.matiere_id))];
+        const subjectsScheduledToday = allClassMatieres.filter((matiere: Matiere) => subjectIdsForDay.includes(matiere.id));
         setMatieres(subjectsScheduledToday);
 
         if (subjectsScheduledToday.length === 1) {
           setSelectedSubject(subjectsScheduledToday[0].id.toString());
         }
-      } catch (error) { sonnerToast.error((error as Error).message); setMatieres([]); }
-      finally { setIsLoadingMatieres(false); }
+      } catch (error) {
+        sonnerToast.error((error as Error).message);
+        setMatieres([]);
+      } finally {
+        setIsLoadingMatieres(false);
+      }
     };
 
     fetchMatieresForDay();
-    setSelectedTimeSlot('');
-    setAvailableSessions([]);     
-    setAttendanceData([]);
   }, [selectedClass, selectedSchoolYearId, date]);
 
-  // Fetch sessions when date, class, or subject changes
   useEffect(() => {
     if (!date || !selectedClass || !selectedSubject || !selectedSchoolYearId) {
       setAvailableSessions([]);
@@ -318,39 +303,22 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
     const fetchSessions = async () => {
       setIsLoadingSessions(true);
       setAvailableSessions([]);
-      setSelectedTimeSlot(''); 
-      setAttendanceData([]); 
+      setSelectedTimeSlot('');
+      setAttendanceData([]);
 
       try {
+        const dayOfWeekName = format(date, 'EEEE', { locale: fr }).charAt(0).toUpperCase() + format(date, 'EEEE', { locale: fr }).slice(1);
+        const response = await fetchData(`${API_BASE_URL}/emploi-du-temps?classe_id=${selectedClass}&matiere_id=${selectedSubject}&annee_scolaire_id=${selectedSchoolYearId}`);
 
-         const dayOfWeekNameUncapitalized = format(date, 'EEEE', { locale: fr });
-        const dayOfWeekName = dayOfWeekNameUncapitalized.charAt(0).toUpperCase() + dayOfWeekNameUncapitalized.slice(1);
-        // 2. Appeler l'API pour obtenir TOUTES les sessions pour cette classe/matière/année
-        //    (sans le paramètre date, car on va filtrer par jour nous-mêmes)
-        const response = await fetch(`${API_BASE_URL}/emploi-du-temps?classe_id=${selectedClass}&matiere_id=${selectedSubject}&annee_scolaire_id=${selectedSchoolYearId}`);
-                if (!response.ok) {
-          if (response.status === 404) {
-            setAvailableSessions([]);
-            sonnerToast.info("Aucune session de cours (base) trouvée pour cette classe et matière.");
-            return;
-          }
-         throw new Error("Impossible de charger les sessions de cours (base).");
-        }
-
-        const allClassSubjectSessions: EmploiDuTempsEntry[] = await response.json();
-
-        // 3. Filtrer ces sessions par le jour de la semaine calculé
-const sessionsForDay = allClassSubjectSessions.filter(session => 
-          session.jour === dayOfWeekName && 
-          session.matiere_id === parseInt(selectedSubject)
+        const sessionsForDay = response.filter((session: EmploiDuTempsEntry) =>
+          session.jour === dayOfWeekName && session.matiere_id === parseInt(selectedSubject)
         );
-        // 4. Mettre à jour l'état avec les sessions filtrées
-        //    et s'assurer que availableSessions contient des objets avec heure_debut et heure_fin
-        setAvailableSessions(sessionsForDay.map(s => ({ heure_debut: s.heure_debut, heure_fin: s.heure_fin })));
+
+        setAvailableSessions(sessionsForDay.map((s: EmploiDuTempsEntry) => ({ heure_debut: s.heure_debut, heure_fin: s.heure_fin })));
 
         if (sessionsForDay.length === 1) {
           const session = sessionsForDay[0];
-          setSelectedTimeSlot(`${session.heure_debut.substring(0,5)}-${session.heure_fin.substring(0,5)}`);
+          setSelectedTimeSlot(`${session.heure_debut.substring(0, 5)}-${session.heure_fin.substring(0, 5)}`);
         } else if (sessionsForDay.length === 0) {
           sonnerToast.info(`Aucune session de cours trouvée pour ${dayOfWeekName}, pour cette classe et matière.`);
         }
@@ -364,7 +332,6 @@ const sessionsForDay = allClassSubjectSessions.filter(session =>
     fetchSessions();
   }, [date, selectedClass, selectedSubject, selectedSchoolYearId]);
 
-  // Fetch students and existing attendance when a timeslot is selected (or automatically set)
   useEffect(() => {
     if (!selectedClass || !selectedSubject || !date || !selectedSchoolYearId || !selectedTimeSlot) {
       setAttendanceData([]);
@@ -373,38 +340,38 @@ const sessionsForDay = allClassSubjectSessions.filter(session =>
     const fetchStudentsAndAttendance = async () => {
       setIsLoadingStudents(true);
       try {
-        const inscriptionsRes = await fetch(`${API_BASE_URL}/inscriptions?classeId=${selectedClass}&anneeScolaireId=${selectedSchoolYearId}`);
-        if (!inscriptionsRes.ok) throw new Error("Impossible de charger les élèves.");
-        const inscriptions: Inscription[] = await inscriptionsRes.json();
-
+        const inscriptions = await fetchData(`${API_BASE_URL}/inscriptions?classeId=${selectedClass}&anneeScolaireId=${selectedSchoolYearId}`);
         const [heure_debut, heure_fin] = selectedTimeSlot.split('-');
         const absencesRes = await fetch(`${API_BASE_URL}/absences?date=${format(date, 'yyyy-MM-dd')}&classe_id=${selectedClass}&matiere_id=${selectedSubject}&annee_scolaire_id=${selectedSchoolYearId}&heure_debut=${heure_debut}:00&heure_fin=${heure_fin}:00`);
         let existingAbsences: AbsenceRecord[] = [];
         if (absencesRes.ok) {
           existingAbsences = await absencesRes.json();
         } else if (absencesRes.status !== 404) {
-          console.warn("Erreur lors du chargement des absences existantes:", absencesRes.statusText);
+          console.warn("Error loading existing absences:", absencesRes.statusText);
         }
 
-        const studentEntries: StudentAttendanceEntry[] = inscriptions.map(inscription => {
+        const studentEntries = inscriptions.map((inscription: Inscription) => {
           const etudiant = inscription.utilisateur;
-          const existingAbsence = existingAbsences.find(abs => abs.etudiant_id === etudiant.id);
+          const existingAbsence = existingAbsences.find((abs: AbsenceRecord) => abs.etudiant_id === etudiant.id);
           return {
             etudiant_id: etudiant.id,
             nom: `${etudiant.prenom} ${etudiant.nom}`,
             present: !existingAbsence,
-            justified: existingAbsence?.justified || false,
+            justified: !!existingAbsence?.justification,
             justification: existingAbsence?.justification || '',
             existingAbsenceId: existingAbsence?.id || null,
           };
         });
         setAttendanceData(studentEntries);
-      } catch (error) { sonnerToast.error((error as Error).message); setAttendanceData([]); }
-      finally { setIsLoadingStudents(false); }
+      } catch (error) {
+        sonnerToast.error((error as Error).message);
+        setAttendanceData([]);
+      } finally {
+        setIsLoadingStudents(false);
+      }
     };
     fetchStudentsAndAttendance();
   }, [selectedClass, selectedSubject, date, selectedSchoolYearId, selectedTimeSlot]);
-
 
   const handlePresentChange = (etudiant_id: number, present: boolean) => {
     setAttendanceData(prevData =>
@@ -459,8 +426,8 @@ const sessionsForDay = allClassSubjectSessions.filter(session =>
         throw new Error(errorData.message || "Erreur lors de la sauvegarde des présences.");
       }
       sonnerToast.success("Présences enregistrées avec succès !");
-      setSelectedClass(''); // Déclenchera les useEffect pour réinitialiser les champs dépendants
-      setDate(new Date());    // Réinitialiser la date au jour actuel
+      setSelectedClass('');
+      setDate(new Date());
     } catch (error) {
       sonnerToast.error((error as Error).message);
     }
@@ -543,12 +510,13 @@ const sessionsForDay = allClassSubjectSessions.filter(session =>
                 <SelectValue placeholder={isLoadingSessions ? "Chargement..." : "Choisir une session"} />
               </SelectTrigger>
               <SelectContent>
-               {availableSessions.map((session, index) => {
-                  const slot = `${session.heure_debut.substring(0,5)}-${session.heure_fin.substring(0,5)}`;
-                  return (<SelectItem key={index} value={slot}>
-                    {slot}
-                 
-                </SelectItem>);
+                {availableSessions.map((session, index) => {
+                  const slot = `${session.heure_debut.substring(0, 5)}-${session.heure_fin.substring(0, 5)}`;
+                  return (
+                    <SelectItem key={index} value={slot}>
+                      {slot}
+                    </SelectItem>
+                  );
                 })}
               </SelectContent>
             </Select>
@@ -558,9 +526,7 @@ const sessionsForDay = allClassSubjectSessions.filter(session =>
         {isFormComplete ? (
           isLoadingStudents ? (
             <div className="text-center py-8">Chargement des élèves...</div>
-          ) : isLoadingSessions ? (
-            <div className="text-center py-8">Chargement des sessions...</div>
-          ) : ( 
+          ) : (
             <div className="mt-6">
               <Card className="border-2 border-dashed border-green-300 bg-green-50">
                 <CardHeader className="pb-3">
@@ -584,7 +550,7 @@ const sessionsForDay = allClassSubjectSessions.filter(session =>
                           <TableRow>
                             <TableHead className="w-1/2 text-gray-700">Élève</TableHead>
                             <TableHead className="w-1/4 text-center text-gray-700">Présent</TableHead>
-                            <TableHead className="w-1/4 text-center text-gray-700">Absent </TableHead>
+                            <TableHead className="w-1/4 text-center text-gray-700">Absent</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -616,7 +582,6 @@ const sessionsForDay = allClassSubjectSessions.filter(session =>
                       </Table>
                     </div>
                   )}
-
                   <div className="mt-6 flex justify-end">
                     <Button onClick={saveAttendance} className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md transition-colors" disabled={attendanceData.length === 0}>
                       <Save className="mr-2 h-5 w-5" />
@@ -630,11 +595,14 @@ const sessionsForDay = allClassSubjectSessions.filter(session =>
         ) : (
           <div className="bg-white rounded-lg p-8 text-center shadow-inner border border-gray-200">
             <p className="text-gray-600 text-lg font-medium">
-Veuillez <span className="font-bold text-blue-600">sélectionner une classe, une date et une matière</span>.
+              Veuillez <span className="font-bold text-blue-600">sélectionner une classe, une date et une matière</span>.
               {selectedSubject && availableSessions.length > 1 && !selectedTimeSlot && (
                 <span className="block mt-2">Plusieurs sessions existent, veuillez <span className="font-bold text-blue-600">choisir une session</span>.</span>
               )}
-               {selectedSubject && availableSessions.length === 0 && !isLoadingSessions && (<span className="block mt-2 text-orange-600">Aucune session de cours trouvée pour les filtres actuels.</span>)}            </p>
+              {selectedSubject && availableSessions.length === 0 && !isLoadingSessions && (
+                <span className="block mt-2 text-orange-600">Aucune session de cours trouvée pour les filtres actuels.</span>
+              )}
+            </p>
           </div>
         )}
       </CardContent>
@@ -642,7 +610,6 @@ Veuillez <span className="font-bold text-blue-600">sélectionner une classe, une
   );
 }
 
-// --- Vue 2: Suivi et Justification des Absences ---
 interface AttendanceTrackingProps {
   selectedSchoolYearId: string;
   anneesAcademiques: AnneeAcademique[];
@@ -651,14 +618,13 @@ interface AttendanceTrackingProps {
 export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: AttendanceTrackingProps) {
   const [classes, setClasses] = useState<Classe[]>([]);
   const [selectedClass, setSelectedClass] = useState<string>('');
-  const [startDate, setStartDate] = useState<Date>(new Date(new Date().setDate(new Date().getDate() - 30))); // Default to last 30 days
+  const [startDate, setStartDate] = useState<Date>(new Date(new Date().setDate(new Date().getDate() - 30)));
   const [endDate, setEndDate] = useState<Date>(new Date());
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [absenceRecords, setAbsenceRecords] = useState<AbsenceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingClasses, setIsLoadingClasses] = useState(false);
 
-  // Fetch classes
   useEffect(() => {
     if (!selectedSchoolYearId) {
       setClasses([]);
@@ -668,20 +634,20 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
     const fetchClassesData = async () => {
       setIsLoadingClasses(true);
       try {
-        const response = await fetch(`${API_BASE_URL}/classes?annee_scolaire_id=${selectedSchoolYearId}`);
-        if (!response.ok) throw new Error("Impossible de charger les classes.");
-        const allClassesForYear: Classe[] = await response.json();
-        // Filtrage explicite côté client
-        const filteredClasses = allClassesForYear.filter(cls => cls.annee_scolaire_id === parseInt(selectedSchoolYearId));
-        setClasses(filteredClasses);      } catch (error) { sonnerToast.error((error as Error).message); }
-      finally { setIsLoadingClasses(false); }
+        const allClassesForYear = await fetchData(`${API_BASE_URL}/classes?annee_scolaire_id=${selectedSchoolYearId}`);
+        const filteredClasses = allClassesForYear.filter((cls: Classe) => cls.annee_scolaire_id === parseInt(selectedSchoolYearId));
+        setClasses(filteredClasses);
+      } catch (error) {
+        sonnerToast.error((error as Error).message);
+      } finally {
+        setIsLoadingClasses(false);
+      }
     };
     fetchClassesData();
-    setSelectedClass(''); // Reset class on year change
+    setSelectedClass('');
     setAbsenceRecords([]);
   }, [selectedSchoolYearId]);
 
-  // Fetch absences
   useEffect(() => {
     if (!selectedClass || !startDate || !endDate || !selectedSchoolYearId) {
       setAbsenceRecords([]);
@@ -698,17 +664,9 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
         });
         if (searchQuery) params.append('search', searchQuery);
 
-        const response = await fetch(`${API_BASE_URL}/absences?${params.toString()}`);
-        if (!response.ok) {
-          if (response.status === 404) {
-            setAbsenceRecords([]); // No data found is not an error for display
-            return;
-          }
-          throw new Error("Impossible de charger les absences.");
-        }
-        const data: AbsenceRecord[] = await response.json();
-       // Transformation des données reçues de l'API pour correspondre à l'interface AbsenceRecord
-        const mappedData = data.map((item: any) => ({
+        const response = await fetchData(`${API_BASE_URL}/absences?${params.toString()}`);
+
+        const mappedData = response.map((item: any) => ({
           id: item.id,
           etudiant_id: item.etudiant_id || item.etudiant?.id,
           etudiant_nom: item.etudiant ? `${item.etudiant.prenom || ''} ${item.etudiant.nom || ''}`.trim() : 'Élève inconnu',
@@ -718,16 +676,19 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
           matiere_nom: item.matiere ? item.matiere.nom : 'Matière inconnue',
           heure_debut: item.heure_debut,
           heure_fin: item.heure_fin,
-          justified: item.justified,
+          justified: !!item.justification,
           justification: item.justification || '',
         }));
         setAbsenceRecords(mappedData);
-      } catch (error) { sonnerToast.error((error as Error).message); setAbsenceRecords([]); }
-      finally { setIsLoading(false); }
+      } catch (error) {
+        sonnerToast.error((error as Error).message);
+        setAbsenceRecords([]);
+      } finally {
+        setIsLoading(false);
+      }
     };
     fetchAbsences();
   }, [selectedClass, startDate, endDate, searchQuery, selectedSchoolYearId]);
-
 
   const handleJustificationChange = (absenceId: number, justification: string) => {
     setAbsenceRecords(prevData =>
@@ -853,23 +814,23 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
         </div>
 
         {isFilterComplete ? (
-          isLoading ? (
-            <div className="text-center py-8">Chargement des absences...</div>
-          ) : (
-            <div className="space-y-6 mt-6">
-              <div className="flex justify-end">
-                <div className="relative w-64">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-                  <Input
-                    placeholder="Rechercher un élève..."
-                    className="pl-9 bg-white"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
+          <>
+            <div className="flex justify-end mt-6 mb-4">
+              <div className="relative w-64">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+                <Input
+                  placeholder="Rechercher un élève..."
+                  className="pl-9 bg-white"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
               </div>
+            </div>
 
-              {filteredAbsenceRecords.length > 0 ? (
+            <div className="mt-6">
+              {isLoading ? (
+                <p className="text-center text-gray-500">Chargement des données...</p>
+              ) : filteredAbsenceRecords.length > 0 ? (
                 <Card className="shadow-md">
                   <CardContent className="p-0">
                     <div className="overflow-x-auto">
@@ -913,7 +874,9 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
                                 <Input
                                   placeholder="Motif de l'absence..."
                                   value={record.justification}
-                                  onChange={(e) => handleJustificationChange(record.id, e.target.value)}
+                                  onChange={(e) =>
+                                    handleJustificationChange(record.id, e.target.value)
+                                  }
                                   disabled={record.justified}
                                   className="w-full text-gray-800 bg-white"
                                 />
@@ -941,16 +904,16 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
               ) : (
                 <div className="bg-white rounded-lg p-8 text-center shadow-inner border border-gray-200">
                   <p className="text-gray-600 text-lg font-medium">
-                  Aucune absence trouvée pour les critères de recherche et l'année scolaire {anneeScolaireSelectionnee}.
+                    Aucune absence trouvée pour les critères de recherche et l'année scolaire {anneeScolaireSelectionnee}.
                   </p>
                 </div>
               )}
             </div>
-          )
+          </>
         ) : (
           <div className="bg-white rounded-lg p-8 text-center shadow-inner border border-gray-200">
             <p className="text-gray-600 text-lg font-medium">
-+              Veuillez <span className="font-bold text-purple-600">sélectionner une classe, une date de début et une date de fin</span> pour visualiser les absences.
+              Veuillez <span className="font-bold text-purple-600">sélectionner une classe, une date de début et une date de fin</span> pour visualiser les absences.
             </p>
           </div>
         )}

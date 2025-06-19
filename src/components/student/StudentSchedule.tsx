@@ -591,8 +591,8 @@ export function StudentSchedule() {
 <div className="p-6">
               <header className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 p-4 bg-white/70 backdrop-blur-md rounded-2xl border border-gray-100">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900 leading-tight drop">
-                        Mon Emploi du Temps <span className="text-blue-700">{studentName}</span>
+                    <h1 className="text-2xl font-bold text-gray-900 leading-tight drop">
+                        Mon Emploi du Temps 
                         {studentClassName && studentClassName !== 'Classe inconnue' && (
                             <span className="text-2xl text-gray-500 ml-2 font-medium">({studentClassName})</span>
                         )}

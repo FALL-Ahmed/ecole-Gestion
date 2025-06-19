@@ -9,6 +9,7 @@ export class AffectationController {
   @Get()
   async findAll(
     @Query('professeurId') professeurId?: number,
+    
   ): Promise<Affectation[]> {
     console.log('🔎 Requête findAll avec professeurId:', professeurId);
     
