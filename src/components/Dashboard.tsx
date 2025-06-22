@@ -534,23 +534,7 @@ export function Dashboard() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Moyennes par Classe</CardTitle>
-                  <CardDescription>Performance académique par classe</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={filterDataByClass(gradesByClass[selectedYear])}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="class" />
-                      <YAxis domain={[0, 20]} />
-                      <Tooltip />
-                      <Bar dataKey="moyenne" fill="#3b82f6" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+              
 
               <Card>
                 <CardHeader>

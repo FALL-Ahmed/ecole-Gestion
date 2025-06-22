@@ -315,7 +315,7 @@ export function ChapterPlanning() {
   matiereId: Number(ch.matiereId), // S'assurer que c'est un nombre
   classeId: Number(ch.classeId),   // S'assurer que c'est un nombre
   className: derivedProfessorClasses.find(c => Number(c.id) === Number(ch.classeId))?.nom || 'Classe inconnue',
-  subjectName: allMatieres.find(m => Number(m.id) === Number(ch.matiereId))?.nom || 'Matière inconnue',
+  subjectName: ch.description || 'Description du chapitre non disponible', // Utiliser la description du chapitre ici
 }));
 setChapters(chaptersWithNames);
     } catch (error) {

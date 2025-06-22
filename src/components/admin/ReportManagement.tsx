@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { FileDown, Printer, Search, Eye } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { useEstablishmentInfo } from '@/contexts/EstablishmentInfoContext'; // Import the context hook
 
 
 interface AnneeAcademique {
@@ -760,6 +761,8 @@ export function ReportManagement() {
   const isFormComplete = selectedAnneeAcademiqueId && selectedClassId && selectedTermId;
 
   // Fonction pour déterminer la mention en fonction de la moyenne
+    const { schoolName, address, phone, website } = useEstablishmentInfo();
+
   const getMention = (moyenne: number): string => {
     if (moyenne >= 16) return "Félicitations";
     if (moyenne >= 14) return "Très Bien";
@@ -994,7 +997,7 @@ export function ReportManagement() {
         <div className="mb-6 text-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
   <div>
-    <p><strong>Établissement:</strong> École Sources des Sciences</p>
+    <p><strong>Établissement:</strong> {schoolName}</p>
     <p><strong>Élève:</strong> {selectedReport.name}</p>
     <p><strong>Matricule:</strong> 123456</p>
   </div>
@@ -1110,17 +1113,33 @@ export function ReportManagement() {
                 </TableRow>
             ))}
             {selectedReport && (
-             <TableRow className="bg-gray-50 font-bold print:bg-gray-100"> {(() => {
-                  const numDevoirHeaders = dynamicEvaluationHeaders.filter(h => h.toLowerCase().includes('devoir')).length;
+<TableRow className="bg-gray-50 font-bold print:bg-gray-100">
+                {(() => {
+                  let totalCoefficients = 0;
+                  let totalPointsPonderes = 0;
+                  selectedReport.notesParMatiere.forEach(matiere => {
+                    totalCoefficients += matiere.coefficient;
+                    totalPointsPonderes += matiere.moyenneMatiere * matiere.coefficient;
+                  });                  const numDevoirHeaders = dynamicEvaluationHeaders.filter(h => h.toLowerCase().includes('devoir')).length;
                   const numCompoHeaders = dynamicEvaluationHeaders.filter(h => h.toLowerCase().includes('compo') && !h.toLowerCase().includes('devoir')).length;
                   const hasDevoirSpecificColumn = numDevoirHeaders > 0;
-                  return <>
-                    <TableCell colSpan={2 + (hasDevoirSpecificColumn ? 1 : 0)}>Totaux</TableCell>
-                    <TableCell colSpan={numDevoirHeaders + numCompoHeaders}></TableCell> {/* Espace pour les notes Devoir/Compo */}
-                  </>;
+                                  const emptyCellColSpan = numDevoirHeaders + (hasDevoirSpecificColumn ? 1 : 0) + numCompoHeaders;
+
+                  return (
+                    <>
+                      <TableCell>Totaux</TableCell> {/* Aligns with Matière */}
+                      <TableCell className="text-center">{totalCoefficients.toFixed(0)}</TableCell> {/* Aligns with Coeff */}
+                      {/* Empty cells for dynamic note headers */}
+                      <TableCell colSpan={emptyCellColSpan}></TableCell>
+                      {/* Total Points Pondérés */}
+                      <TableCell className="text-center">{totalPointsPonderes.toFixed(2)}</TableCell> {/* Aligns with Moy. Matiere */}
+                      {/* Moyenne Générale & Rang */}
+                     
+                    </>
+                  );
+
                 })()}
-                <TableCell className="text-blue-700 text-center">{selectedReport.avg}/20</TableCell>
-                <TableCell></TableCell>
+               
               </TableRow>
             )}
           </TableBody>
@@ -1175,8 +1194,12 @@ export function ReportManagement() {
       <div className="text-center text-xs text-gray-500 pt-2 pb-6 print:pb-0 print:text-xs">
         
         <p className="mt-2">Cachet et Signature de l'Administration</p>
-        <p className="mt-2">École Sources des Sciences - BP 1234 Nouakchott - Tél: 00 00 00 00</p>
-      </div>
+ <p className="mt-2">
+          {schoolName} - {address}
+          {phone && ` - Tél: ${phone}`}
+          {website && ` - Site: ${website}`}
+        </p>
+         </div>
     </div>
 
     {/* Actions non imprimables */}

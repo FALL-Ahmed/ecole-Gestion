@@ -1,5 +1,6 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useEstablishmentInfo } from '@/contexts/EstablishmentInfoContext'; // Import the context hook
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
@@ -27,7 +28,10 @@ interface SidebarProps {
 
 export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
   const { user, logout } = useAuth();
+    const { schoolName } = useEstablishmentInfo(); // Use the schoolName from context
 
+
+  
   const getMenuItems = () => {
     const commonItems = [
       { id: 'dashboard', label: 'Tableau de bord', icon: Home }
@@ -73,9 +77,14 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
 
   return (
     <div className="w-64 bg-white border-r border-gray-200 h-screen flex flex-col shadow-sm">
-      <div className="p-6 border-b border-gray-200">
-        <h2 className="text-xl font-bold text-blue-900">Sources des Sciences</h2>
-       
+      <div className="flex items-center justify-center p-6 border-b border-gray-200 bg-gradient-to-br from-blue-50 to-indigo-50">
+        <div className="flex flex-col items-center text-center">
+          <div className="p-3 mb-3 rounded-full bg-blue-600 text-white shadow-lg">
+            <School className="h-8 w-8" />
+          </div>
+          <h2 className="text-2xl font-black text-blue-900 tracking-tight drop-shadow-sm">{schoolName}</h2>
+          <p className="text-xs text-gray-500 mt-1">Portail de Gestion</p>
+        </div>
       </div>
       
       <nav className="flex-1 p-4 overflow-y-auto">
@@ -86,14 +95,14 @@ export function Sidebar({ activeSection, onSectionChange }: SidebarProps) {
               <li key={item.id}>
                 <Button
                   variant={activeSection === item.id ? "default" : "ghost"}
-                  className={`w-full justify-start ${
+                  className={`w-full justify-start rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 ease-in-out group ${
                     activeSection === item.id 
-                      ? "bg-blue-600 text-white hover:bg-blue-700" 
-                      : "hover:bg-gray-100"
+                      ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md hover:from-blue-700 hover:to-blue-800"
+                      : "text-gray-700 hover:bg-blue-50 hover:text-blue-700 hover:shadow-sm"
                   }`}
                   onClick={() => onSectionChange(item.id)}
                 >
-                  <Icon className="mr-3 h-4 w-4" />
+                  <Icon className="mr-3 h-4 w-4 transition-transform duration-200 ease-in-out group-hover:scale-110" />
                   {item.label}
                 </Button>
               </li>

@@ -25,6 +25,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useEstablishmentInfo } from '@/contexts/EstablishmentInfoContext'; // Import the context hook
 
 export function Settings() {
   const { toast } = useToast();
@@ -32,12 +33,12 @@ export function Settings() {
 
   // School data
   const [accountForm, setAccountForm] = useState({
-    schoolName: "Sources des Sciences",
-    directorName: "M. Martin Dupont",
-    email: "direction@sources-sciences.fr",
-    phone: "01 23 45 67 89",
-    address: "123 Avenue de l'Éducation, 75001 Paris",
-    website: "www.sources-sciences.fr"
+    schoolName: "",
+    directorName: "",
+    email: "",
+    phone: "",
+    address: "",
+    website: ""
   });
 
   // Notification settings
@@ -60,7 +61,10 @@ export function Settings() {
   // Data for current academic year
   const [academicYearsList, setAcademicYearsList] = useState<any[]>([]);
   const [currentAcademicYearId, setCurrentAcademicYearId] = useState<number | null>(null);
-  const [isLoadingAcademicData, setIsLoadingAcademicData] = useState(true);
+  const [isLoadingAcademicConfig, setIsLoadingAcademicConfig] = useState(true);
+  const [isLoadingEstablishmentInfo, setIsLoadingEstablishmentInfo] = useState(true);
+
+  const { fetchEstablishmentInfo: fetchEstablishmentInfoContext } = useEstablishmentInfo(); // Get the context's fetch function
 
   // Utility function to find academic year name by ID
   const getAcademicYearNameById = useCallback((id: number | null) => {
@@ -102,6 +106,38 @@ export function Settings() {
     }
   };
 
+  // Fetches establishment information
+  const fetchEstablishmentInfo = async () => {
+    setIsLoadingEstablishmentInfo(true);
+    try {
+      const response = await fetch('http://localhost:3000/api/establishment-info');
+      if (!response.ok) {
+        if (response.status === 404) {
+          // No info found, use defaults or empty strings
+          setAccountForm({ schoolName: "", directorName: "", email: "", phone: "", address: "", website: "" });
+          toast({ title: "Information", description: "Aucune information d'établissement trouvée. Vous pouvez en configurer.", variant: "default" });
+          return;
+        }
+        throw new Error('Failed to fetch establishment information');
+      }
+      const data = await response.json();
+      setAccountForm({
+        schoolName: data.schoolName || "",
+        directorName: data.directorName || "",
+        email: data.email || "",
+        phone: data.phone || "",
+        address: data.address || "",
+        website: data.website || ""
+      });
+    } catch (error: any) {
+      console.error('Error fetching establishment information:', error);
+      toast({ title: "Erreur", description: `Impossible de charger les informations de l'établissement: ${error.message}.`, variant: "destructive" });
+      setAccountForm({ schoolName: "Erreur chargement", directorName: "", email: "", phone: "", address: "", website: "" });
+    } finally {
+      setIsLoadingEstablishmentInfo(false);
+    }
+  };
+
   // Fetches the currently configured academic year ID
   const fetchCurrentAcademicYearConfiguration = async () => {
     try {
@@ -130,20 +166,22 @@ export function Settings() {
   // Combined effect to load all academic data
   useEffect(() => {
     const loadAcademicData = async () => {
-      setIsLoadingAcademicData(true);
+      setIsLoadingAcademicConfig(true);
       await fetchAcademicYears();
+      // Establishment info is independent of academic years list for its initial fetch
+      await fetchEstablishmentInfo();
     };
     loadAcademicData();
   }, []);
 
   // This useEffect will run when academicYearsList is updated
   useEffect(() => {
-    if (academicYearsList.length > 0) {
+    if (academicYearsList.length > 0 || !isLoadingAcademicConfig) { // Ensure it runs even if list is empty but initial load attempt finished
       fetchCurrentAcademicYearConfiguration().then(() => {
-        setIsLoadingAcademicData(false);
+        setIsLoadingAcademicConfig(false);
       });
-    } else if (academicYearsList.length === 0 && !isLoadingAcademicData) {
-      setIsLoadingAcademicData(false);
+    } else if (academicYearsList.length === 0 && !isLoadingAcademicConfig) { // Handles case where fetchAcademicYears finishes with empty list
+      setIsLoadingAcademicConfig(false);
     }
   }, [academicYearsList]);
 
@@ -168,7 +206,35 @@ export function Settings() {
     let success = true;
     let description = `Vos paramètres ${getTabDescription(activeTab)} ont été mis à jour.`;
 
-    if (activeTab === 'academic') {
+    if (activeTab === 'account') {
+      try {
+        const response = await fetch('http://localhost:3000/api/establishment-info', {
+          method: 'POST', // Or PUT, depending on your API design for single resource
+          headers: { 'Content-Type': 'application/json' },
+ body: JSON.stringify({
+            ...accountForm,
+            // Convert empty strings to null for optional URL fields
+            website: accountForm.website === "" ? null : accountForm.website,
+            // Ajoutez d'autres champs optionnels si nécessaire
+          }),        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Échec de la sauvegarde des informations de l'établissement.");
+        }
+        await fetchEstablishmentInfo(); // Re-fetch to confirm
+        await fetchEstablishmentInfoContext(); // Trigger update in shared context
+      } catch (error: any) {
+        console.error('Error saving establishment information:', error);
+        description = `Erreur lors de la sauvegarde des informations de l'établissement: ${error.message}`;
+        success = false;
+      }
+    } else if (activeTab === 'notifications') {
+      // TODO: Implement saving notification settings to a dedicated endpoint or /api/configuration
+      description = "La sauvegarde des paramètres de notification n'est pas encore implémentée.";
+      success = false; // Mark as not successful until implemented
+    } else if (activeTab === 'security') {
+      // TODO: Implement saving security settings
+    } else if (activeTab === 'academic') {
       if (currentAcademicYearId === null) {
         toast({
           title: "Erreur de sauvegarde",
@@ -184,11 +250,8 @@ export function Settings() {
           headers: {
             'Content-Type': 'application/json',
           },
-          // --- THE CRITICAL FIX IS HERE ---
           body: JSON.stringify({
-            annee_scolaire: { // Now sends the nested object as expected by backend
-              id: currentAcademicYearId
-            }
+            annee_scolaire_id: currentAcademicYearId // Send as direct ID
           }),
           // --- END OF FIX ---
         });
@@ -256,7 +319,6 @@ export function Settings() {
                     className="w-full"
                   />
                 </FormItem>
-
                 <FormItem className="w-full">
                   <FormLabel>Nom du directeur *</FormLabel>
                   <Input
@@ -266,6 +328,7 @@ export function Settings() {
                     className="w-full"
                   />
                 </FormItem>
+                
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
@@ -313,22 +376,7 @@ export function Settings() {
 
               <Separator />
 
-              <FormItem className="w-full">
-                <FormLabel>Logo de l'établissement</FormLabel>
-                <div className="flex items-center gap-4 mt-2 w-full">
-                  <div className="w-16 h-16 bg-gray-100 border rounded flex items-center justify-center text-gray-400">
-                    Logo
-                  </div>
-                  <div className="flex flex-col gap-2 flex-grow">
-                    <Button variant="outline" className="w-full">
-                      Changer le logo
-                    </Button>
-                    <p className="text-xs text-gray-500">
-                      Formats acceptés: JPG, PNG (max. 2MB)
-                    </p>
-                  </div>
-                </div>
-              </FormItem>
+              
             </CardContent>
             <CardFooter className="flex justify-end">
               <Button onClick={saveSettings}>Enregistrer</Button>
@@ -437,8 +485,8 @@ export function Settings() {
             <CardContent className="space-y-6">
               <FormItem className="w-full">
                 <FormLabel>Année scolaire actuelle *</FormLabel>
-                {/* Conditionnellement rendre le Select lorsque les données sont chargées */}
-                {isLoadingAcademicData ? (
+                
+                {isLoadingAcademicConfig || isLoadingEstablishmentInfo ? ( // Check both loading states if they affect this part
                   <div>Chargement des années scolaires...</div>
                 ) : (
                   <Select

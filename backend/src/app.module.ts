@@ -19,6 +19,7 @@ import { EmploiDuTempsModule } from './emploidutemps/emploidutemps.module';
 import { ExceptionEmploiDuTempsModule } from './exceptionemploidutemps/exceptionemploidutemps.module'; // Nouvelle importation
 import { AbsenceModule } from './absence/absence.module'; // Adaptez le chemin
 import { ChapitreModule } from './chapitre/chapitre.module'; // Assurez-vous que le chemin est correct
+import { EtablissementInfoModule } from './etablissement/etablissement-info.module';
 
 
 
@@ -50,7 +51,8 @@ import { ChapitreModule } from './chapitre/chapitre.module'; // Assurez-vous que
     EmploiDuTempsModule,
     ExceptionEmploiDuTempsModule,
     AbsenceModule,
-    ChapitreModule 
+    ChapitreModule,
+    EtablissementInfoModule 
   ],
   controllers: [AppController],
   providers: [AppService],

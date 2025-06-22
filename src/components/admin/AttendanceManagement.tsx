@@ -513,7 +513,7 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
                 {availableSessions.map((session, index) => {
                   const slot = `${session.heure_debut.substring(0, 5)}-${session.heure_fin.substring(0, 5)}`;
                   return (
-                    <SelectItem key={index} value={slot}>
+                    <SelectItem key={slot} value={slot}>
                       {slot}
                     </SelectItem>
                   );
