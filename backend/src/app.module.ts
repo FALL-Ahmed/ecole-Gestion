@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule, ConfigService } from '@nestjs/config'; // Importez ConfigService
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -25,17 +26,26 @@ import { EtablissementInfoModule } from './etablissement/etablissement-info.modu
 
 @Module({
   imports: [
-    TypeOrmModule.forRoot({
-      type: 'mysql',
-      host: 'localhost',
-      port: 3306,
-      username: 'root',
-      password: '', // ← ton mot de passe MySQL ici
-      database: 'school_management', // ← nom de ta base de données
-      autoLoadEntities: true,
-      synchronize: false, // ← ne pas toucher aux tables existantes
+     ConfigModule.forRoot({
+      isGlobal: true, // Rend les variables d'environnement disponibles globalement
+      envFilePath: '.env', // Chemin vers votre fichier .env local
     }),
-
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule], // Importez ConfigModule pour utiliser ConfigService
+      useFactory: (configService: ConfigService) => ({
+        type: 'mysql', // Ou 'mariadb' si c'est le cas
+        host: configService.get<string>('DB_HOST'),
+        port: configService.get<number>('DB_PORT'),
+        username: configService.get<string>('DB_USER'),
+        password: configService.get<string>('DB_PASSWORD'),
+        database: configService.get<string>('DB_NAME'),
+        entities: [__dirname + '/**/*.entity{.ts,.js}'], // Chemin vers vos entités
+        // Ne jamais utiliser synchronize: true en production !
+synchronize: false,
+        logging: false,
+      }),
+      inject: [ConfigService], // Injectez ConfigService dans la factory
+    }),
     AuthModule,
     UsersModule,
     ClasseModule,

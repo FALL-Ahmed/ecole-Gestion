@@ -30,10 +30,9 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
   const [filterClasse, setFilterClasse] = useState("");
   const [filterAnnee, setFilterAnnee] = useState("");
   const [coefficients, setCoefficients] = useState([]);
-  const [coeffError, setCoeffError] = useState("");
   const [openAnnee, setOpenAnnee] = useState<string | null>(null);
   const [loadingTrimestres, setLoadingTrimestres] = useState(false);
-  const [coeffData, setCoeffData] = useState<{ [matiereId: string]: number }>({});
+  const [coeffData, setCoeffData] = useState<{ [matiereId: string]: number | '' }>({});
   const [anneeScolaireId, setAnneeScolaireId] = useState(''); // ✅ PAS null
   const [anneeScolaireFiltre, setAnneeScolaireFiltre] = useState(""); // ou null
   const [currentConfiguredAcademicYearId, setCurrentConfiguredAcademicYearId] = useState<string | null>(null);
@@ -50,7 +49,7 @@ const [trimestresToConfirm, setTrimestresToConfirm] = useState<Array<{ nom: stri
   id: number;
   classeNom: string;
   matiereNom: string;
-  coefficient: number;
+  coefficient: number | '';
   classeId?: number;
   matiereId?: number;
 } | null>(null);
@@ -62,6 +61,7 @@ const [trimestresToConfirm, setTrimestresToConfirm] = useState<Array<{ nom: stri
   const [classeNiveau, setClasseNiveau] = useState("Primaire");
   const [coeffClasse, setCoeffClasse] = useState("");
   const [selectedMatieres, setSelectedMatieres] = useState<{ [id: string]: number }>({});
+  const [coeffError, setCoeffError] = useState("");
 
   const [coeffMatiere, setCoeffMatiere] = useState("");
   const [coefficient, setCoefficient] = useState(1);
@@ -1192,18 +1192,19 @@ return matieresUniques.map(c => (
   return;
 }
 
-// Vérification supplémentaire
-const classeId = Number(coeffClasse);
-if (isNaN(classeId)) {
-  setCoeffError("L'identifiant de la classe est invalide.");
-  return;
-}
-        // Création du payload avec parsing sécurisé des ids et coefficients
-        const payload = Object.entries(coeffData).map(([matiere_id, coefficient]) => ({
+  // Filter out entries with empty or invalid coefficients before creating the payload
+        const payload = Object.entries(coeffData)
+          .filter(([_, coefficient]) => coefficient !== '' && !isNaN(Number(coefficient)) && Number(coefficient) > 0)
+          .map(([matiere_id, coefficient]) => ({
           classe_id: Number(coeffClasse),
           matiere_id: Number(matiere_id),
           coefficient: Number(coefficient),
         }));
+
+          if (payload.length === 0) {
+          setCoeffError("Veuillez renseigner au moins un coefficient valide.");
+          return;
+        }
 
         try {
           const response = await fetch("http://localhost:3000/api/coefficientclasse", {
@@ -1327,11 +1328,14 @@ if (isNaN(classeId)) {
                         <input
                           type="number"
                           value={coeffData[matiere.id]}
-                          onChange={(e) =>
-                            setCoeffData({ ...coeffData, [matiere.id]: parseInt(e.target.value) || 1 })
-                          }
+                                                    onChange={(e) => {
+                            const value = e.target.value;
+                            // Allow empty string for clearing the input, otherwise parse as float
+                            setCoeffData({ ...coeffData, [matiere.id]: value === '' ? '' : parseFloat(value) });
+                          }}
+
                           className="w-16 border border-blue-300 dark:border-blue-700 rounded-md px-2 py-1 text-center text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          min="1"
+                          min="1" step="1"
                           onClick={(e) => e.stopPropagation()} // Important pour ne pas déclencher le onClick du div parent
                         />
                       </div>
@@ -1380,12 +1384,14 @@ if (isNaN(classeId)) {
         <form
           onSubmit={async (e) => {
             e.preventDefault();
-            if (!currentEditingCoeff) return;
-            try {
+if (!currentEditingCoeff || currentEditingCoeff.coefficient === '' || isNaN(Number(currentEditingCoeff.coefficient)) || Number(currentEditingCoeff.coefficient) <= 0) {
+              toast.error("Le coefficient ne peut pas être vide et doit être un nombre positif.");
+              return;
+            }            try {
               const response = await fetch(`http://localhost:3000/api/coefficientclasse/${currentEditingCoeff.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ coefficient: currentEditingCoeff.coefficient }),
+                body: JSON.stringify({ coefficient: Number(currentEditingCoeff.coefficient) }),
               });
               if (!response.ok) {
                 const errorData = await response.json();
@@ -1408,13 +1414,14 @@ if (isNaN(classeId)) {
             <Input
               id="editCoefficientValue"
               type="number"
-              value={currentEditingCoeff?.coefficient || 1}
-              onChange={(e) =>
-                setCurrentEditingCoeff(prev => prev ? { ...prev, coefficient: parseFloat(e.target.value) || 1 } : null)
-              }
+             value={currentEditingCoeff?.coefficient ?? ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                setCurrentEditingCoeff(prev => prev ? { ...prev, coefficient: value === '' ? '' : parseFloat(value) } : null)
+              }}
               className="mt-1 block w-full"
-              min="0.5"
-              step="0.5"
+             min="1"
+              step="1"
               required
             />
           </div>
