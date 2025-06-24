@@ -21,8 +21,8 @@ import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import { fr } from 'date-fns/locale';
-
-const API_BASE_URL = 'http://localhost:3000/api';
+// Utilisez la variable d'environnement VITE_API_BASE_URL configurée sur Vercel
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 // --- Interface Definitions ---
 interface AnneeAcademique {
