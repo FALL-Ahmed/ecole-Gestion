@@ -35,6 +35,10 @@
     "rxjs": "^7.8.1",
     "typeorm": "^0.3.24"
   },
+  "engines": {
+  "node": ">=20.11"
+},
+
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
@@ -79,4 +83,5 @@
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
   }
+  
 }
