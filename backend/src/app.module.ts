@@ -42,8 +42,10 @@ import { EtablissementInfoModule } from './etablissement/etablissement-info.modu
         entities: [__dirname + '/**/*.entity{.ts,.js}'], // Chemin vers vos entités
         // Ne jamais utiliser synchronize: true en production !
 synchronize: false,
-        logging: false,
-      }),
+logging: configService.get<string>('NODE_ENV') !== 'production',
+            ssl: configService.get<string>('NODE_ENV') === 'production'
+              ? { rejectUnauthorized: true }
+              : false      }),
       inject: [ConfigService], // Injectez ConfigService dans la factory
     }),
     AuthModule,
