@@ -43,9 +43,10 @@ import { EtablissementInfoModule } from './etablissement/etablissement-info.modu
         // Ne jamais utiliser synchronize: true en production !
 synchronize: false,
 logging: configService.get<string>('NODE_ENV') !== 'production',
-            ssl: configService.get<string>('NODE_ENV') === 'production'
-              ? { rejectUnauthorized: true }
-              : false      }),
+            ssl: configService.get<string>('DB_HOST')?.includes('railway')
+  ? { rejectUnauthorized: false }
+  : false
+      }),
       inject: [ConfigService], // Injectez ConfigService dans la factory
     }),
     AuthModule,
