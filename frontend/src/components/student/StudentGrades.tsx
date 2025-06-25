@@ -121,11 +121,11 @@ interface ClassAverages {
   };
 }
 
-const API_BASE_URL = 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const fetchCoefficientsForClass = async (classId: number): Promise<Coefficient[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/coefficientclasse?classeId=${classId}`);
+    const response = await fetch(`${API_URL}/api/coefficientclasse?classeId=${classId}`);
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`HTTP error! status: ${response.status} for coefficients. Response: ${errorText}`);
@@ -149,7 +149,7 @@ const fetchCoefficientsForClass = async (classId: number): Promise<Coefficient[]
 
 const fetchActiveAcademicYearId = async (): Promise<number | null> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/configuration`);
+    const response = await fetch(`${API_URL}/api/configuration`);
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`HTTP error! status: ${response.status} for configuration. Response: ${errorText}`);
@@ -176,13 +176,12 @@ const fetchActiveAcademicYearId = async (): Promise<number | null> => {
 
 const fetchUserInscriptionAndClassInfo = async (userId: number, activeAnneeAcademiqueId: number): Promise<{ studentName: string; className: string; classId: number; anneeScolaireId: number; eleveId: number } | null> => {
   try {
-    const userResponse = await fetch(`${API_BASE_URL}/api/users/${userId}`);
+    const userResponse = await fetch(`${API_URL}/api/users/${userId}`);
     if (!userResponse.ok) {
       throw new Error(`HTTP error! status: ${userResponse.status} for user ${userId}`);
     }
     const user: AuthUser = await userResponse.json();
-
-    const inscriptionResponse = await fetch(`${API_BASE_URL}/api/inscriptions?utilisateurId=${userId}&anneeAcademiqueId=${activeAnneeAcademiqueId}&_expand=classe&_expand=annee_scolaire&_expand=utilisateur`);
+    const inscriptionResponse = await fetch(`${API_URL}/api/inscriptions?utilisateurId=${userId}&anneeAcademiqueId=${activeAnneeAcademiqueId}&_expand=classe&_expand=annee_scolaire&_expand=utilisateur`);
     if (!inscriptionResponse.ok) {
       throw new Error(`HTTP error! status: ${inscriptionResponse.status} for inscription`);
     }
@@ -229,7 +228,7 @@ const fetchUserInscriptionAndClassInfo = async (userId: number, activeAnneeAcade
 
 const fetchNotesForEleve = async (eleveId: number): Promise<Note[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/notes?_expand=evaluation&_expand=evaluation.matiere&_cacheBust=${Date.now()}`);
+    const response = await fetch(`${API_URL}/api/notes?_expand=evaluation&_expand=evaluation.matiere&_cacheBust=${Date.now()}`);
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
@@ -265,7 +264,7 @@ const fetchNotesForEleve = async (eleveId: number): Promise<Note[]> => {
 
 const fetchAllMatiere = async (): Promise<Matiere[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/matieres`);
+    const response = await fetch(`${API_URL}/api/matieres`);
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
@@ -283,7 +282,7 @@ const fetchAllMatiere = async (): Promise<Matiere[]> => {
 
 const fetchAllTrimestresNames = async (): Promise<string[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/trimestres`);
+    const response = await fetch(`${API_URL}/api/trimestres`);
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
@@ -312,7 +311,7 @@ const fetchAllTrimestresNames = async (): Promise<string[]> => {
 
 const fetchAllTrimestreObjects = async (): Promise<TrimestreData[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/trimestres`);
+    const response = await fetch(`${API_URL}/api/trimestres`);
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
@@ -330,7 +329,7 @@ const fetchAllTrimestreObjects = async (): Promise<TrimestreData[]> => {
 
 const fetchAllStudentsInClass = async (classId: number, anneeScolaireId: number): Promise<Inscription[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/inscriptions?classeId=${classId}&anneeAcademiqueId=${anneeScolaireId}&_expand=utilisateur`);
+    const response = await fetch(`${API_URL}/api/inscriptions?classeId=${classId}&anneeAcademiqueId=${anneeScolaireId}&_expand=utilisateur`);
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
@@ -349,7 +348,7 @@ const fetchAllStudentsInClass = async (classId: number, anneeScolaireId: number)
 
 const fetchAllNotesForClass = async (classId: number, anneeScolaireId: number): Promise<Note[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/notes?_expand=evaluation&_expand=evaluation.matiere&_expand=evaluation.classe&_cacheBust=${Date.now()}`);
+    const response = await fetch(`${API_URL}/api/notes?_expand=evaluation&_expand=evaluation.matiere&_expand=evaluation.classe&_cacheBust=${Date.now()}`);
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);

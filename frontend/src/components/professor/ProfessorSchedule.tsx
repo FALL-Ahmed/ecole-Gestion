@@ -39,7 +39,7 @@ import { fr } from 'date-fns/locale';
 import { toast } from '@/hooks/use-toast';
 
 // API Configuration
-const API_BASE_URL = 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // Interfaces
 interface AnneeAcademique {
@@ -275,10 +275,10 @@ export function ProfessorSchedule() {
         setProfessorName(`${user.prenom} ${user.nom}`);
 
         const [anneesRes, matieresRes, classesRes, usersRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/annees-academiques`).then(res => res.json()),
-          fetch(`${API_BASE_URL}/api/matieres`).then(res => res.json()),
-          fetch(`${API_BASE_URL}/api/classes`).then(res => res.json()),
-          fetch(`${API_BASE_URL}/api/users`).then(res => res.json()),
+          fetch(`${API_URL}/api/annees-academiques`).then(res => res.json()),
+          fetch(`${API_URL}/api/matieres`).then(res => res.json()),
+          fetch(`${API_URL}/api/classes`).then(res => res.json()),
+          fetch(`${API_URL}/api/users`).then(res => res.json()),
         ]);
 
         setAllMatieres(matieresRes);
@@ -320,7 +320,7 @@ export function ProfessorSchedule() {
 
     try {
       const scheduleRes: EmploiDuTempsEntry[] = await fetch(
-        `${API_BASE_URL}/api/emploi-du-temps?professeur_id=${professorId}&annee_academique_id=${currentAnneeAcademique.id}`
+        `${API_URL}/api/emploi-du-temps?professeur_id=${professorId}&annee_academique_id=${currentAnneeAcademique.id}`
       ).then(res => res.json());
 
       const groupedSchedule: Record<string, EmploiDuTempsEntry[]> = {};
@@ -333,7 +333,7 @@ export function ProfessorSchedule() {
       const weekEndDate = format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'yyyy-MM-dd');
 
       const exceptionsRes: ExceptionEmploiDuTempsEntry[] = await fetch(
-        `${API_BASE_URL}/api/exception-emploi-du-temps?professeur_id=${professorId}&start_date=${weekStartDate}&end_date=${weekEndDate}`
+        `${API_URL}/api/exception-emploi-du-temps?professeur_id=${professorId}&start_date=${weekStartDate}&end_date=${weekEndDate}`
       ).then(res => res.json());
       setExceptionsData(exceptionsRes);
     } catch (err) {

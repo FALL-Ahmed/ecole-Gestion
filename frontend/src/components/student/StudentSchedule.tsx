@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import { ScrollArea } from '@radix-ui/react-scroll-area';
 
 // --- API Configuration ---
-const API_BASE_URL = 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // --- Types for API Data ---
 interface AnneeAcademique { id: number; libelle: string; date_debut: string; date_fin: string; }
@@ -241,7 +241,7 @@ export function StudentSchedule() {
             setStudentId(user.id);
             setStudentName(`${user.prenom} ${user.nom}`);
 
-            const anneesRes: AnneeAcademique[] = await fetch(`${API_BASE_URL}/api/annees-academiques`).then(res => res.json());
+            const anneesRes: AnneeAcademique[] = await fetch(`${API_URL}/api/annees-academiques`).then(res => res.json());
             const activeAnnee = anneesRes.find((an: AnneeAcademique) =>
                 new Date() >= parseISO(an.date_debut) && new Date() <= parseISO(an.date_fin)
             );
@@ -264,7 +264,7 @@ export function StudentSchedule() {
                 setCurrentAnneeAcademique(activeAnnee);
             }
 
-            const inscriptionsRes: Inscription[] = await fetch(`${API_BASE_URL}/api/inscriptions?utilisateurId=${user.id}&anneeScolaireId=${activeAnnee?.id || (anneesRes.length > 0 ? anneesRes[0].id : '')}`).then(res => res.json());
+            const inscriptionsRes: Inscription[] = await fetch(`${API_URL}/api/inscriptions?utilisateurId=${user.id}&anneeScolaireId=${activeAnnee?.id || (anneesRes.length > 0 ? anneesRes[0].id : '')}`).then(res => res.json());
             const studentInscription = inscriptionsRes.find(inscription =>
                 inscription.utilisateurId === user.id &&
                 inscription.anneeScolaireId === (activeAnnee?.id || (anneesRes.length > 0 ? anneesRes[0].id : -1)) &&
@@ -278,9 +278,9 @@ export function StudentSchedule() {
             setStudentClassId(studentInscription.classeId);
 
             const [matieresRes, classesRes, usersRes] = await Promise.all([
-                fetch(`${API_BASE_URL}/api/matieres`).then(res => res.json()),
-                fetch(`${API_BASE_URL}/api/classes`).then(res => res.json()),
-                fetch(`${API_BASE_URL}/api/users`).then(res => res.json()),
+                fetch(`${API_URL}/api/matieres`).then(res => res.json()),
+                fetch(`${API_URL}/api/classes`).then(res => res.json()),
+                fetch(`${API_URL}/api/users`).then(res => res.json()),
             ]);
 
             setAllMatieres(matieresRes);
@@ -330,8 +330,8 @@ export function StudentSchedule() {
 
         try {
             const [scheduleRes, exceptionsRes] = await Promise.all([
-                fetch(`${API_BASE_URL}/api/emploi-du-temps?classe_id=${studentClassId}&annee_academique_id=${currentAnneeAcademique.id}`).then(res => res.json()),
-                fetch(`${API_BASE_URL}/api/exception-emploi-du-temps?classe_id=${studentClassId}&start_date=${weekStartDate}&end_date=${weekEndDate}`).then(res => res.json()),
+                fetch(`${API_URL}/api/emploi-du-temps?classe_id=${studentClassId}&annee_academique_id=${currentAnneeAcademique.id}`).then(res => res.json()),
+                fetch(`${API_URL}/api/exception-emploi-du-temps?classe_id=${studentClassId}&start_date=${weekStartDate}&end_date=${weekEndDate}`).then(res => res.json()),
             ]);
 
             setBaseScheduleEntries(scheduleRes);

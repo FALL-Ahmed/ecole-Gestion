@@ -92,6 +92,8 @@ type NoteEntry = { eleveId: number; nom: string; prenom: string; note: string };
 
 // --- Composant GradeInput ---
 export function GradeInput() {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
   const { user } = useAuth();
 
   // --- États des données initiales chargées depuis l'API ---
@@ -127,7 +129,7 @@ export function GradeInput() {
         console.log('🔄 Chargement des données initiales...');
 
         // Step 1: Fetch active academic year configuration first
-        const configRes = await fetch('http://localhost:3000/api/configuration');
+        const configRes = await fetch(`${API_URL}/api/configuration`);
         if (!configRes.ok) {
           const errorText = await configRes.text();
           throw new Error(`Erreur lors du chargement de la configuration: ${configRes.status} - ${errorText}`);
@@ -167,9 +169,9 @@ export function GradeInput() {
 
         // Step 2: Fetch other data using Promise.all
         const [affectationsRes, allClassesRes, utilisateursRes] = await Promise.all([
-          fetch('http://localhost:3000/api/affectations?include=professeur,matiere,classe,annee_scolaire'),
-          fetch('http://localhost:3000/api/classes'),
-          fetch('http://localhost:3000/api/users'),
+         fetch(`${API_URL}/api/affectations?include=professeur,matiere,classe,annee_scolaire`),
+          fetch(`${API_URL}/api/classes`),
+          fetch(`${API_URL}/api/users`),
         ]);
 
         const checkResponse = async (res: Response, name: string) => {
@@ -334,7 +336,7 @@ export function GradeInput() {
 
       try {
         console.log(`🔍 Recherche du trimestre pour la date ${date} et année active ${activeAnneeScolaire.id}`);
-        const trimestreRes = await fetch(`http://localhost:3000/api/trimestres/by-date?date=${date}&anneeId=${activeAnneeScolaire.id}`);
+        const trimestreRes = await fetch(`${API_URL}/api/trimestres/by-date?date=${date}&anneeId=${activeAnneeScolaire.id}`);
         if (!trimestreRes.ok) {
           const errorText = await trimestreRes.text();
           throw new Error(`Impossible de déterminer le trimestre: ${trimestreRes.status} - ${errorText}`);
@@ -428,7 +430,7 @@ export function GradeInput() {
       try {
         // CORRECTION MAJEURE ICI : Changer anneeAcademiqueId en anneeScolaireId
         const res = await fetch(
-          `http://localhost:3000/api/inscriptions?classeId=${selectedClassId}&anneeScolaireId=${activeAnneeScolaire.id}`
+          `${API_URL}/api/inscriptions?classeId=${selectedClassId}&anneeScolaireId=${activeAnneeScolaire.id}`
         );
 
         if (!res.ok) {
@@ -596,7 +598,7 @@ export function GradeInput() {
         anneeScolaire: { id: activeAnneeScolaire.id }
       };
       console.log('📥 Création de l\'évaluation avec les données:', evaluationPayload);
-      const evalRes = await fetch('http://localhost:3000/api/evaluations', {
+      const evalRes = await fetch(`${API_URL}/api/evaluation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(evaluationPayload)
@@ -620,7 +622,7 @@ export function GradeInput() {
       }));
       console.log('📝 Enregistrement des notes:', notesToSave);
 
-      const noteRes = await fetch('http://localhost:3000/api/notes', {
+      const noteRes = await fetch(`${API_URL}/api/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(notesToSave)

@@ -77,7 +77,8 @@ import { useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 
 
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = `${API_URL}/api`;
 // Helper types (consider moving to a shared types file if used elsewhere)
 interface AnneeScolaire {
   id: number;
