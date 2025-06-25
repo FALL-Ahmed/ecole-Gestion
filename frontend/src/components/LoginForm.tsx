@@ -16,6 +16,9 @@ import { Eye, EyeOff, School, BookOpen, GraduationCap } from 'lucide-react';
 import { useEstablishmentInfo } from '@/contexts/EstablishmentInfoContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 export function LoginForm() {
   const { setUser } = useAuth();
   const [email, setEmail] = useState('');
@@ -48,7 +51,7 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:3000/auth/login', {
+      const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -78,7 +81,7 @@ export function LoginForm() {
           }
 
           const affectationRes = await fetch(
-            `http://localhost:3000/api/affectations?professeurId=${professorId}`
+            `${API_URL}/api/affectations?professeurId=${professorId}`
           );
 
           if (!affectationRes.ok) {

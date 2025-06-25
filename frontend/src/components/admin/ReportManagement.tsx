@@ -128,8 +128,8 @@ interface BulletinEleve {
   totalElevesClasse?: number;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
-
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = `${API_URL}/api`;
 const fetchAnneesAcademiques = async (): Promise<AnneeAcademique[]> => {
   try {
     const response = await fetch(`${API_BASE_URL}/annees-academiques`);

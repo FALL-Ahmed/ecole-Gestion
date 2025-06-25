@@ -204,6 +204,8 @@ export default function UserManagement() {
 
   const { toast } = useToast();
 
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
   // --- Data Fetching ---
   useEffect(() => {
     async function fetchData() {
@@ -211,10 +213,12 @@ export default function UserManagement() {
       setIsLoadingInscriptions(true);
       try {
         const [usersRes, classesRes, yearsRes] = await Promise.all([
-          fetch('http://localhost:3000/api/users'),
-          fetch('http://localhost:3000/api/classes'),
-          fetch('http://localhost:3000/api/annees-academiques'),
+          fetch(`${API_URL}/api/users`),
+          fetch(`${API_URL}/api/classes`),
+          fetch(`${API_URL}/api/annees-academiques`),
         ]);
+
+
 
         if (!usersRes.ok || !classesRes.ok || !yearsRes.ok) {
           throw new Error('Erreur lors du chargement des données de base');
@@ -231,7 +235,7 @@ export default function UserManagement() {
         setAcademicYears(yearsData);
 
         // Fetch inscriptions after users, classes, years are loaded for proper linking
-        const inscriptionsRes = await fetch('http://localhost:3000/api/inscriptions');
+        const inscriptionsRes = await fetch(`${API_URL}/api/inscriptions`);
         if (!inscriptionsRes.ok) {
           throw new Error('Erreur lors du chargement des inscriptions');
         }
@@ -304,7 +308,7 @@ setUsers(usersWithInscriptions);
     // --- AJOUTE CETTE PARTIE POUR LA MISE À JOUR ---
     if (editUser) {
       // Mode édition (mise à jour)
-      const response = await fetch(`http://localhost:3000/api/users/${editUser.id}`, {
+      const response = await fetch(`${API_URL}/api/users/${editUser.id}`, {
         method: 'PUT', // ou 'PATCH' selon ton API
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData),
@@ -334,7 +338,7 @@ setUsers(usersWithInscriptions);
     // --- FIN DE LA PARTIE MISE À JOUR ---
 
     // --- CRÉATION (ton code existant) ---
-    const userResponse = await fetch('http://localhost:3000/api/users', {
+    const userResponse = await fetch(`${API_URL}/api/users`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userData),
@@ -419,7 +423,7 @@ setUsers(usersWithInscriptions);
         throw new Error("Veuillez sélectionner un élève, une classe et une année scolaire.");
       }
 
-      const response = await fetch('http://localhost:3000/api/inscriptions', {
+      const response = await fetch(`${API_URL}/api/inscriptions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

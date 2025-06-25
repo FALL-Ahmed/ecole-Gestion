@@ -19,6 +19,7 @@ interface EstablishmentInfoContextType {
 const EstablishmentInfoContext = createContext<EstablishmentInfoContextType | undefined>(
   undefined
 );
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // Default values for initial state
 const DEFAULT_SCHOOL_NAME = 'Chargement...';
@@ -40,7 +41,7 @@ export const EstablishmentInfoProvider: React.FC<EstablishmentInfoProviderProps>
 
   const fetchEstablishmentInfo = useCallback(async () => {
     try {
-      const response = await axios.get('http://localhost:3000/api/establishment-info');
+      const response = await axios.get(`${API_URL}/api/establishment-info`);
       if (response.data && response.data.schoolName) {
         setSchoolName(response.data.schoolName);
         setAddress(response.data.address || 'Adresse inconnue');

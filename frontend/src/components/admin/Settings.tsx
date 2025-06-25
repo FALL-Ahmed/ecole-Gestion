@@ -27,6 +27,9 @@ import { format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useEstablishmentInfo } from '@/contexts/EstablishmentInfoContext'; // Import the context hook
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+
 export function Settings() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('account');
@@ -90,7 +93,7 @@ export function Settings() {
   // Fetches all available academic years
   const fetchAcademicYears = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/annees-academiques');
+      const response = await fetch(`${API_URL}/api/annees-academiques`);
       if (!response.ok) {
         throw new Error('Failed to fetch academic years');
       }
@@ -110,7 +113,7 @@ export function Settings() {
   const fetchEstablishmentInfo = async () => {
     setIsLoadingEstablishmentInfo(true);
     try {
-      const response = await fetch('http://localhost:3000/api/establishment-info');
+      const response = await fetch(`${API_URL}/api/establishment-info`);
       if (!response.ok) {
         if (response.status === 404) {
           // No info found, use defaults or empty strings
@@ -141,7 +144,7 @@ export function Settings() {
   // Fetches the currently configured academic year ID
   const fetchCurrentAcademicYearConfiguration = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/configuration');
+      const response = await fetch(`${API_URL}/api/configuration`);
       if (!response.ok) {
         if (response.status === 404) {
           setCurrentAcademicYearId(null);
@@ -208,7 +211,7 @@ export function Settings() {
 
     if (activeTab === 'account') {
       try {
-        const response = await fetch('http://localhost:3000/api/establishment-info', {
+        const response = await fetch(`${API_URL}/api/establishment-info`, {
           method: 'POST', // Or PUT, depending on your API design for single resource
           headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify({
@@ -245,7 +248,7 @@ export function Settings() {
       }
 
       try {
-        const response = await fetch('http://localhost:3000/api/configuration', {
+        const response = await fetch(`${API_URL}/api/configuration`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

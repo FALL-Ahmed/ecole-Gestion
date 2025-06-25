@@ -70,7 +70,8 @@ interface AffectationApiResponse {
   annee_scolaire: { id: number; libelle: string; dateDebut: string; dateFin: string };
 }
 
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = `${API_URL}/api`;
 
 // --- Helper Functions ---
 

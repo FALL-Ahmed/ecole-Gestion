@@ -46,7 +46,7 @@ import {
 import { fr } from 'date-fns/locale';
 
 // Mock des interfaces et des données
-const API_BASE_URL = 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 interface AnneeAcademique { id: number; libelle: string; date_debut: string; date_fin: string; }
 interface Classe { id: number; nom: string; niveau: string; annee_scolaire_id: number; }
@@ -275,12 +275,12 @@ export function ScheduleManagement() {
           matieresRes,
           usersRes,
           affectationsRes,
-        ] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/annees-academiques`).then(res => res.json()),
-          fetch(`${API_BASE_URL}/api/classes`).then(res => res.json()),
-          fetch(`${API_BASE_URL}/api/matieres`).then(res => res.json()),
-          fetch(`${API_BASE_URL}/api/users`).then(res => res.json()),
-          fetch(`${API_BASE_URL}/api/affectations`).then(res => res.json()),
+        ] = await Promise.all([ // Changed from API_BASE_URL
+          fetch(`${API_URL}/api/annees-academiques`).then(res => res.json()),
+          fetch(`${API_URL}/api/classes`).then(res => res.json()),
+          fetch(`${API_URL}/api/matieres`).then(res => res.json()),
+          fetch(`${API_URL}/api/users`).then(res => res.json()),
+          fetch(`${API_URL}/api/affectations`).then(res => res.json()),
         ]);
 
         setAnneesAcademiques(anneesRes);
@@ -329,17 +329,17 @@ export function ScheduleManagement() {
     }
 
     setIsLoading(true);
-    try {
-      let baseScheduleUrl = `${API_BASE_URL}/api/emploi-du-temps?annee_academique_id=${currentAnneeIdNum}`;
+    try { // Changed from API_BASE_URL
+      let baseScheduleUrl = `${API_URL}/api/emploi-du-temps?annee_academique_id=${currentAnneeIdNum}`;
       if (scheduleView === 'class') baseScheduleUrl += `&classe_id=${currentClassIdNum}`;
       else baseScheduleUrl += `&professeur_id=${currentTeacherIdNum}`;
 
-      const etdRes: EmploiDuTempsEntry[] = await fetch(baseScheduleUrl).then(res => res.json());
+  const etdRes: EmploiDuTempsEntry[] = await fetch(baseScheduleUrl).then(res => res.json());
       setEmploisDuTemps(etdRes);
 
-      const weekStartDate = format(currentWeekStart, 'yyyy-MM-dd');
-      const weekEndDate = format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'yyyy-MM-dd');
-      let exceptionsUrl = `${API_BASE_URL}/api/exception-emploi-du-temps?start_date=${weekStartDate}&end_date=${weekEndDate}`;
+     const weekStartDate = format(currentWeekStart, 'yyyy-MM-dd'); // Changed from API_BASE_URL
+      const weekEndDate = format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'yyyy-MM-dd'); // Changed from API_BASE_URL
+      let exceptionsUrl = `${API_URL}/api/exception-emploi-du-temps?start_date=${weekStartDate}&end_date=${weekEndDate}`;
 
       if (scheduleView === 'class') exceptionsUrl += `&classe_id=${currentClassIdNum}`;
       else if (scheduleView === 'teacher') exceptionsUrl += `&professeur_id=${currentTeacherIdNum}`;
@@ -583,15 +583,16 @@ export function ScheduleManagement() {
     setIsSaving(true);
     try {
       let response;
-      if (modalMode === 'add') {
-        response = await fetch(`${API_BASE_URL}/api/emploi-du-temps`, {
+      if (modalMode === 'add') { // Changed from API_BASE_URL
+        response = await fetch(`${API_URL}/api/emploi-du-temps`, {
+      
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
       } else {
         if (!editingBaseEntryId) throw new Error("ID d'entrée de base manquant.");
-        response = await fetch(`${API_BASE_URL}/api/emploi-du-temps/${editingBaseEntryId}`, {
+        response = await fetch(`${API_URL}/api/emploi-du-temps/${editingBaseEntryId}`, { // Changed from API_BASE_URL
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -624,7 +625,7 @@ export function ScheduleManagement() {
 
     setIsSaving(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/emploi-du-temps/${editingBaseEntryId}`, {
+      const response = await fetch(`${API_URL}/api/emploi-du-temps/${editingBaseEntryId}`, {
         method: 'DELETE',
       });
 
@@ -714,14 +715,14 @@ export function ScheduleManagement() {
     try {
       let response;
       if (modalMode === 'add') {
-        response = await fetch(`${API_BASE_URL}/api/exception-emploi-du-temps`, {
+        response = await fetch(`${API_URL}/api/exception-emploi-du-temps`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
       } else {
         if (!editingExceptionId) throw new Error("ID d'exception manquant.");
-        response = await fetch(`${API_BASE_URL}/api/exception-emploi-du-temps/${editingExceptionId}`, {
+        response = await fetch(`${API_URL}/api/exception-emploi-du-temps/${editingExceptionId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -754,7 +755,7 @@ export function ScheduleManagement() {
 
     setIsSaving(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/exception-emploi-du-temps/${editingExceptionId}`, {
+      const response = await fetch(`${API_URL}/api/exception-emploi-du-temps/${editingExceptionId}`, {
         method: 'DELETE',
       });
 

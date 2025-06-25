@@ -69,7 +69,8 @@ interface TempNoteData {
   noteValue: number | '';
 }
 
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = `${API_URL}/api`; // Re-add this line as it was removed from the top-level
 
 const fetchAnneesAcademiques = async (): Promise<AnneeAcademique[]> => {
   try {

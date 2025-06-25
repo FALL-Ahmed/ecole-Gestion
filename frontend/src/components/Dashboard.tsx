@@ -54,7 +54,9 @@ interface AbsenceAPI { // Interface pour les données d'absence brutes de l'API
   anneeScolaire?: { id: number; libelle: string };
 }
 
-const API_BASE_URL_NOTIF = 'http://localhost:3000/api'; // Préfixe pour les appels API liés aux absences
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL_NOTIF = `${API_URL}/api`;
+
 const NOTIFIED_ABSENCE_IDS_KEY_PREFIX = 'notified_absence_ids_';
 
 interface MatiereApiData {
@@ -238,8 +240,9 @@ export function Dashboard() {
 
       try {
         // 1. Récupération de la configuration de l'année scolaire
-        console.log('Fetching configuration from: http://localhost:3000/api/configuration');
-        const configResponse = await axios.get<ConfigurationApiData>('http://localhost:3000/api/configuration');
+      console.log('Fetching configuration from:', `${API_BASE_URL_NOTIF}/configuration`);
+        const configResponse = await axios.get<ConfigurationApiData>(`${API_BASE_URL_NOTIF}/configuration`);
+        
         const activeYearId = configResponse.data?.annee_scolaire?.id;
 
         console.log('Config response data:', configResponse.data);
@@ -257,10 +260,10 @@ export function Dashboard() {
 
         // 2. Récupération des données brutes (notes, évaluations, matières) en parallèle
         console.log('Fetching notes, evaluations, and subjects in parallel...');
-        const [notesResponse, evaluationsResponse, matieresResponse] = await Promise.all([
-          axios.get<NoteApiData[]>(`http://localhost:3000/api/notes`),
-          axios.get<EvaluationApiData[]>(`http://localhost:3000/api/evaluations`),
-          axios.get<MatiereApiData[]>(`http://localhost:3000/api/matieres`),
+        const [notesResponse, evaluationsResponse, matieresResponse] = await Promise.all([ // Changed from http://localhost:3000
+          axios.get<NoteApiData[]>(`${API_BASE_URL_NOTIF}/notes`), // Changed from http://localhost:3000
+          axios.get<EvaluationApiData[]>(`${API_BASE_URL_NOTIF}/evaluations`), // Changed from http://localhost:3000
+          axios.get<MatiereApiData[]>(`${API_BASE_URL_NOTIF}/matieres`), // Changed from http://localhost:3000
         ]);
 
         const allNotes = notesResponse.data;

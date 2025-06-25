@@ -27,7 +27,8 @@ import { toast as sonnerToast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fr } from 'date-fns/locale';
 
-const API_BASE_URL = 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = `${API_URL}/api`;
 
 // --- Interfaces pour les données API ---
 interface AnneeAcademique {
@@ -94,6 +95,7 @@ interface EmploiDuTempsEntry {
 const timeSlots = ["08:00-10:00", "10:15-12:00", "12:15-14:00"];
 
 const fetchData = async (url: string) => {
+
   try {
     const response = await fetch(url);
     if (!response.ok) {

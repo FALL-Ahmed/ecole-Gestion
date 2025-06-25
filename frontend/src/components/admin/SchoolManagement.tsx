@@ -125,42 +125,43 @@ const [successMsg, setSuccessMsg] = useState("");
 
 // Définir refreshCoefficients ici pour qu'il soit accessible partout dans le composant
 const refreshCoefficients = () => {
-  fetch("http://localhost:3000/api/coefficientclasse")
+  fetch(`${API_URL}/api/coefficientclasse`)
     .then(res => res.json())
     .then(data => setCoefficients(data));
 };
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 useEffect(() => {
   const fetchData = async () => {
     try {
       let res, data;
 
-      res = await fetch("http://localhost:3000/api/classes");
+      res = await fetch(`${API_URL}/api/classes`);
       if (!res.ok) throw new Error("Erreur classes : " + res.status);
       data = await res.json();
       setClasses(data);
 
-      res = await fetch("http://localhost:3000/api/matieres");
+      res = await fetch(`${API_URL}/api/matieres`);
       if (!res.ok) throw new Error("Erreur matieres : " + res.status);
       data = await res.json();
       setMatieres(data);
 
-      res = await fetch("http://localhost:3000/api/annees-academiques");
+      res = await fetch(`${API_URL}/api/annees-academiques`);
       if (!res.ok) throw new Error("Erreur annees : " + res.status);
       data = await res.json();
       setAnnees(data);
 
-      res = await fetch("http://localhost:3000/api/users");
+      res = await fetch(`${API_URL}/api/users`);
       if (!res.ok) throw new Error("Erreur users : " + res.status);
       data = await res.json();
       setProfs(data.filter(u => u.role === "professeur"));
 
-      res = await fetch("http://localhost:3000/api/trimestres");
+      res = await fetch(`${API_URL}/api/trimestres`);
       if (!res.ok) throw new Error("Erreur trimestres : " + res.status);
       data = await res.json();
       setTrimestres(data);
 
-      res = await fetch("http://localhost:3000/api/affectations");
+      res = await fetch(`${API_URL}/api/affectations`);
       if (!res.ok) throw new Error("Erreur affectations : " + res.status);
       data = await res.json();
       setAffectations(data);
@@ -169,7 +170,7 @@ useEffect(() => {
       refreshCoefficients();
 
       // Fetch current academic year configuration
-      const configRes = await fetch("http://localhost:3000/api/configuration");
+      const configRes = await fetch(`${API_URL}/api/configuration`);
       if (configRes.ok) {
         const configData = await configRes.json(); // Correction: utiliser configRes.json()
         if (configData && configData.annee_scolaire && configData.annee_scolaire.id) {
@@ -361,7 +362,7 @@ const handleConfirmSaveAnnee = async () => {
   if (!anneeToConfirm) return;
 
   try {
-    const response = await fetch("http://localhost:3000/api/annees-academiques", {
+    const response = await fetch(`${API_URL}/api/annees-academiques`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ libelle: anneeToConfirm.libelle, date_debut: anneeToConfirm.debut, date_fin: anneeToConfirm.fin })
@@ -1018,7 +1019,7 @@ return matieresUniques.map(c => (
         e.preventDefault();
 
         // Création de la classe
-        const res = await fetch("http://localhost:3000/api/classes", {
+        const res = await fetch(`${API_URL}/api/classes`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ nom: classeNom, niveau: classeNiveau,anneeScolaireId }),
@@ -1041,7 +1042,7 @@ return matieresUniques.map(c => (
     );
 
             if (classeExistante) {
-              await fetch("http://localhost:3000/api/coefficientclasse/clone", {
+              await fetch(`${API_URL}/api/coefficientclasse/clone`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -1207,7 +1208,7 @@ return matieresUniques.map(c => (
         }
 
         try {
-          const response = await fetch("http://localhost:3000/api/coefficientclasse", {
+          const response = await fetch(`${API_URL}/api/coefficientclasse`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -1388,7 +1389,7 @@ if (!currentEditingCoeff || currentEditingCoeff.coefficient === '' || isNaN(Numb
               toast.error("Le coefficient ne peut pas être vide et doit être un nombre positif.");
               return;
             }            try {
-              const response = await fetch(`http://localhost:3000/api/coefficientclasse/${currentEditingCoeff.id}`, {
+              const response = await fetch(`${API_URL}/api/coefficientclasse/${currentEditingCoeff.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ coefficient: Number(currentEditingCoeff.coefficient) }),
@@ -1459,7 +1460,7 @@ if (!currentEditingCoeff || currentEditingCoeff.coefficient === '' || isNaN(Numb
         }
 
         const affectationPromises = affectClasses.map(classeId => {
-          return fetch("http://localhost:3000/api/affectations", {
+          return fetch(`${API_URL}/api/affectations`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
