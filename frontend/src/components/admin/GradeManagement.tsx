@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { BookOpen, FileDown, Printer, Save,  Info, AlertCircle } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
@@ -25,6 +26,16 @@ interface AnneeAcademique {
   id: number;
   libelle: string;
 }
+
+// Helper function to format academic year display
+const formatAcademicYearDisplay = (annee: { libelle: string; date_debut?: string; date_fin?: string }): string => {
+  if (!annee || !annee.date_debut || !annee.date_fin) {
+    return annee.libelle || "Année inconnue";
+  }
+  const startYear = new Date(annee.date_debut).getFullYear();
+  const endYear = new Date(annee.date_fin).getFullYear();
+  return annee.libelle && annee.libelle.includes(String(startYear)) && annee.libelle.includes(String(endYear)) ? annee.libelle : `${annee.libelle || ''} (${startYear}-${endYear})`.trim();
+};
 
 interface Classe {
   id: number;
@@ -433,7 +444,7 @@ export function GradeManagement() {
             <div className="space-y-2">
               <label htmlFor="annee-select" className="text-sm font-medium">Année Scolaire</label>
               <Select onValueChange={setSelectedAnneeAcademiqueId} value={selectedAnneeAcademiqueId}>
-                <SelectTrigger id="annee-select">
+                <SelectTrigger id="annee-select"> 
                   <SelectValue placeholder="Sélectionner une année" />
                 </SelectTrigger>
                 <SelectContent>
@@ -530,76 +541,110 @@ export function GradeManagement() {
                   Aucune évaluation configurée pour cette matière et ce trimestre correspondant aux types attendus (Devoir, Composition).
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table className="min-w-full">
-  <TableHeader className="bg-gray-50">
-    <TableRow>
-      <TableHead className="min-w-[150px] px-4 py-3 font-semibold text-left sticky left-0 bg-gray-50 z-10">
-        Élève
-      </TableHead>
-      {evaluationsToDisplay.map((evalItem) => (
-        <TableHead 
-          key={evalItem.id} 
-          className="min-w-[100px] px-4 py-3 font-semibold text-center"
-          title={evalItem.description || evalItem.type}
-        >
-          <div className="flex flex-col items-center">
-            <span>{evalItem.type}</span>
-            {evalItem.date && (
-              <span className="text-xs font-normal text-gray-500">
-                {new Date(evalItem.date).toLocaleDateString()}
-              </span>
-            )}
-          </div>
-        </TableHead>
-      ))}
-    </TableRow>
-  </TableHeader>
-  
-  <TableBody className="divide-y divide-gray-200">
-    {eleves.map((eleve) => (
-      <TableRow key={eleve.id} className="hover:bg-gray-50">
-        <TableCell className="font-medium px-4 py-3 sticky left-0 bg-white z-10 whitespace-nowrap">
-          {eleve.nom} {eleve.prenom}
-        </TableCell>
-        
-        {evaluationsToDisplay.map(evalItem => {
-          const gradeValue = gradeData[eleve.id]?.[evalItem.id] ?? '';
-          const isInvalid = gradeValue && (gradeValue < 0 || gradeValue > 20);
-          
-          return (
-            <TableCell 
-              key={`${eleve.id}-${evalItem.id}`} 
-              className="px-4 py-2 text-center"
-            >
-              <div className="flex justify-center">
-                <Input
-                  type="number"
-                  min="0"
-                  max="20"
-                  step="0.5"
-                  value={gradeValue}
-                  onChange={(e) => handleGradeChange(eleve.id, evalItem.id, e.target.value)}
-                  className={`w-24 text-center px-3 py-2 rounded border ${
-                    isInvalid 
-                      ? 'border-red-500 bg-red-50' 
-                      : 'border-gray-300 hover:border-gray-400 focus:border-blue-500'
-                  } focus:ring-2 focus:ring-blue-200 transition-colors`}
-                  aria-label={`Note de ${eleve.prenom} ${eleve.nom} pour ${evalItem.type}`}
-                  aria-invalid={isInvalid}
-                />
-                {isInvalid && (
-                  <span className="sr-only">Note invalide, doit être entre 0 et 20</span>
-                )}
-              </div>
-            </TableCell>
-          );
-        })}
-      </TableRow>
-    ))}
-  </TableBody>
-</Table>
-                </div>
+                <>
+                  {/* Vue pour ordinateur (Tableau) - reste identique */}
+                  <div className="hidden lg:block overflow-x-auto">
+                    <Table className="min-w-full">
+                      <TableHeader className="bg-gray-50">
+                        <TableRow>
+                          <TableHead className="min-w-[150px] px-4 py-3 font-semibold text-left sticky left-0 bg-gray-50 z-10">
+                            Élève
+                          </TableHead>
+                          {evaluationsToDisplay.map((evalItem) => (
+                            <TableHead 
+                              key={evalItem.id} 
+                              className="min-w-[100px] px-4 py-3 font-semibold text-center"
+                              title={evalItem.description || evalItem.type}
+                            >
+                              <div className="flex flex-col items-center">
+                                <span>{evalItem.type}</span>
+                                {evalItem.date && (
+                                  <span className="text-xs font-normal text-gray-500">
+                                    {new Date(evalItem.date).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody className="divide-y divide-gray-200">
+                        {eleves.map((eleve) => (
+                          <TableRow key={eleve.id} className="hover:bg-gray-50">
+                            <TableCell className="font-medium px-4 py-3 sticky left-0 bg-white z-10 whitespace-nowrap">
+                              {eleve.nom} {eleve.prenom}
+                            </TableCell>
+                            {evaluationsToDisplay.map(evalItem => {
+                              const gradeValue = gradeData[eleve.id]?.[evalItem.id] ?? '';
+                              const isInvalid = gradeValue && (gradeValue < 0 || gradeValue > 20);
+                              return (
+                                <TableCell 
+                                  key={`${eleve.id}-${evalItem.id}`} 
+                                  className="px-4 py-2 text-center"
+                                >
+                                  <div className="flex justify-center">
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      max="20"
+                                      step="0.5"
+                                      value={gradeValue}
+                                      onChange={(e) => handleGradeChange(eleve.id, evalItem.id, e.target.value)}
+                                      className={`w-24 text-center px-3 py-2 rounded border ${
+                                        isInvalid 
+                                          ? 'border-red-500 bg-red-50' 
+                                          : 'border-gray-300 hover:border-gray-400 focus:border-blue-500'
+                                      } focus:ring-2 focus:ring-blue-200 transition-colors`}
+                                      aria-label={`Note de ${eleve.prenom} ${eleve.nom} pour ${evalItem.type}`}
+                                      aria-invalid={isInvalid}
+                                    />
+                                    {isInvalid && (<span className="sr-only">Note invalide, doit être entre 0 et 20</span>)}
+                                  </div>
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Vue pour mobile (Cartes) - ajoutée pour la responsivité */}
+                  <div className="block lg:hidden space-y-4 p-2">
+                    {eleves.map((eleve) => (
+                      <Card key={eleve.id} className="bg-white shadow-sm">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base font-semibold text-blue-700">{eleve.nom} {eleve.prenom}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          {evaluationsToDisplay.map(evalItem => {
+                            const gradeValue = gradeData[eleve.id]?.[evalItem.id] ?? '';
+                            const isInvalid = gradeValue && (gradeValue < 0 || gradeValue > 20);
+                            return (
+                              <div key={evalItem.id} className="flex items-center justify-between gap-4">
+                                <Label htmlFor={`grade-${eleve.id}-${evalItem.id}`} className="text-sm text-gray-600">
+                                  {evalItem.type}
+                                </Label>
+                                <Input
+                                  id={`grade-${eleve.id}-${evalItem.id}`}
+                                  type="number"
+                                  min="0"
+                                  max="20"
+                                  step="0.5"
+                                  value={gradeValue}
+                                  onChange={(e) => handleGradeChange(eleve.id, evalItem.id, e.target.value)}
+                                  className={`w-24 text-center px-3 py-2 rounded border ${isInvalid ? 'border-red-500 bg-red-50' : 'border-gray-300 focus:border-blue-500'} focus:ring-2 focus:ring-blue-200 transition-colors`}
+                                  aria-label={`Note de ${eleve.prenom} ${eleve.nom} pour ${evalItem.type}`}
+                                  aria-invalid={isInvalid}
+                                />
+                              </div>
+                            );
+                          })}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </>
               )
             )}
             

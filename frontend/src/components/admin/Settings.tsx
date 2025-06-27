@@ -296,12 +296,33 @@ export function Settings() {
       <h1 className="text-2xl font-bold mb-6">Paramètres de l'établissement</h1>
 
       <Tabs defaultValue="account" value={activeTab} onValueChange={setActiveTab} className="space-y-6 w-full">
-        <TabsList className="grid grid-cols-2 md:grid-cols-4 w-full">
-          <TabsTrigger value="account">Établissement</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="academic">Année scolaire</TabsTrigger>
-          <TabsTrigger value="security">Sécurité</TabsTrigger>
-        </TabsList>
+       <TabsList className="flex flex-row flex-wrap w-full gap-2 sm:gap-4 justify-center mb-8">
+  <TabsTrigger
+    value="account"
+    className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
+  >
+    Établissement
+  </TabsTrigger>
+  <TabsTrigger
+    value="notifications"
+    className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
+  >
+    Notifications
+  </TabsTrigger>
+  <TabsTrigger
+    value="academic"
+    className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
+  >
+    Année scolaire
+  </TabsTrigger>
+  <TabsTrigger
+    value="security"
+    className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
+  >
+    Sécurité
+  </TabsTrigger>
+</TabsList>
+<div className="h-4 sm:h-12"></div>
 
         <TabsContent value="account" className="w-full">
           <Card className="w-full">

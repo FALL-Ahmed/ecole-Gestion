@@ -3,6 +3,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
@@ -127,6 +128,16 @@ interface BulletinEleve {
   absencesNonJustifieesHeures?: number; // Modifié pour stocker les heures
   totalElevesClasse?: number;
 }
+
+// Helper function to format academic year display
+const formatAcademicYearDisplay = (annee: { libelle: string; date_debut?: string; date_fin?: string }): string => {
+  if (!annee || !annee.date_debut || !annee.date_fin) {
+    return annee.libelle || "Année inconnue";
+  }
+  const startYear = new Date(annee.date_debut).getFullYear();
+  const endYear = new Date(annee.date_fin).getFullYear();
+  return annee.libelle && annee.libelle.includes(String(startYear)) && annee.libelle.includes(String(endYear)) ? annee.libelle : `${annee.libelle || ''} (${startYear}-${endYear})`.trim();
+};
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const API_BASE_URL = `${API_URL}/api`;
@@ -788,7 +799,7 @@ export function ReportManagement() {
               <Select onValueChange={setSelectedAnneeAcademiqueId} value={selectedAnneeAcademiqueId}>
                 <SelectTrigger id="annee-select" className="border-gray-300 focus:border-blue-500 rounded-md">
                   <SelectValue placeholder="Sélectionner une année" />
-                </SelectTrigger>
+                </SelectTrigger> 
                 <SelectContent>
                   {anneesAcademiques.map((annee) => (
                     <SelectItem key={annee.id} value={annee.id.toString()}>{annee.libelle}</SelectItem>
@@ -881,7 +892,7 @@ export function ReportManagement() {
                   <p>Aucun élève correspondant à votre recherche.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-lg">
+                <>                  {/* Desktop View */}                  <div className="hidden lg:block overflow-x-auto rounded-lg">
                   <Table className="min-w-full divide-y divide-gray-200">
                     <TableHeader className="bg-gray-100">
                       <TableRow>
@@ -929,7 +940,43 @@ export function ReportManagement() {
                       ))}
                     </TableBody>
                   </Table>
-                </div>
+                  </div>
+                  {/* Mobile View */}
+                  <div className="block lg:hidden space-y-4 p-2">
+                    {filteredBulletins.map((bulletin) => (
+                      <Card key={bulletin.id} className="bg-white dark:bg-gray-800 shadow-md rounded-lg">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-base font-semibold text-blue-700 dark:text-blue-300">{bulletin.name}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2 text-sm border-t border-b py-3">
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium text-gray-600 dark:text-gray-300">Moyenne:</span>
+                            <span className="font-semibold text-gray-800 dark:text-gray-100">{bulletin.avg}/20</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium text-gray-600 dark:text-gray-300">Classement:</span>
+                            <span className="text-gray-800 dark:text-gray-100">{bulletin.rank}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium text-gray-600 dark:text-gray-300">État:</span>
+                            <Badge className="bg-green-500 text-white text-xs font-medium px-2 py-0.5 rounded-full">Généré</Badge>
+                          </div>
+                        </CardContent>
+                        <CardFooter className="flex justify-end gap-2 pt-3">
+                          <Button variant="outline" size="sm" onClick={() => handlePreviewReport(bulletin)} className="text-blue-600 hover:bg-blue-50 rounded-md flex-1 justify-center">
+                            <Eye className="h-4 w-4 mr-1" /> Prévisualiser
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => exportReportFromRow(bulletin)} className="text-purple-600 hover:bg-purple-50 rounded-md">
+                            <FileDown className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => printReportFromRow(bulletin)} className="text-red-600 hover:bg-red-50 rounded-md">
+                            <Printer className="h-4 w-4" />
+                          </Button>
+                        </CardFooter>
+                      </Card>
+                    ))}
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -974,7 +1021,7 @@ export function ReportManagement() {
           <h2 className="text-2xl font-bold text-blue-800 mb-1">BULLETIN DE NOTES</h2>
           <p className="font-semibold text-sm">
             Année Scolaire:{" "}
-            <span className="text-blue-700">
+            <span className="text-blue-700">{/* Use formatAcademicYearDisplay here if annee object is available */}
               {anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId))?.libelle}
             </span>
           </p>

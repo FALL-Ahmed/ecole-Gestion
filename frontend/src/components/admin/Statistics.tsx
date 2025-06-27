@@ -130,6 +130,16 @@ interface SubjectSuccessRateItem {
   taux: number;
 }
 
+// Helper function to format academic year display
+const formatAcademicYearDisplay = (annee: { libelle: string; date_debut?: string; date_fin?: string }): string => {
+  if (!annee || !annee.date_debut || !annee.date_fin) {
+    return annee.libelle || "Année inconnue";
+  }
+  const startYear = new Date(annee.date_debut).getFullYear();
+  const endYear = new Date(annee.date_fin).getFullYear();
+  return annee.libelle && annee.libelle.includes(String(startYear)) && annee.libelle.includes(String(endYear)) ? annee.libelle : `${annee.libelle || ''} (${startYear}-${endYear})`.trim();
+};
+
 // --- Helper Functions ---
 const COLORS_PIE = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#A28CF2', '#FF6699'];
 
@@ -1126,13 +1136,35 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">Statistiques</h1>
+<Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
+ <TabsList className="flex flex-row flex-wrap w-full gap-2 sm:gap-4 justify-center mb-8">
+  <TabsTrigger
+    value="overview"
+    className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
+  >
+    Vue d'ensemble
+  </TabsTrigger>
+  <TabsTrigger
+    value="grades"
+    className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
+  >
+    Notes et réussite
+  </TabsTrigger>
+  <TabsTrigger
+    value="attendance"
+    className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
+  >
+    Assiduité
+  </TabsTrigger>
+</TabsList>
+<div className="h-4 sm:h-8"></div>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Filtres</CardTitle>
-          <CardDescription>Visualisez les statistiques par période et par classe</CardDescription>
-        </CardHeader>
-        <CardContent>
+<Card className="mb-6">
+  <CardHeader>
+    <CardTitle>Filtres</CardTitle>
+    <CardDescription>Visualisez les statistiques par période et par classe</CardDescription>
+  </CardHeader>
+  <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Année Scolaire</label>
@@ -1142,8 +1174,7 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
                 </SelectTrigger>
                 <SelectContent>
                   {academicYears.map((year) => (
-                    <SelectItem key={year.id} value={String(year.id)}>
-                      {year.libelle}
+                    <SelectItem key={year.id} value={String(year.id)}>{formatAcademicYearDisplay(year)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1205,12 +1236,7 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
         </CardContent>
       </Card>
 
-      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
-        <TabsList className="grid grid-cols-1 md:grid-cols-3 gap-2">
-          <TabsTrigger value="overview">Vue d'ensemble</TabsTrigger>
-          <TabsTrigger value="grades">Notes et réussite</TabsTrigger>
-          <TabsTrigger value="attendance">Assiduité</TabsTrigger>
-        </TabsList>
+      
         
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

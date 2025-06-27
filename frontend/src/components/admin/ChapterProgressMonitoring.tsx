@@ -62,6 +62,16 @@ interface AnneeScolaire {
   date_fin?: string;
 }
 
+// Helper function to format academic year display
+const formatAcademicYearDisplay = (annee: { libelle: string; date_debut?: string; date_fin?: string }): string => {
+  if (!annee || !annee.date_debut || !annee.date_fin) {
+    return annee.libelle || "Année inconnue";
+  }
+  const startYear = new Date(annee.date_debut).getFullYear();
+  const endYear = new Date(annee.date_fin).getFullYear();
+  return annee.libelle && annee.libelle.includes(String(startYear)) && annee.libelle.includes(String(endYear)) ? annee.libelle : `${annee.libelle || ''} (${startYear}-${endYear})`.trim();
+};
+
 interface AffectationApiResponse {
   id: number;
   professeur: { id: number; nom: string; prenom: string; email: string; role?: string };
@@ -456,7 +466,7 @@ export function ChapterProgressMonitoring() {
               <Select value={selectedAnneeId} onValueChange={handleAnneeChange} disabled={annees.length === 0}>
                 <SelectTrigger>
                   <SelectValue placeholder="Sélectionner une année" />
-                </SelectTrigger>
+                </SelectTrigger> 
                 <SelectContent>
                   {annees.map(annee => (
                     <SelectItem key={annee.id} value={String(annee.id)}>{annee.libelle}</SelectItem>
@@ -516,70 +526,94 @@ export function ChapterProgressMonitoring() {
                   <Loader2 className="h-8 w-8 animate-spin text-blue-500 mr-3" />
                   <span className="text-lg text-gray-600">Chargement des chapitres...</span>
                 </div>
+              ) : displayChapters.length === 0 ? (
+                <div className="text-center py-6 text-gray-500">
+                  {selectedAnneeId ? "Aucun chapitre trouvé pour les filtres sélectionnés." : "Veuillez sélectionner une année scolaire pour voir les chapitres."}
+                </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Chapitre</TableHead>
-                      <TableHead>Classe</TableHead>
-                      <TableHead>Matière</TableHead>
-                      <TableHead>Planifié</TableHead>
-                      <TableHead>Réalisé</TableHead>
-                      <TableHead>Statut</TableHead>
-                      <TableHead>Planning</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedAnneeId && displayChapters.length === 0 && !isFetchingChapters ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center py-6 text-gray-500">
-                          Aucun chapitre trouvé pour les filtres sélectionnés.
-                        </TableCell>
-                      </TableRow>
-                    ) : !selectedAnneeId ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center py-6 text-gray-500">
-                          Veuillez sélectionner une année scolaire pour voir les chapitres.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      displayChapters.map((chapter) => {
-                        const timelineStatus = calculateTimelineStatus(chapter);
-                        return (
-                          <TableRow key={chapter.id}>
-                            <TableCell className="font-medium">
-                              {chapter.titre}
-                              <p className="text-xs text-gray-500 truncate max-w-xs">{chapter.description}</p>
-                            </TableCell>
-                            <TableCell>{chapter.className || 'N/A'}</TableCell>
-                            <TableCell>{chapter.subjectName || 'N/A'}</TableCell>
-                            <TableCell>
-                              {formatDate(chapter.dateDebutPrevue)} - {formatDate(chapter.dateFinPrevue)}
-                            </TableCell>
-                            <TableCell>
-                              {chapter.dateDebutReel ? (
-                                <>
-                                  {formatDate(chapter.dateDebutReel)}
-                                  {chapter.dateFinReel && ` - ${formatDate(chapter.dateFinReel)}`}
-                                </>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </TableCell>
-                            <TableCell>{getStatusBadge(chapter.statut)}</TableCell>
-                            <TableCell>
-                              {chapter.statut !== 'planifié' && (
-                                <Badge variant="outline" className={timelineStatus.class}>
-                                  {timelineStatus.label}
-                                </Badge>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
+                <>
+                  {/* Desktop View */}
+                  <div className="hidden lg:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Chapitre</TableHead>
+                          <TableHead>Classe</TableHead>
+                          <TableHead>Matière</TableHead>
+                          <TableHead>Planifié</TableHead>
+                          <TableHead>Réalisé</TableHead>
+                          <TableHead>Statut</TableHead>
+                          <TableHead>Planning</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {displayChapters.map((chapter) => {
+                          const timelineStatus = calculateTimelineStatus(chapter);
+                          return (
+                            <TableRow key={chapter.id}>
+                              <TableCell className="font-medium">
+                                {chapter.titre}
+                                <p className="text-xs text-gray-500 truncate max-w-xs">{chapter.description}</p>
+                              </TableCell>
+                              <TableCell>{chapter.className || 'N/A'}</TableCell>
+                              <TableCell>{chapter.subjectName || 'N/A'}</TableCell>
+                              <TableCell>
+                                {formatDate(chapter.dateDebutPrevue)} - {formatDate(chapter.dateFinPrevue)}
+                              </TableCell>
+                              <TableCell>
+                                {chapter.dateDebutReel ? (
+                                  <>
+                                    {formatDate(chapter.dateDebutReel)}
+                                    {chapter.dateFinReel && ` - ${formatDate(chapter.dateFinReel)}`}
+                                  </>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                              </TableCell>
+                              <TableCell>{getStatusBadge(chapter.statut)}</TableCell>
+                              <TableCell>
+                                {chapter.statut !== 'planifié' && (
+                                  <Badge variant="outline" className={timelineStatus.class}>
+                                    {timelineStatus.label}
+                                  </Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {/* Mobile View */}
+                  <div className="block lg:hidden space-y-4 p-4">
+                    {displayChapters.map((chapter) => {
+                      const timelineStatus = calculateTimelineStatus(chapter);
+                      return (
+                        <Card key={chapter.id} className="bg-white dark:bg-gray-800 shadow-md rounded-lg">
+                          <CardHeader className="pb-3">
+                            <div className="flex justify-between items-start">
+                              <CardTitle className="text-base font-semibold text-blue-700 dark:text-blue-300">{chapter.titre}</CardTitle>
+                              {getStatusBadge(chapter.statut)}
+                            </div>
+                            <CardDescription className="text-xs pt-1">{chapter.description}</CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-2 text-sm border-t pt-3">
+                            <div className="flex justify-between"><span className="font-medium text-gray-600 dark:text-gray-300">Classe:</span> <span className="font-semibold">{chapter.className || 'N/A'}</span></div>
+                            <div className="flex justify-between"><span className="font-medium text-gray-600 dark:text-gray-300">Matière:</span> <span className="font-semibold">{chapter.subjectName || 'N/A'}</span></div>
+                            <div className="flex justify-between"><span className="font-medium text-gray-600 dark:text-gray-300">Planifié:</span> <span>{formatDate(chapter.dateDebutPrevue)} - {formatDate(chapter.dateFinPrevue)}</span></div>
+                            <div className="flex justify-between"><span className="font-medium text-gray-600 dark:text-gray-300">Réalisé:</span> <span>{chapter.dateDebutReel ? `${formatDate(chapter.dateDebutReel)} - ${formatDate(chapter.dateFinReel)}` : '-'}</span></div>
+                            {chapter.statut !== 'planifié' && (
+                              <div className="flex justify-between items-center pt-1">
+                                <span className="font-medium text-gray-600 dark:text-gray-300">Planning:</span>
+                                <Badge variant="outline" className={timelineStatus.class}>{timelineStatus.label}</Badge>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -598,38 +632,59 @@ export function ChapterProgressMonitoring() {
                   <span className="text-lg text-gray-600">Chargement des données...</span>
                 </div>
               ) : teacherPerformanceData.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Enseignant</TableHead>
-                      <TableHead>Matières</TableHead>
-                      <TableHead>Classes</TableHead>
-                      <TableHead>Chapitres terminés</TableHead>
-                      <TableHead>Progression</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <>
+                  {/* Desktop View */}
+                  <div className="hidden lg:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Enseignant</TableHead>
+                          <TableHead>Matières</TableHead>
+                          <TableHead>Classes</TableHead>
+                          <TableHead>Chapitres terminés</TableHead>
+                          <TableHead>Progression</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {teacherPerformanceData.map((teacher) => (
+                          <TableRow key={teacher.id}>
+                            <TableCell className="font-medium">{teacher.name}</TableCell>
+                            <TableCell>{teacher.subjects}</TableCell>
+                            <TableCell>{teacher.classes}</TableCell>
+                            <TableCell>{teacher.chaptersCompleted} / {teacher.chaptersTotal}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center space-x-2">
+                                <Progress
+                                  value={teacher.chaptersTotal > 0 ? (teacher.chaptersCompleted / teacher.chaptersTotal) * 100 : 0}
+                                  className="h-2 w-[100px]"
+                                />
+                                <span className="text-sm font-medium">
+                                  {teacher.chaptersTotal > 0 ? Math.round((teacher.chaptersCompleted / teacher.chaptersTotal) * 100) : 0}%
+                                </span>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {/* Mobile View */}
+                  <div className="block lg:hidden space-y-4 p-4">
                     {teacherPerformanceData.map((teacher) => (
-                      <TableRow key={teacher.id}>
-                        <TableCell className="font-medium">{teacher.name}</TableCell>
-                        <TableCell>{teacher.subjects}</TableCell>
-                        <TableCell>{teacher.classes}</TableCell>
-                        <TableCell>{teacher.chaptersCompleted} / {teacher.chaptersTotal}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center space-x-2">
-                            <Progress
-                              value={teacher.chaptersTotal > 0 ? (teacher.chaptersCompleted / teacher.chaptersTotal) * 100 : 0}
-                              className="h-2 w-[100px]"
-                            />
-                            <span className="text-sm font-medium">
-                              {teacher.chaptersTotal > 0 ? Math.round((teacher.chaptersCompleted / teacher.chaptersTotal) * 100) : 0}%
-                            </span>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                      <Card key={teacher.id} className="bg-white dark:bg-gray-800 shadow-md rounded-lg">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-base font-semibold text-blue-700 dark:text-blue-300">{teacher.name}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3 text-sm border-t pt-3">
+                          <div className="flex justify-between"><span className="font-medium text-gray-600 dark:text-gray-300">Matières:</span> <span className="text-right">{teacher.subjects}</span></div>
+                          <div className="flex justify-between"><span className="font-medium text-gray-600 dark:text-gray-300">Classes:</span> <span className="text-right">{teacher.classes}</span></div>
+                          <div className="flex justify-between items-center"><span className="font-medium text-gray-600 dark:text-gray-300">Chapitres terminés:</span><span className="font-semibold">{teacher.chaptersCompleted} / {teacher.chaptersTotal}</span></div>
+                          <div><span className="font-medium text-gray-600 dark:text-gray-300">Progression:</span><div className="flex items-center space-x-2 mt-1"><Progress value={teacher.chaptersTotal > 0 ? (teacher.chaptersCompleted / teacher.chaptersTotal) * 100 : 0} className="h-2 flex-1" /><span className="text-xs font-medium">{teacher.chaptersTotal > 0 ? Math.round((teacher.chaptersCompleted / teacher.chaptersTotal) * 100) : 0}%</span></div></div>
+                        </CardContent>
+                      </Card>
                     ))}
-                  </TableBody>
-                </Table>
+                  </div>
+                </>
               ) : (
                 <div className="text-center py-6 text-gray-500">
                   {selectedAnneeId ? "Aucune donnée de performance enseignant pour les filtres actuels." : "Veuillez sélectionner une année scolaire."}

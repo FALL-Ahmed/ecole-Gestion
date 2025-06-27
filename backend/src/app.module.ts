@@ -42,7 +42,7 @@ import { EtablissementInfoModule } from './etablissement/etablissement-info.modu
         entities: [__dirname + '/**/*.entity{.ts,.js}'], // Chemin vers vos entités
         // Ne jamais utiliser synchronize: true en production !
 synchronize: false,
-logging: configService.get<string>('NODE_ENV') !== 'production',
+logging: false,
             ssl: configService.get<string>('DB_HOST')?.includes('railway')
   ? { rejectUnauthorized: false }
   : false

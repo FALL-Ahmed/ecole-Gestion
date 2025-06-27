@@ -16,7 +16,8 @@ import { ProfessorAttendance } from './professor/ProfessorAttendance';
 import { ProfessorSchedule } from './professor/ProfessorSchedule';
 import { GradeInput } from './professor/GradeInput';
 import { StudentSchedule } from './student/StudentSchedule';
-import { StudentCourses } from './student/StudentCourses';
+import { StudentCourses } from './student/StudentCourse';
+
 import { StudentGrades } from './student/StudentGrades';
 import { StudentAttendance } from './student/StudentAttendance';
 import { ChapterPlanning } from './professor/ChapterPlanning';

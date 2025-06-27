@@ -85,6 +85,16 @@ type ExceptionType = 'annulation' | 'remplacement_prof' | 'deplacement_cours' | 
 type ScheduleManagementMode = 'base' | 'exception';
 
 const days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+
+// Helper function to format academic year display
+const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string; date_fin: string }): string => {
+  if (!annee || !annee.date_debut || !annee.date_fin) {
+    return annee.libelle || "Année inconnue";
+  }
+  const startYear = new Date(annee.date_debut).getFullYear();
+  const endYear = new Date(annee.date_fin).getFullYear();
+  return annee.libelle && annee.libelle.includes(String(startYear)) && annee.libelle.includes(String(endYear)) ? annee.libelle : `${annee.libelle || ''} (${startYear}-${endYear})`.trim();
+};
 const timeSlots = ['08:00-10:00', '10:15-12:00', '12:15-14:00'];
 
 interface ScheduleItemData {
@@ -167,8 +177,8 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ day, date, timeSlot, data, 
           >
             {data ? (
               <>
-                <p className="font-medium text-sm truncate">{data.subjectName}</p>
-                <p className="text-xs mt-1 truncate">{data.teacherName}</p>
+                <p className="font-medium text-sm break-words">{data.subjectName}</p>
+                <p className="text-xs mt-1 break-words">{data.teacherName}</p>
                 {data.isException && (
                   <Badge
                     variant="outline"
@@ -820,7 +830,7 @@ export function ScheduleManagement() {
                   <SelectContent className="bg-white">
                     {anneesAcademiques.map((annee) => (
                       <SelectItem key={annee.id} value={String(annee.id)}>
-                        {annee.libelle}
+                        {formatAcademicYearDisplay(annee)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -926,40 +936,76 @@ export function ScheduleManagement() {
                 <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
               </div>
             ) : (
-              <ScrollArea className="h-[calc(100vh-400px)] rounded-md border p-4 bg-white">
-                <div className="grid grid-cols-[100px_repeat(6,1fr)] gap-2 mb-2">
-                  <div className="font-semibold text-gray-500"></div>
-                  {currentWeekDaysInfo.map((dayInfo, index) => (
-                    <div key={index} className="font-semibold text-center py-2 bg-gray-100 rounded">
-                      {dayInfo.dayNameCapitalized}
-                      <div className="text-xs font-normal text-gray-500">
-                        {format(dayInfo.date, 'dd/MM')}
-                      </div>
+              <>
+                {/* Desktop View: Grid */}
+                <div className="hidden lg:block">
+                  <ScrollArea className="h-[calc(100vh-400px)] rounded-md border p-4 bg-white">
+                    <div className="grid grid-cols-[100px_repeat(6,1fr)] gap-2 mb-2">
+                      <div className="font-semibold text-gray-500"></div>
+                      {currentWeekDaysInfo.map((dayInfo, index) => (
+                        <div key={index} className="font-semibold text-center py-2 bg-gray-100 rounded">
+                          {dayInfo.dayNameCapitalized}
+                          <div className="text-xs font-normal text-gray-500">
+                            {format(dayInfo.date, 'dd/MM')}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
 
-                {timeSlots.map((timeSlot) => (
-                  <div key={timeSlot} className="grid grid-cols-[100px_repeat(6,1fr)] gap-2 mb-2">
-                    <div className="text-sm font-medium text-gray-500 py-2 flex items-center">
-                      {timeSlot}
-                    </div>
-                    {currentWeekDaysInfo.map((dayInfo) => (
-                      <div key={`${dayInfo.dayNameCapitalized}-${timeSlot}`} className="min-h-[100px]">
-                        <ScheduleItem
-                          day={dayInfo.dayNameCapitalized}
-                          date={dayInfo.date}
-                          timeSlot={timeSlot}
-                          data={getScheduleItemData(dayInfo.dayNameCapitalized, dayInfo.date, timeSlot)}
-                          onItemClick={handleItemClick}
-                          scheduleMode={scheduleMode}
-                          scheduleView={scheduleView}
-                        />
+                    {timeSlots.map((timeSlot) => (
+                      <div key={timeSlot} className="grid grid-cols-[100px_repeat(6,1fr)] gap-2 mb-2">
+                        <div className="text-sm font-medium text-gray-500 py-2 flex items-center">
+                          {timeSlot}
+                        </div>
+                        {currentWeekDaysInfo.map((dayInfo) => (
+                          <div key={`${dayInfo.dayNameCapitalized}-${timeSlot}`} className="min-h-[100px]">
+                            <ScheduleItem
+                              day={dayInfo.dayNameCapitalized}
+                              date={dayInfo.date}
+                              timeSlot={timeSlot}
+                              data={getScheduleItemData(dayInfo.dayNameCapitalized, dayInfo.date, timeSlot)}
+                              onItemClick={handleItemClick}
+                              scheduleMode={scheduleMode}
+                              scheduleView={scheduleView}
+                            />
+                          </div>
+                        ))}
                       </div>
                     ))}
-                  </div>
-                ))}
-              </ScrollArea>
+                  </ScrollArea>
+                </div>
+
+                {/* Mobile View: List */}
+                <div className="block lg:hidden">
+                  <ScrollArea className="h-[calc(100vh-400px)] rounded-md border p-4 bg-white">
+                    {currentWeekDaysInfo.map((dayInfo) => (
+                      <div key={dayInfo.date.toISOString()} className="mb-6">
+                        <h3 className="text-lg font-semibold text-gray-800 mb-3 sticky top-0 bg-white py-2 z-10 border-b">
+                          {dayInfo.dayNameCapitalized} - {format(dayInfo.date, 'dd/MM')}
+                        </h3>
+                        <div className="space-y-4">
+                          {timeSlots.map((timeSlot) => (
+                            <div key={timeSlot} className="flex flex-col gap-2">
+                              <div className="text-sm font-medium text-gray-600">{timeSlot}</div>
+                              <div className="min-h-[90px]">
+                                <ScheduleItem
+                                  day={dayInfo.dayNameCapitalized}
+                                  date={dayInfo.date}
+                                  timeSlot={timeSlot}
+                                  data={getScheduleItemData(dayInfo.dayNameCapitalized, dayInfo.date, timeSlot)}
+                                  onItemClick={handleItemClick}
+                                  scheduleMode={scheduleMode}
+                                  scheduleView={scheduleView}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </ScrollArea>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

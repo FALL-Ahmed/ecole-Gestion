@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete } from '@nestjs/common';
 import { AnneeAcademiqueService } from './annee-academique.service';
 import { CreateAnneeAcademiqueDto } from './create-annee-academique.dto';
 
@@ -19,5 +19,10 @@ export class AnneeAcademiqueController {
   @Post()
   create(@Body() data: CreateAnneeAcademiqueDto) {
     return this.anneeService.create(data);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: number) {
+    return this.anneeService.remove(id);
   }
 }

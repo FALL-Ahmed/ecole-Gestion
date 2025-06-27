@@ -21,6 +21,11 @@ export class AnneeAcademiqueService {
     return annee;
   }
 
+  // ...existing code...
+async remove(id: number) {
+  // Ajoute ici la logique de suppression (ORM ou requête SQL)
+return this.anneeRepo.delete(id);}
+
   create(data: CreateAnneeAcademiqueDto): Promise<anneescolaire> {
     const annee = this.anneeRepo.create(data);
     return this.anneeRepo.save(annee);

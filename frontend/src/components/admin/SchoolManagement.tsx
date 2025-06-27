@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
-import { Plus, Users, Award, Calendar, User, ArrowRightIcon, SaveIcon, ClipboardListIcon, Pencil } from "lucide-react";
+import { Plus, Users, Award, Calendar, User, ArrowRightIcon, SaveIcon, ClipboardListIcon, Pencil, Trash2 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { Input } from "@/components/ui/input"; // Assurez-vous que Input est importé
 import {
@@ -41,7 +41,16 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
 const [anneeToConfirm, setAnneeToConfirm] = useState<{ libelle: string; debut: string; fin: string } | null>(null);
 const [isConfirmTrimestresOpen, setIsConfirmTrimestresOpen] = useState(false);
 const [trimestresToConfirm, setTrimestresToConfirm] = useState<Array<{ nom: string; date_debut: string; date_fin: string }>>([]);
-  
+const [isDeleteAnneeDialogOpen, setIsDeleteAnneeDialogOpen] = useState(false);
+const [anneeToDelete, setAnneeToDelete] = useState<{ id: string; libelle: string } | null>(null);
+  // Utiliser un `useEffect` pour ouvrir la boîte de dialogue de manière fiable
+  // lorsque `anneeToDelete` est défini.
+  useEffect(() => {
+    if (anneeToDelete) {
+      setIsDeleteAnneeDialogOpen(true);
+    }
+  }, [anneeToDelete]);
+
   const [isEditCoeffDialogOpen, setIsEditCoeffDialogOpen] = useState(false);
 
   const [currentEditingCoeff, setCurrentEditingCoeff] = useState<{
@@ -102,6 +111,18 @@ const [trimestres, setTrimestres] = useState<{
     };
   }[]>([]);
 
+// Helper function to format academic year display consistently
+const formatAcademicYearDisplay = (annee: { libelle: string; date_debut?: string; date_fin?: string }): string => {
+  if (!annee || !annee.date_debut || !annee.date_fin) {
+    return annee?.libelle || "Année inconnue";
+  }
+  const startYear = new Date(annee.date_debut).getFullYear();
+  const endYear = new Date(annee.date_fin).getFullYear();
+  if (annee.libelle && annee.libelle.includes(String(startYear)) && annee.libelle.includes(String(endYear))) {
+      return annee.libelle;
+  }
+  return `${startYear}-${endYear}`;
+};
 // Feedback
 const [successMsg, setSuccessMsg] = useState("");
 
@@ -390,6 +411,37 @@ const handleConfirmSaveAnnee = async () => {
   }
 };
 
+const handleDeleteAnnee = async () => {
+  if (!anneeToDelete) return;
+
+  try {
+    const response = await fetch(`${API_URL}/api/annees-academiques/${anneeToDelete.id}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Réponse non-JSON du serveur.' }));
+      throw new Error(errorData.message || `Échec de la suppression de l'année scolaire. Statut: ${response.status}`);
+    }
+
+    // Mettre à jour l'état local pour refléter la suppression
+    setAnnees(prev => prev.filter(a => a.id !== anneeToDelete.id));
+    setTrimestres(prev => prev.filter(t => String(t.anneeScolaire?.id) !== anneeToDelete.id));
+    setClasses(prev => prev.filter(c => c.annee_scolaire_id !== anneeToDelete.id));
+    setAffectations(prev => prev.filter(aff => String(aff.annee_scolaire?.id) !== anneeToDelete.id));
+    
+    const remainingClassIds = new Set(classes.filter(c => c.annee_scolaire_id !== anneeToDelete.id).map(c => c.id));
+    setCoefficients(prev => prev.filter(coeff => remainingClassIds.has(String(coeff.classe?.id))));
+
+    toast.success(`L'année scolaire "${anneeToDelete.libelle}" et toutes ses données associées ont été supprimées.`);
+  } catch (error) {
+    console.error("Erreur lors de la suppression de l'année scolaire:", error);
+    toast.error(error instanceof Error ? error.message : "Une erreur est survenue.");
+  } finally {
+    setIsDeleteAnneeDialogOpen(false);
+    setAnneeToDelete(null);
+  }
+};
 
 function getCoefficientsByClasse(classeId) {
   return coefficients
@@ -413,10 +465,10 @@ function getCoefficientsByClasse(classeId) {
           </h1>
         </div>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 border border-blue-100 dark:border-gray-700 rounded-2xl shadow flex w-full gap-3 p-2">
+          <TabsList className="mb-8 grid h-auto w-full grid-cols-2 gap-2 rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 p-2 shadow dark:border-gray-700 dark:from-gray-900 dark:to-gray-800 sm:grid-cols-4 md:h-12">
             <TabsTrigger
               value="annees"
-              className="flex-1 flex items-center gap-2 px-4 py-2 rounded-xl font-semibold transition
+              className="flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition
                 text-blue-800 dark:text-blue-100
                 hover:bg-blue-100 dark:hover:bg-gray-800
                 data-[state=active]:bg-blue-500 data-[state=active]:text-white"
@@ -425,7 +477,7 @@ function getCoefficientsByClasse(classeId) {
             </TabsTrigger>
             <TabsTrigger
               value="classes"
-              className="flex-1 flex items-center gap-2 px-4 py-2 rounded-xl font-semibold transition
+              className="flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition
                 text-blue-800 dark:text-blue-100
                 hover:bg-blue-100 dark:hover:bg-gray-800
                 data-[state=active]:bg-blue-500 data-[state=active]:text-white"
@@ -434,7 +486,7 @@ function getCoefficientsByClasse(classeId) {
             </TabsTrigger>
             <TabsTrigger
               value="coefficients"
-              className="flex-1 flex items-center gap-2 px-4 py-2 rounded-xl font-semibold transition
+              className="flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition
                 text-blue-800 dark:text-blue-100
                 hover:bg-blue-100 dark:hover:bg-gray-800
                 data-[state=active]:bg-blue-500 data-[state=active]:text-white"
@@ -443,7 +495,7 @@ function getCoefficientsByClasse(classeId) {
             </TabsTrigger>
             <TabsTrigger
               value="affectations"
-              className="flex-1 flex items-center gap-2 px-4 py-2 rounded-xl font-semibold transition
+              className="flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold transition
                 text-blue-800 dark:text-blue-100
                 hover:bg-blue-100 dark:hover:bg-gray-800
                 data-[state=active]:bg-blue-500 data-[state=active]:text-white"
@@ -460,52 +512,46 @@ function getCoefficientsByClasse(classeId) {
       <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-200">
         <Users className="h-6 w-6" /> Gestion des classes
       </CardTitle>
+      <div className="mt-1 text-sm text-blue-500 dark:text-blue-300">
+        Ajoutez, visualisez et organisez les classes par année scolaire.
+      </div>
     </CardHeader>
 
-    {/* Filtre année scolaire */}
-    <div className="mb-6 w-full max-w-xs px-6">
-      <label
-        htmlFor="annee-select"
-        className="block mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300"
-      >
-        Filtrer par année scolaire
-      </label>
-      <div className="relative">
-        <select
-          id="annee-select"
-          value={anneeScolaireFiltre}
-          onChange={(e) => setAnneeScolaireFiltre(e.target.value)}
-          className="block w-full appearance-none rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 pr-10 text-gray-800 dark:text-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-400"
-        >
-          <option value="">Choisir une année</option>
-          {annees.map((a) => (
-            <option key={a.id} value={String(a.id)}>
-              {a.libelle}
-            </option>
-          ))}
-        </select>
-        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 dark:text-gray-400">
-          <Calendar className="h-5 w-5" />
-        </div>
-      </div>
-    </div>
+    
 
     <CardContent>
-      {/* Bouton Ajouter + message succès */}
-      <div className="flex justify-between items-center mb-6 px-6">
+       {/* Barre d'outils : Filtre et Bouton Ajouter */}
+      <div className="mb-6 flex flex-col items-start justify-between gap-4 rounded-xl border border-gray-200 bg-gray-50 px-6 py-4 dark:border-gray-700 dark:bg-gray-800/50 md:flex-row md:items-center">
+        <div className="w-full md:w-auto">
+          <label htmlFor="annee-select-classes" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Filtrer par année scolaire
+          </label>
+          <select
+            id="annee-select-classes"
+            value={anneeScolaireFiltre}
+            onChange={(e) => setAnneeScolaireFiltre(e.target.value)}
+            className="block w-full appearance-none rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-800 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-400 dark:border-gray-700 dark:bg-gray-800 dark:text-white md:w-64"
+          >
+            <option value="">Choisir une année</option>
+            {annees.map((a) => (
+              <option key={a.id} value={String(a.id)}>{a.libelle}</option>
+            ))}
+          </select>
+        </div>
         <Button
-          className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg hover:scale-105 transition-transform duration-300"
+          className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg transition-transform duration-300 hover:scale-105 md:w-auto"
           onClick={() => setIsAddClasseOpen(true)}
         >
           <Plus className="h-4 w-4 mr-2" />
           Ajouter une classe
         </Button>
-        {successMsg && (
-          <div className="ml-4 px-4 py-2 rounded bg-green-100 text-green-800 text-sm font-semibold shadow">
-            {successMsg}
-          </div>
-        )}
+       
       </div>
+{successMsg && (
+        <div className="mb-4 px-6 text-center font-semibold text-green-700 dark:text-green-300">
+          {successMsg}
+        </div>
+      )}
 
       <div className="px-6">
         {/* Si aucune année sélectionnée */}
@@ -693,15 +739,15 @@ return matieresUniques.map(c => (
           {/* Onglet Affectation des professeurs */}
 <TabsContent value="affectations">
   <Card className="bg-white/90 dark:bg-gray-900/90 rounded-3xl shadow-xl border-2 border-blue-100 dark:border-blue-900">
-    <CardHeader className="flex flex-row items-center justify-between">
+    <CardHeader className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
       <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-200">
         <User className="h-6 w-6" /> Affectation des professeurs
       </CardTitle>
       {/* Filtres en haut à droite */}
-      <div className="flex gap-2 items-center">
+      <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center">
         
         <select
-  className="border border-blue-300 dark:border-blue-700 rounded-lg px-3 py-1 text-sm bg-white dark:bg-gray-800 shadow-sm focus:ring-2 focus:ring-blue-300"
+  className="w-full rounded-lg border border-blue-300 bg-white px-3 py-1 text-sm shadow-sm focus:ring-2 focus:ring-blue-300 dark:border-blue-700 dark:bg-gray-800 sm:w-auto"
   value={filterAnnee}
   onChange={e => setFilterAnnee(e.target.value)}
 >
@@ -713,7 +759,7 @@ return matieresUniques.map(c => (
   ))}
 </select>
         <select
-          className="border border-blue-300 dark:border-blue-700 rounded-lg px-3 py-1 text-sm bg-white dark:bg-gray-800 shadow-sm focus:ring-2 focus:ring-blue-300"
+          className="w-full rounded-lg border border-blue-300 bg-white px-3 py-1 text-sm shadow-sm focus:ring-2 focus:ring-blue-300 dark:border-blue-700 dark:bg-gray-800 sm:w-auto"
           value={filterClasse}
           onChange={e => setFilterClasse(e.target.value)}
           disabled={!filterAnnee}
@@ -730,7 +776,7 @@ return matieresUniques.map(c => (
             ))}
         </select>
         <select
-          className="border border-blue-300 dark:border-blue-700 rounded-lg px-3 py-1 text-sm bg-white dark:bg-gray-800 shadow-sm focus:ring-2 focus:ring-blue-300"
+          className="w-full rounded-lg border border-blue-300 bg-white px-3 py-1 text-sm shadow-sm focus:ring-2 focus:ring-blue-300 dark:border-blue-700 dark:bg-gray-800 sm:w-auto"
           value={filterProf}
           onChange={e => setFilterProf(e.target.value)}
         >
@@ -920,12 +966,24 @@ return matieresUniques.map(c => (
                 aria-expanded={isOpen}
               >
                 <header className="flex items-center gap-4 px-6 pt-6">
-                  <span className="flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-tr from-blue-400 to-indigo-600 text-white text-2xl shadow-lg">
-                    <Calendar className="w-8 h-8" />
-                  </span>
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 truncate">
-                    {annee.libelle}
-                  </h3>
+                  <div className="flex items-center gap-4">
+                    <span className="flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-tr from-blue-400 to-indigo-600 text-white text-2xl shadow-lg">
+                      <Calendar className="w-8 h-8" />
+                    </span>
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 truncate">
+                      {annee.libelle}
+                    </h3>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50"
+                    onClick={(e) => {
+                      e.stopPropagation(); // Empêche le déclenchement de l'ouverture/fermeture de la carte
+                      setAnneeToDelete({ id: annee.id, libelle: annee.libelle });
+                                          
+                    }}
+                  ><Trash2 className="h-5 w-5" /></Button>
                 </header>
 
                 <div className="flex items-center justify-between px-6 pb-6 gap-6 mt-4 border-t border-gray-200 dark:border-gray-700">
@@ -1004,8 +1062,9 @@ return matieresUniques.map(c => (
 
       {/* Dialog Ajouter Classe */}
       <Dialog open={isAddClasseOpen} onOpenChange={setIsAddClasseOpen}>
-  <DialogContent className="rounded-2xl shadow-2xl border-2 border-blue-300 dark:border-blue-900 w-full max-w-lg bg-white dark:bg-gray-900">
-    <DialogHeader>
+  <DialogContent className="h-full w-full max-h-screen overflow-y-auto rounded-2xl border-2 border-blue-300 bg-white p-0 shadow-2xl dark:border-blue-900 dark:bg-gray-900 sm:h-auto sm:max-h-[90vh] sm:max-w-lg">
+    <DialogHeader className="p-6">
+ 
       <DialogTitle className="text-center text-2xl font-bold text-gray-800 dark:text-white">
         Nouvelle Classe
       </DialogTitle>
@@ -1063,7 +1122,7 @@ return matieresUniques.map(c => (
         
         toast.success(message);
       }}
-      className="space-y-6 mt-4"
+      className="space-y-6 p-6"
     >
       <fieldset className="border border-blue-200 dark:border-blue-800 rounded-xl p-6 space-y-5 bg-gray-50 dark:bg-gray-800/50">
         <legend className="text-lg font-medium text-blue-700 dark:text-blue-300 px-2">
@@ -1170,8 +1229,8 @@ return matieresUniques.map(c => (
 
       {/* Dialog Ajouter Coefficient */}
      <Dialog open={isAddCoeffOpen} onOpenChange={setIsAddCoeffOpen}>
-  <DialogContent className="rounded-lg shadow-xl border-2 border-blue-300 dark:border-blue-900 w-full max-w-2xl bg-white dark:bg-gray-900">
-    <DialogHeader>
+  <DialogContent className="h-full w-full max-h-screen overflow-y-auto rounded-lg border-2 border-blue-300 bg-white p-0 shadow-xl dark:border-blue-900 dark:bg-gray-900 sm:h-auto sm:max-h-[90vh] sm:max-w-2xl">
+    <DialogHeader className="p-6">
       <div className="flex items-center justify-center mb-2">
         <DialogTitle className="text-center text-2xl font-bold text-blue-700 dark:text-blue-300">
           Gestion des Coefficients
@@ -1231,8 +1290,8 @@ return matieresUniques.map(c => (
           console.error(error);
           setCoeffError(error.message || "Erreur inconnue.");
         }
-      }}
-      className="space-y-6 mt-4"
+            }} className="space-y-6 p-6"
+
     >
       {/* Section Classe */}
       <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
@@ -1441,8 +1500,9 @@ if (!currentEditingCoeff || currentEditingCoeff.coefficient === '' || isNaN(Numb
 
       {/* Dialog Affecter Professeur */}
       <Dialog open={isAffectProfOpen} onOpenChange={setIsAffectProfOpen}>
-  <DialogContent className="rounded-lg shadow-xl border-2 border-blue-300 dark:border-blue-800 max-w-md bg-white dark:bg-gray-900">
-    <DialogHeader>
+  <DialogContent className="h-full w-full max-h-screen overflow-y-auto rounded-lg border-2 border-blue-300 bg-white p-0 shadow-xl dark:border-blue-800 dark:bg-gray-900 sm:h-auto sm:max-h-[90vh] sm:max-w-md">
+    <DialogHeader className="p-6">
+
       <DialogTitle className="text-xl font-semibold text-blue-700 dark:text-blue-300 text-center">
         Affectation Professeur
       </DialogTitle>
@@ -1487,7 +1547,7 @@ if (!currentEditingCoeff || currentEditingCoeff.coefficient === '' || isNaN(Numb
             toast.error("Erreur lors de l'affectation");
           });
       }}
-      className="space-y-4 p-4"
+      className="space-y-4 p-6"
     >
       {/* Professeur */}
       <div className="space-y-2">
@@ -1637,8 +1697,8 @@ if (!currentEditingCoeff || currentEditingCoeff.coefficient === '' || isNaN(Numb
   setIsAddAnneeOpen(open);
   setIsAddTrimestreOpen(false); // reset to step 1 if closed
 }}>
-  <DialogContent className="rounded-2xl shadow-2xl border-2 border-blue-300 dark:border-blue-900 w-full max-w-xl">
-    <DialogHeader>
+  <DialogContent className="h-full w-full max-h-screen overflow-y-auto rounded-2xl border-2 border-blue-300 bg-white p-0 shadow-2xl dark:border-blue-900 dark:bg-gray-900 sm:h-auto sm:max-h-[90vh] sm:max-w-xl">
+    <DialogHeader className="p-6">
       <DialogTitle className="text-center text-xl text-blue-700 dark:text-blue-200">
         {isAddAnneeOpen ? "Étape 1 : Ajouter une année scolaire" : "Étape 2 : Ajouter les 3 trimestres"}
       </DialogTitle>
@@ -1665,8 +1725,8 @@ if (!currentEditingCoeff || currentEditingCoeff.coefficient === '' || isNaN(Numb
     // Ouvrir le dialogue de confirmation au lieu d'envoyer directement
       setAnneeToConfirm({ libelle: anneeLibelle, debut: anneeDebut, fin: anneeFin });
       setIsConfirmAnneeOpen(true);  
-    }}
-    className="space-y-6"
+     }} className="space-y-6 p-6"
+
   >
     <fieldset className="border border-blue-200 dark:border-blue-800 rounded-xl p-6">
       <legend className="text-lg font-semibold text-blue-700 dark:text-blue-300 px-2">
@@ -1737,8 +1797,8 @@ if (!currentEditingCoeff || currentEditingCoeff.coefficient === '' || isNaN(Numb
 
       setTrimestresToConfirm(allTrimestres.map(t => ({ nom: t.nom, date_debut: t.date_debut, date_fin: t.date_fin }))); // Ne stockez que ce qui est nécessaire pour l'affichage de confirmation
       setIsConfirmTrimestresOpen(true);
-    }}
-    className="space-y-6"
+        }} className="space-y-6 p-6"
+
   >
     {[1, 2, 3].map(i => (
       <fieldset
@@ -1789,29 +1849,63 @@ if (!currentEditingCoeff || currentEditingCoeff.coefficient === '' || isNaN(Numb
 </Dialog>
  
  {/* Dialogue de Confirmation pour l'Année Scolaire */}
- <Dialog open={isConfirmAnneeOpen} onOpenChange={setIsConfirmAnneeOpen}>
-  <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden rounded-xl animate-fade-in-up"> {/* Wow 1, 2, 3 */}
-    <DialogHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 pb-4"> {/* Wow 4 */}
-      <DialogTitle className="text-2xl font-extrabold tracking-tight">Confirmer l'Année Scolaire</DialogTitle> {/* Wow 5 */}
-      
+ <Dialog open={isDeleteAnneeDialogOpen} onOpenChange={(isOpen) => {
+  setIsDeleteAnneeDialogOpen(isOpen);
+  if (!isOpen) setAnneeToDelete(null);
+}}>
+  <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden rounded-xl animate-fade-in-up bg-red-50 dark:bg-red-900">
+    <DialogHeader className="bg-gradient-to-r from-red-600 to-red-400 text-white p-6 pb-4">
+      <DialogTitle className="text-2xl font-extrabold tracking-tight">
+        Supprimer l'année scolaire
+      </DialogTitle>
     </DialogHeader>
-
-    {anneeToConfirm && (
-      <div className="p-6 space-y-4 text-gray-800 dark:text-gray-200">
-        
-
-        <p className="mt-6 text-sm text-orange-700 bg-orange-100 dark:bg-orange-900/30 p-3 rounded-lg border border-orange-300 dark:border-orange-700 font-medium"> {/* Wow 7 */}
-          <span className="mr-2">⚠️</span> Assurez-vous que ces détails sont parfaitement exacts.
-        </p>
-      </div>
-    )}
-
-    <DialogFooter className="flex justify-end gap-3 p-6 bg-gray-50 dark:bg-gray-900 border-t"> {/* Wow 8 */}
-      <Button variant="outline" onClick={() => setIsConfirmAnneeOpen(false)} className="px-5 py-2.5 text-base rounded-md transition-all duration-200 hover:scale-105">Annuler</Button> {/* Wow 9 */}
-      <Button onClick={handleConfirmSaveAnnee} className="px-5 py-2.5 text-base rounded-md bg-green-600 hover:bg-green-700 transition-all duration-200 hover:scale-105">Confirmer et Continuer</Button> {/* Wow 9 */}
+    <div className="p-6 space-y-4 text-gray-800 dark:text-gray-200">
+      <p className="text-lg font-semibold text-red-700 dark:text-red-200">
+        Êtes-vous sûr de vouloir supprimer l'année scolaire&nbsp;
+        <span className="font-bold">{anneeToDelete?.libelle}</span> ?
+      </p>
+      <p className="text-sm text-gray-700 dark:text-gray-300">
+        Cette action est <span className="font-bold text-red-700 dark:text-red-300">irréversible</span> et supprimera toutes les données associées à cette année (trimestres, classes, coefficients, affectations...).
+      </p>
+    </div>
+    <DialogFooter className="flex justify-end gap-3 p-6 bg-gray-50 dark:bg-gray-900 border-t">
+      <Button variant="outline" onClick={() => setIsDeleteAnneeDialogOpen(false)} className="px-5 py-2.5 text-base rounded-md">
+        Annuler
+      </Button>
+      <Button
+        onClick={handleDeleteAnnee}
+        className="px-5 py-2.5 text-base rounded-md bg-red-600 hover:bg-red-700 text-white font-bold"
+      >
+        Supprimer définitivement
+      </Button>
     </DialogFooter>
   </DialogContent>
 </Dialog>
+
+<Dialog open={isConfirmAnneeOpen} onOpenChange={setIsConfirmAnneeOpen}>
+  <DialogContent className="sm:max-w-[480px] p-0 overflow-hidden rounded-xl animate-fade-in-up bg-blue-50 dark:bg-blue-900">
+    <DialogHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 pb-4">
+      <DialogTitle className="text-2xl font-extrabold tracking-tight">Confirmer l'Année Scolaire</DialogTitle>
+    </DialogHeader>
+    {anneeToConfirm && (
+      <div className="p-6 space-y-4 text-gray-800 dark:text-gray-200">
+        {/* ...infos année... */}
+      </div>
+    )}
+    <DialogFooter className="flex justify-end gap-3 p-6 bg-gray-50 dark:bg-gray-900 border-t">
+      <Button variant="outline" onClick={() => setIsConfirmAnneeOpen(false)} className="px-5 py-2.5 text-base rounded-md">
+        Annuler
+      </Button>
+      <Button
+        onClick={handleConfirmSaveAnnee}
+        className="px-5 py-2.5 text-base rounded-md bg-red-600 hover:bg-red-700 text-white font-bold"
+      >
+        Confirmer et Continuer
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
 
 <Dialog open={isConfirmTrimestresOpen} onOpenChange={setIsConfirmTrimestresOpen}>
   <DialogContent className="max-w-lg">
@@ -1857,4 +1951,3 @@ if (!currentEditingCoeff || currentEditingCoeff.coefficient === '' || isNaN(Numb
   );
 
 }
-

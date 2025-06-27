@@ -1,59 +1,46 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { FileIcon, FileText, Search, Download, Eye, ArrowLeft } from 'lucide-react';
+import { FileIcon, FileText, Search, Download, Eye, ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface StudentMaterialsProps {
-  initialCourse?: string;
+  initialCourseId?: number;
   onBack?: () => void;
 }
 
-const courses = ['Mathématiques', 'Français', 'Histoire-Géographie', 'Anglais', 'Sciences', 'Espagnol', 'Arts Plastiques', 'EPS', 'Musique'];
-const chapters = {
-  'Mathématiques': ['Chapitre 1 - Nombres', 'Chapitre 2 - Géométrie', 'Chapitre 3 - Fractions', 'Chapitre 4 - Statistiques'],
-  'Français': ['Chapitre 1 - Grammaire', 'Chapitre 2 - Conjugaison', 'Chapitre 3 - Orthographe', 'Chapitre 4 - Expression écrite'],
-  'Histoire-Géographie': ['Chapitre 1 - Préhistoire', 'Chapitre 2 - Égypte ancienne', 'Chapitre 3 - Grèce antique', 'Chapitre 4 - Géographie mondiale'],
-  'Anglais': ['Chapitre 1 - Grammaire de base', 'Chapitre 2 - Vocabulaire courant', 'Chapitre 3 - Temps verbaux', 'Chapitre 4 - Expression orale'],
-  'Sciences': ['Chapitre 1 - Le corps humain', 'Chapitre 2 - Biodiversité', 'Chapitre 3 - Matière et matériaux', 'Chapitre 4 - Énergie'],
-  'Espagnol': ['Chapitre 1 - Introduction', 'Chapitre 2 - Phrases simples', 'Chapitre 3 - Vocabulaire', 'Chapitre 4 - Conjugaison'],
-  'Arts Plastiques': ['Chapitre 1 - Couleurs', 'Chapitre 2 - Formes', 'Chapitre 3 - Techniques de dessin', 'Chapitre 4 - Histoire de l\'art'],
-  'EPS': ['Chapitre 1 - Sports collectifs', 'Chapitre 2 - Athlétisme', 'Chapitre 3 - Gymnastique', 'Chapitre 4 - Natation'],
-  'Musique': ['Chapitre 1 - Notions de base', 'Chapitre 2 - Instruments', 'Chapitre 3 - Histoire de la musique', 'Chapitre 4 - Pratique vocale']
-};
+interface Course {
+  id: number;
+  name: string;
+}
 
-const documents = [
-  { id: 1, name: 'Cours - Nombres entiers.pdf', subject: 'Mathématiques', chapter: 'Chapitre 1 - Nombres', type: 'pdf', size: '2.3 MB', date: '15/09/2023', teacher: 'M. Dubois', description: 'Cours sur les nombres entiers et les opérations de base' },
-  { id: 2, name: 'Exercices - Chapitre 1.pdf', subject: 'Mathématiques', chapter: 'Chapitre 1 - Nombres', type: 'pdf', size: '1.7 MB', date: '18/09/2023', teacher: 'M. Dubois', description: 'Exercices de révision sur les opérations avec nombres entiers' },
-  { id: 3, name: 'Correction DS1.pdf', subject: 'Mathématiques', chapter: 'Chapitre 1 - Nombres', type: 'pdf', size: '0.8 MB', date: '05/10/2023', teacher: 'M. Dubois', description: 'Correction du devoir surveillé n°1' },
-  { id: 4, name: 'Présentation - Géométrie.pptx', subject: 'Mathématiques', chapter: 'Chapitre 2 - Géométrie', type: 'ppt', size: '5.1 MB', date: '12/10/2023', teacher: 'M. Dubois', description: 'Support de cours pour la leçon sur les figures géométriques' },
-  { id: 5, name: 'Cours - Fractions.pdf', subject: 'Mathématiques', chapter: 'Chapitre 3 - Fractions', type: 'pdf', size: '1.8 MB', date: '15/11/2023', teacher: 'M. Dubois', description: 'Cours sur les fractions et les opérations avec fractions' },
-  { id: 6, name: 'Grammaire de base.pdf', subject: 'Français', chapter: 'Chapitre 1 - Grammaire', type: 'pdf', size: '2.1 MB', date: '20/09/2023', teacher: 'Mme Bernard', description: 'Cours de grammaire française' },
-  { id: 7, name: 'Histoire - La préhistoire.pdf', subject: 'Histoire-Géographie', chapter: 'Chapitre 1 - Préhistoire', type: 'pdf', size: '3.2 MB', date: '22/09/2023', teacher: 'M. Robert', description: 'Cours sur la préhistoire et les premiers hommes' },
-  { id: 8, name: 'Le corps humain.pdf', subject: 'Sciences', chapter: 'Chapitre 1 - Le corps humain', type: 'pdf', size: '4.5 MB', date: '25/09/2023', teacher: 'M. Thomas', description: 'Anatomie et fonctionnement du corps humain' },
-];
+interface Chapter {
+  id: number;
+  titre: string;
+}
+
+interface Document {
+  id: number;
+  name: string;
+  description: string;
+  type: string;
+  size: string;
+  date: string;
+  teacher: string;
+  subject: string;
+  chapter: string;
+}
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = `${API_URL}/api`;
 
 const getFileIcon = (type: string) => {
   switch (type) {
@@ -69,17 +56,82 @@ const getFileIcon = (type: string) => {
   }
 };
 
-export function StudentMaterials({ initialCourse, onBack }: StudentMaterialsProps) {
-  const [selectedCourse, setSelectedCourse] = useState<string>(initialCourse || '');
+export function StudentMaterials({ initialCourseId, onBack }: StudentMaterialsProps) {
+  const { user } = useAuth();
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
+
+  const [selectedCourse, setSelectedCourse] = useState<string>(initialCourseId?.toString() || '');
   const [selectedChapter, setSelectedChapter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<string>('all');
 
-  useEffect(() => {
-    if (initialCourse && !selectedCourse) {
-      setSelectedCourse(initialCourse);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Chargement des matières et documents
+  const fetchStudentData = useCallback(async () => {
+    if (!user || user.role !== 'eleve') {
+      setError("Accès non autorisé.");
+      setIsLoading(false);
+      return;
     }
-  }, [initialCourse, selectedCourse]);
+    setIsLoading(true);
+    setError(null);
+    try {
+      const configRes = await fetch(`${API_BASE_URL}/configuration`);
+      const configData = await configRes.json();
+      const activeAnneeId = configData?.annee_scolaire?.id || configData?.annee_academique_active_id;
+      if (!activeAnneeId) throw new Error("Année scolaire active non configurée.");
+
+      const inscriptionsRes = await fetch(`${API_BASE_URL}/inscriptions?utilisateurId=${user.id}&anneeScolaireId=${activeAnneeId}`);
+      const inscriptions = await inscriptionsRes.json();
+      const studentInscription = inscriptions.find((insc: any) => insc.actif);
+      if (!studentInscription || !studentInscription.classe?.id) throw new Error("Inscription active introuvable.");
+      const studentClassId = studentInscription.classe.id;
+
+      const affectationsRes = await fetch(`${API_BASE_URL}/affectations?classe_id=${studentClassId}&annee_scolaire_id=${activeAnneeId}`);
+      const affectations = await affectationsRes.json();
+      const studentCourses = affectations.map((aff: any) => ({
+        id: aff.matiere.id,
+        name: aff.matiere.nom,
+      }));
+      setCourses(studentCourses);
+
+      const documentsRes = await fetch(`${API_BASE_URL}/documents`);
+      const allDocuments = await documentsRes.json();
+      setDocuments(Array.isArray(allDocuments) ? allDocuments : []);
+    } catch (err: any) {
+      setError(err.message || "Impossible de charger les données.");
+      toast({ title: "Erreur", description: err.message, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchStudentData();
+  }, [fetchStudentData]);
+
+  // Charger les chapitres quand une matière est sélectionnée
+  useEffect(() => {
+    if (!selectedCourse) {
+      setChapters([]);
+      setSelectedChapter('');
+      return;
+    }
+    const fetchChaptersForCourse = async () => {
+      try {
+        const chaptersRes = await fetch(`${API_BASE_URL}/chapitres?matiereId=${selectedCourse}`);
+        const chaptersData = await chaptersRes.json();
+        setChapters(chaptersData.map((ch: any) => ({ id: ch.id, titre: ch.titre })));
+      } catch (err) {
+        setChapters([]);
+      }
+    };
+    fetchChaptersForCourse();
+  }, [selectedCourse]);
 
   const handleCourseChange = (course: string) => {
     setSelectedCourse(course);
@@ -100,26 +152,38 @@ export function StudentMaterials({ initialCourse, onBack }: StudentMaterialsProp
     });
   };
 
+  // Filtrage local
   const filteredDocuments = documents.filter(doc => {
-    // Filtrer par matière si sélectionnée
-    if (selectedCourse && doc.subject !== selectedCourse) return false;
-    
-    // Filtrer par chapitre si sélectionné
+    if (selectedCourse && doc.subject !== courses.find(c => c.id.toString() === selectedCourse)?.name) return false;
     if (selectedChapter && doc.chapter !== selectedChapter) return false;
-    
-    // Filtrer par recherche si texte saisi
     if (searchQuery && !doc.name.toLowerCase().includes(searchQuery.toLowerCase()) && 
         !doc.description.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    
     return true;
   });
 
-  // Trier par date de publication (plus récent d'abord)
   const sortedDocuments = [...filteredDocuments].sort((a, b) => {
     const dateA = a.date.split('/').reverse().join('');
     const dateB = b.date.split('/').reverse().join('');
     return viewMode === 'recent' ? dateB.localeCompare(dateA) : dateA.localeCompare(dateB);
   });
+
+  if (isLoading) {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center h-64">
+        <Loader2 className="h-12 w-12 animate-spin text-blue-500" />
+        <p className="mt-4 text-lg text-gray-600">Chargement des supports de cours...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 text-center text-red-500">
+        <h2 className="text-xl font-semibold mb-2">Erreur</h2>
+        <p>{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -148,14 +212,13 @@ export function StudentMaterials({ initialCourse, onBack }: StudentMaterialsProp
                 </SelectTrigger>
                 <SelectContent>
                   {courses.map((course) => (
-                    <SelectItem key={course} value={course}>
-                      {course}
+                    <SelectItem key={course.id} value={course.id.toString()}>
+                      {course.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            
             <div className="space-y-2">
               <label className="text-sm font-medium">Chapitre</label>
               <Select 
@@ -167,15 +230,14 @@ export function StudentMaterials({ initialCourse, onBack }: StudentMaterialsProp
                   <SelectValue placeholder="Tous les chapitres" />
                 </SelectTrigger>
                 <SelectContent>
-                  {selectedCourse && chapters[selectedCourse]?.map((chapter) => (
-                    <SelectItem key={chapter} value={chapter}>
-                      {chapter}
+                  {selectedCourse && chapters.map((chapter) => (
+                    <SelectItem key={chapter.id} value={chapter.titre}>
+                      {chapter.titre}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            
             <div className="space-y-2">
               <label className="text-sm font-medium">Recherche</label>
               <div className="relative">
@@ -191,18 +253,11 @@ export function StudentMaterials({ initialCourse, onBack }: StudentMaterialsProp
           </div>
         </CardContent>
       </Card>
-      
+
       <div className="flex flex-col md:flex-row justify-between items-center mb-4">
         <h2 className="text-lg font-medium mb-2 md:mb-0">
           {sortedDocuments.length} document(s) disponible(s)
         </h2>
-        
-        <Tabs defaultValue="all" value={viewMode} onValueChange={setViewMode} className="w-full md:w-auto">
-          <TabsList>
-            <TabsTrigger value="all">Par défaut</TabsTrigger>
-            <TabsTrigger value="recent">Plus récents</TabsTrigger>
-          </TabsList>
-        </Tabs>
       </div>
 
       {sortedDocuments.length > 0 ? (
@@ -261,7 +316,7 @@ export function StudentMaterials({ initialCourse, onBack }: StudentMaterialsProp
           <Button 
             variant="link" 
             onClick={() => {
-              setSelectedCourse(initialCourse || '');
+              setSelectedCourse(initialCourseId?.toString() || '');
               setSelectedChapter('');
               setSearchQuery('');
             }}

@@ -19,7 +19,7 @@ import {
 import { Plus, Search, Check, X, ChevronDown, ChevronUp, Loader2, Shield, User, GraduationCap, BookOpen, Upload, Info, Eye, EyeOff } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Skeleton } from '../ui/skeleton';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { Label } from '../ui/label';
@@ -662,11 +662,11 @@ useEffect(() => {
 
   return (
     <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
-      <div className="mb-6 flex justify-center space-x-4">
+      <div className="mb-6 flex flex-col md:flex-row justify-center items-center md:space-x-4 space-y-4 md:space-y-0">
         <Button
           onClick={() => setActiveTab('users')}
           className={cn(
-            "px-8 py-3 text-lg rounded-xl transition-all duration-300 ease-in-out",
+            "px-8 py-3 text-lg rounded-xl transition-all duration-300 ease-in-out w-full md:w-auto",
             activeTab === 'users'
               ? "bg-blue-600 hover:bg-blue-700 text-white shadow-lg-soft"
               : "bg-gray-200 hover:bg-gray-300 text-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200"
@@ -677,7 +677,7 @@ useEffect(() => {
         <Button
           onClick={() => setActiveTab('inscriptions')}
           className={cn(
-            "px-8 py-3 text-lg rounded-xl transition-all duration-300 ease-in-out",
+            "px-8 py-3 text-lg rounded-xl transition-all duration-300 ease-in-out w-full md:w-auto",
             activeTab === 'inscriptions'
               ? "bg-blue-600 hover:bg-blue-700 text-white shadow-lg-soft"
               : "bg-gray-200 hover:bg-gray-300 text-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200"
@@ -690,7 +690,7 @@ useEffect(() => {
       {/* --- User Management View --- */}
       {activeTab === 'users' && (
         <>
-          <div className="flex justify-end mb-6">
+          <div className="flex justify-center md:justify-end mb-6">
             <Dialog open={isAddUserDialogOpen} onOpenChange={setIsAddUserDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2">
@@ -1097,73 +1097,36 @@ useEffect(() => {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                {isLoadingUsers ? (
-                  <div className="space-y-4 p-6">
-                    {[...Array(5)].map((_, i) => (
-                      <Skeleton key={i} className="h-12 w-full rounded-md bg-gray-200 dark:bg-gray-700" />
-                    ))}
-                  </div>
-                ) : (
-                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead className="bg-gray-50 dark:bg-gray-800">
-                      <tr>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group"
-                          onClick={() => requestSortUsers('nom')}
-                        >
-                          <div className="flex items-center">
-                            Nom & Prénom
-                            <SortIcon column="nom" sortConfig={sortConfigUsers} />
-                          </div>
-                        </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group"
-                          onClick={() => requestSortUsers('email')}
-                        >
-                          <div className="flex items-center">
-                            Email
-                            <SortIcon column="email" sortConfig={sortConfigUsers} />
-                          </div>
-                        </th>
-                        
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                        >
-                          <div className="flex items-center">
-                            Classe
-                            {/* Class isn't a direct sortable field on User, but can be derived from inscriptions */}
-                            {/* <SortIcon column="classe_id" sortConfig={sortConfigUsers} /> */}
-                          </div>
-                        </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group"
-                          onClick={() => requestSortUsers('actif')}
-                        >
-                          <div className="flex items-center">
-                            Statut
-                            <SortIcon column="actif" sortConfig={sortConfigUsers} />
-                          </div>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
-                      {filteredUsers.length === 0 ? (
+              {isLoadingUsers ? (
+                <div className="space-y-4 p-6">
+                  {[...Array(5)].map((_, i) => (
+                    <Skeleton key={i} className="h-12 w-full rounded-md bg-gray-200 dark:bg-gray-700" />
+                  ))}
+                </div>
+              ) : (
+                <>
+                  {/* Desktop View */}
+                  <div className="hidden lg:block overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
-                          <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                            {searchTermUsers ? 'Aucun utilisateur trouvé' : 'Aucun utilisateur disponible'}
-                          </td>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group" onClick={() => requestSortUsers('nom')}>
+                            <div className="flex items-center">Nom & Prénom<SortIcon column="nom" sortConfig={sortConfigUsers} /></div>
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group" onClick={() => requestSortUsers('email')}>
+                            <div className="flex items-center">Email<SortIcon column="email" sortConfig={sortConfigUsers} /></div>
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <div className="flex items-center">Rôle</div>
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group" onClick={() => requestSortUsers('actif')}>
+                            <div className="flex items-center">Statut<SortIcon column="actif" sortConfig={sortConfigUsers} /></div>
+                          </th>
                         </tr>
-                      ) : (
-                        filteredUsers.map((user) => (
-                          <tr
-                            key={user.id}
-                            className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                          >
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
+                        {filteredUsers.map((user) => (
+                          <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center">
                                 <TooltipProvider>
@@ -1171,65 +1134,78 @@ useEffect(() => {
                                     <TooltipTrigger>
                                       <Avatar className="h-10 w-10 mr-3 border border-gray-200 dark:border-gray-600">
                                         <AvatarImage src={user.photoUrl || undefined} />
-                                        <AvatarFallback>
-                                          {user.nom?.[0]}{user.prenom?.[0]}
-                                        </AvatarFallback>
+                                        <AvatarFallback>{user.nom?.[0]}{user.prenom?.[0]}</AvatarFallback>
                                       </Avatar>
                                     </TooltipTrigger>
-                                    <TooltipContent>
-                                      <img
-                                        src={user.photoUrl || '/default-user.png'}
-                                        alt={`${user.nom} ${user.prenom}`}
-                                        className="h-24 w-24 rounded-md object-cover"
-                                      />
-                                    </TooltipContent>
+                                    <TooltipContent><img src={user.photoUrl || '/default-user.png'} alt={`${user.nom} ${user.prenom}`} className="h-24 w-24 rounded-md object-cover" /></TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
                                 <div>
-                                  <div
-  className="font-medium text-blue-700 dark:text-blue-300 cursor-pointer underline hover:text-blue-900"
-  onClick={() => setEditUser(user)}
-  title="Modifier cet utilisateur"
->
-  {user.nom} {user.prenom}
-</div>
-                                  {user.tuteurNom && (
-                                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                                      Tuteur: {user.tuteurNom}
-                                    </div>
-                                  )}
+                                  <div className="font-medium text-blue-700 dark:text-blue-300 cursor-pointer underline hover:text-blue-900" onClick={() => setEditUser(user)} title="Modifier cet utilisateur">{user.nom} {user.prenom}</div>
+                                  {user.tuteurNom && <div className="text-xs text-gray-500 dark:text-gray-400">Tuteur: {user.tuteurNom}</div>}
                                 </div>
                               </div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                              {user.email}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <Badge className={`${roleColors[user.role]} capitalize`}>
-                                {user.role}
-                              </Badge>
-                            </td>
-                            
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{user.email}</td>
+                            <td className="px-6 py-4 whitespace-nowrap"><Badge className={`${roleColors[user.role]} capitalize`}>{user.role}</Badge></td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               {user.actif ? (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                                  <Check className="h-3 w-3 mr-1" />
-                                  Actif
-                                </span>
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"><Check className="h-3 w-3 mr-1" />Actif</span>
                               ) : (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-                                  <X className="h-3 w-3 mr-1" />
-                                  Inactif
-                                </span>
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"><X className="h-3 w-3 mr-1" />Inactif</span>
                               )}
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                )}
-              </div>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile View */}
+                  <div className="block lg:hidden p-4 space-y-4">
+                    {filteredUsers.length === 0 ? (
+                      <div className="text-center text-sm text-gray-500 dark:text-gray-400 py-8">
+                        {searchTermUsers ? 'Aucun utilisateur trouvé' : 'Aucun utilisateur disponible'}
+                      </div>
+                    ) : (
+                      filteredUsers.map((user) => (
+                        <Card key={user.id} className="bg-white dark:bg-gray-800 shadow-md rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onClick={() => setEditUser(user)}>
+                          <CardHeader className="flex flex-row items-center gap-4 pb-2">
+                            <Avatar className="h-12 w-12 border-2 border-white dark:border-gray-700">
+                              <AvatarImage src={user.photoUrl || undefined} />
+                              <AvatarFallback>{user.nom?.[0]}{user.prenom?.[0]}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <CardTitle className="text-base font-semibold text-blue-700 dark:text-blue-300">{user.nom} {user.prenom}</CardTitle>
+                              <CardDescription className="text-xs text-gray-500 dark:text-gray-400">{user.email}</CardDescription>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="pt-2 text-sm space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium text-gray-600 dark:text-gray-300">Rôle:</span>
+                              <Badge className={`${roleColors[user.role]} capitalize`}>{user.role}</Badge>
+                            </div>
+                            {user.tuteurNom && (
+                              <div className="flex justify-between items-center">
+                                <span className="font-medium text-gray-600 dark:text-gray-300">Tuteur:</span>
+                                <span className="text-gray-800 dark:text-gray-100">{user.tuteurNom}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium text-gray-600 dark:text-gray-300">Statut:</span>
+                              {user.actif ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"><Check className="h-3 w-3 mr-1" /> Actif</span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"><X className="h-3 w-3 mr-1" /> Inactif</span>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </>
@@ -1238,9 +1214,14 @@ useEffect(() => {
       {/* --- Inscription Management View --- */}
       {activeTab === 'inscriptions' && (
         <>
-          <div className="flex justify-end mb-6">
+          <div className="flex justify-center md:justify-end mb-6">
             <Dialog open={isAddInscriptionDialogOpen} onOpenChange={setIsAddInscriptionDialogOpen}>
-              
+              <DialogTrigger asChild>
+                <Button className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  Ajouter une inscription
+                </Button>
+              </DialogTrigger>
               <DialogContent className="sm:max-w-[800px] p-6 bg-white dark:bg-gray-800 rounded-lg shadow-xl">
                 <DialogHeader>
                   <DialogTitle className="text-2xl font-bold text-gray-900 dark:text-white">Ajouter une nouvelle inscription</DialogTitle>
@@ -1415,80 +1396,37 @@ useEffect(() => {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                {isLoadingInscriptions ? (
-                  <div className="space-y-4 p-6">
-                    {[...Array(5)].map((_, i) => (
-                      <Skeleton key={i} className="h-12 w-full rounded-md bg-gray-200 dark:bg-gray-700" />
-                    ))}
-                  </div>
-                ) : (
-                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead className="bg-gray-50 dark:bg-gray-800">
-                      <tr>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group"
-                          onClick={() => requestSortInscriptions('utilisateur')}
-                        >
-                          <div className="flex items-center">
-                            Élève (Nom & Prénom)
-                            <SortIcon column="utilisateur" sortConfig={sortConfigInscriptions} />
-                          </div>
-                        </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group"
-                          onClick={() => requestSortInscriptions('classe')}
-                        >
-                          <div className="flex items-center">
-                            Classe
-                            <SortIcon column="classe" sortConfig={sortConfigInscriptions} />
-                          </div>
-                        </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group"
-                          onClick={() => requestSortInscriptions('annee_scolaire')}
-                        >
-                          <div className="flex items-center">
-                            Année Scolaire
-                            <SortIcon column="annee_scolaire" sortConfig={sortConfigInscriptions} />
-                          </div>
-                        </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                        >
-                          Rôle
-                        </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group"
-                          onClick={() => requestSortInscriptions('actif')}
-                        >
-                          <div className="flex items-center">
-                            Statut
-                            <SortIcon column="actif" sortConfig={sortConfigInscriptions} />
-                          </div>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
-                      {filteredInscriptions.length === 0 ? (
+              {isLoadingInscriptions ? (
+                <div className="space-y-4 p-6">
+                  {[...Array(5)].map((_, i) => (
+                    <Skeleton key={i} className="h-12 w-full rounded-md bg-gray-200 dark:bg-gray-700" />
+                  ))}
+                </div>
+              ) : (
+                <>
+                  {/* Desktop View */}
+                  <div className="hidden lg:block overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-800">
                         <tr>
-                          <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                            {searchTermInscriptions ? 'Aucune inscription trouvée' : 'Aucune inscription disponible'}
-                          </td>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group" onClick={() => requestSortInscriptions('utilisateur')}>
+                            <div className="flex items-center">Élève (Nom & Prénom)<SortIcon column="utilisateur" sortConfig={sortConfigInscriptions} /></div>
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group" onClick={() => requestSortInscriptions('classe')}>
+                            <div className="flex items-center">Classe<SortIcon column="classe" sortConfig={sortConfigInscriptions} /></div>
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group" onClick={() => requestSortInscriptions('annee_scolaire')}>
+                            <div className="flex items-center">Année Scolaire<SortIcon column="annee_scolaire" sortConfig={sortConfigInscriptions} /></div>
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Rôle</th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group" onClick={() => requestSortInscriptions('actif')}>
+                            <div className="flex items-center">Statut<SortIcon column="actif" sortConfig={sortConfigInscriptions} /></div>
+                          </th>
                         </tr>
-                      ) : (
-                        filteredInscriptions.map((inscription) => (
-                          <tr
-  key={inscription.id}
-  className="hover:bg-blue-50 dark:hover:bg-blue-900 transition-colors cursor-pointer"
-  onClick={() => handleEditUserFromInscription(inscription)}
->
-                            {/* Élève (Nom & Prénom, Email, and Tuteur if any) */}
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
+                        {filteredInscriptions.map((inscription) => (
+                          <tr key={inscription.id} className="hover:bg-blue-50 dark:hover:bg-blue-900 transition-colors cursor-pointer" onClick={() => handleEditUserFromInscription(inscription)}>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center">
                                 <TooltipProvider>
@@ -1496,79 +1434,85 @@ useEffect(() => {
                                     <TooltipTrigger>
                                       <Avatar className="h-10 w-10 mr-3 border border-gray-200 dark:border-gray-600">
                                         <AvatarImage src={inscription.utilisateur.photoUrl || undefined} />
-                                        <AvatarFallback>
-                                          {inscription.utilisateur.prenom?.[0]}{inscription.utilisateur.nom?.[0]}
-                                        </AvatarFallback>
+                                        <AvatarFallback>{inscription.utilisateur.prenom?.[0]}{inscription.utilisateur.nom?.[0]}</AvatarFallback>
                                       </Avatar>
                                     </TooltipTrigger>
-                                    <TooltipContent>
-                                      <img
-                                        src={inscription.utilisateur.photoUrl || '/default-user.png'}
-                                        alt={`${inscription.utilisateur.prenom} ${inscription.utilisateur.nom}`}
-                                        className="h-24 w-24 rounded-md object-cover"
-                                      />
-                                    </TooltipContent>
+                                    <TooltipContent><img src={inscription.utilisateur.photoUrl || '/default-user.png'} alt={`${inscription.utilisateur.prenom} ${inscription.utilisateur.nom}`} className="h-24 w-24 rounded-md object-cover" /></TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
                                 <div>
-                                  <div className="font-medium text-gray-900 dark:text-white">
-                                    {inscription.utilisateur.prenom} {inscription.utilisateur.nom}
-                                  </div>
-                                  <div className="text-sm text-gray-500 dark:text-gray-400">
-                                    {inscription.utilisateur.email}
-                                  </div>
-                                  {inscription.utilisateur.tuteurNom && (
-                                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                                      Tuteur: {inscription.utilisateur.tuteurNom}
-                                    </div>
-                                  )}
+                                  <div className="font-medium text-gray-900 dark:text-white">{inscription.utilisateur.prenom} {inscription.utilisateur.nom}</div>
+                                  <div className="text-sm text-gray-500 dark:text-gray-400">{inscription.utilisateur.email}</div>
+                                  {inscription.utilisateur.tuteurNom && <div className="text-xs text-gray-500 dark:text-gray-400">Tuteur: {inscription.utilisateur.tuteurNom}</div>}
                                 </div>
                               </div>
                             </td>
-
-                            {/* Classe & Niveau */}
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                {inscription.classe.nom}
-                              </div>
-                              <div className="text-sm text-gray-500 dark:text-gray-400">
-                                {inscription.classe.niveau}
-                              </div>
+                              <div className="text-sm font-medium text-gray-900 dark:text-white">{inscription.classe.nom}</div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400">{inscription.classe.niveau}</div>
                             </td>
-
-                            {/* Année Scolaire */}
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                              {inscription.annee_scolaire.libelle}
-                            </td>
-
-                            {/* Rôle */}
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <Badge className={`${roleColors[inscription.utilisateur.role]} capitalize`}>
-                                {inscription.utilisateur.role}
-                              </Badge>
-                            </td>
-
-                            {/* Statut Inscription */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{inscription.annee_scolaire.libelle}</td>
+                            <td className="px-6 py-4 whitespace-nowrap"><Badge className={`${roleColors[inscription.utilisateur.role]} capitalize`}>{inscription.utilisateur.role}</Badge></td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               {inscription.actif ? (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                                  <Check className="h-3 w-3 mr-1" />
-                                  Active
-                                </span>
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"><Check className="h-3 w-3 mr-1" />Active</span>
                               ) : (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-                                  <X className="h-3 w-3 mr-1" />
-                                  Inactive
-                                </span>
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"><X className="h-3 w-3 mr-1" />Inactive</span>
                               )}
                             </td>
                           </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                )}
-              </div>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile View */}
+                  <div className="block lg:hidden p-4 space-y-4">
+                    {filteredInscriptions.length === 0 ? (
+                      <div className="text-center text-sm text-gray-500 dark:text-gray-400 py-8">
+                        {searchTermInscriptions ? 'Aucune inscription trouvée' : 'Aucune inscription disponible'}
+                      </div>
+                    ) : (
+                      filteredInscriptions.map((inscription) => (
+                        <Card key={inscription.id} className="bg-white dark:bg-gray-800 shadow-md rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onClick={() => handleEditUserFromInscription(inscription)}>
+                          <CardHeader className="flex flex-row items-center gap-4 pb-2">
+                            <Avatar className="h-12 w-12 border-2 border-white dark:border-gray-700">
+                              <AvatarImage src={inscription.utilisateur.photoUrl || undefined} />
+                              <AvatarFallback>{inscription.utilisateur.prenom?.[0]}{inscription.utilisateur.nom?.[0]}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <CardTitle className="text-base font-semibold text-blue-700 dark:text-blue-300">{inscription.utilisateur.prenom} {inscription.utilisateur.nom}</CardTitle>
+                              <CardDescription className="text-xs text-gray-500 dark:text-gray-400">{inscription.utilisateur.email}</CardDescription>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="pt-2 text-sm space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium text-gray-600 dark:text-gray-300">Classe:</span>
+                              <span className="text-gray-800 dark:text-gray-100 font-semibold">{inscription.classe.nom} ({inscription.classe.niveau})</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium text-gray-600 dark:text-gray-300">Année:</span>
+                              <span className="text-gray-800 dark:text-gray-100">{inscription.annee_scolaire.libelle}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium text-gray-600 dark:text-gray-300">Rôle:</span>
+                              <Badge className={`${roleColors[inscription.utilisateur.role]} capitalize`}>{inscription.utilisateur.role}</Badge>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium text-gray-600 dark:text-gray-300">Statut:</span>
+                              {inscription.actif ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"><Check className="h-3 w-3 mr-1" /> Active</span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"><X className="h-3 w-3 mr-1" /> Inactive</span>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </>

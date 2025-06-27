@@ -589,7 +589,7 @@ export function StudentSchedule() {
 
     return (
 <div className="p-6">
-              <header className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 p-4 bg-white/70 backdrop-blur-md rounded-2xl border border-gray-100">
+              <header className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10 p-4 bg-white/70 backdrop-blur-md rounded-2xl border border-gray-100">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 leading-tight drop">
                         Mon Emploi du Temps 
@@ -601,7 +601,7 @@ export function StudentSchedule() {
                         {format(currentTime, 'EEEE dd MMMM yyyy', { locale: fr })}
                     </p>
                 </div>
-                <div className="flex items-center gap-3 bg-gray-50/50 p-2 rounded-xl shadow-inner border border-gray-100">
+                <div className="flex items-center flex-wrap justify-end gap-2 bg-gray-50/50 p-2 rounded-xl shadow-inner border border-gray-100">
                     <Button
                         variant="outline"
                         size="icon"
@@ -625,7 +625,7 @@ export function StudentSchedule() {
                         variant="default"
                         size="sm"
                         onClick={() => setWeekOffset(0)}
-                        className="ml-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 flex items-center"
+                        className="ml-2 md:ml-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 flex items-center"
                     >
                         <Home className="h-4 w-4 mr-2" /> Cette Semaine
                     </Button>

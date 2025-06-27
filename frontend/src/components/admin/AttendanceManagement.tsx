@@ -153,54 +153,80 @@ export function AttendanceManagement() {
     };
     fetchAnnees();
   }, []);
+return (
+  <div className="bg-gray-50 min-h-screen w-full">
+    <CardHeader className="pb-4">
+      <CardTitle className="text-2xl font-bold text-gray-800">
+        Gestion des Présences et Absences
+      </CardTitle>
+      <CardDescription>
+        Gérez les présences quotidiennes des élèves et suivez leurs absences.
+      </CardDescription>
+    </CardHeader>
 
-  return (
-    <div className="bg-gray-50 min-h-screen w-full">
-      <CardHeader className="pb-4">
-        <CardTitle className="text-2xl font-bold text-gray-800">Gestion des Présences et Absences</CardTitle>
-        <CardDescription>Gérez les présences quotidiennes des élèves et suivez leurs absences.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="flex items-center gap-4 mb-6">
-          <label htmlFor="school-year-select" className="font-semibold text-gray-700">Année Scolaire :</label>
-          <Select onValueChange={setSelectedSchoolYearId} value={selectedSchoolYearId} disabled={isLoadingYears}>
-            <SelectTrigger id="school-year-select" className="w-[200px] bg-white">
-              <SelectValue placeholder="Sélectionner une année" />
-            </SelectTrigger>
-            <SelectContent>
-              {anneesAcademiques.map((annee) => (
-                <SelectItem key={annee.id} value={annee.id.toString()}>
-                  {annee.libelle}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+    {/* Onglets tout en haut */}
+    <Tabs defaultValue="dailyAttendance" className="w-full px-2">
+  <TabsList className="flex flex-row flex-wrap w-full gap-2 sm:gap-4 justify-center mb-4 sm:mb-8">
+    <TabsTrigger value="dailyAttendance" className="flex-1 sm:flex-none">Enregistrer les Présences</TabsTrigger>
+ <TabsTrigger
+    value="absenceTracking"
+className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
+  >
+    Suivi des Absences
+  </TabsTrigger>  
+  </TabsList>
 
-        <Tabs defaultValue="dailyAttendance" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="dailyAttendance">Enregistrer les Présences</TabsTrigger>
-            <TabsTrigger value="absenceTracking">Suivi des Absences</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="dailyAttendance">
-            <ProfessorAttendance
-              selectedSchoolYearId={selectedSchoolYearId}
-              anneesAcademiques={anneesAcademiques}
-            />
-          </TabsContent>
-          <TabsContent value="absenceTracking">
-            <AttendanceTracking
-              selectedSchoolYearId={selectedSchoolYearId}
-              anneesAcademiques={anneesAcademiques}
-            />
-          </TabsContent>
-        </Tabs>
-      </CardContent>
-    </div>
-  );
+      {/* Sélecteur d'année scolaire dans chaque tab */}
+      <TabsContent value="dailyAttendance">
+  <div className="flex items-center gap-4 mb-8 mt-14">{/* <-- passe de mb-6 à mb-8 */}
+    <label htmlFor="school-year-select" className="font-semibold text-gray-700">
+      Année Scolaire :
+    </label>
+    <Select onValueChange={setSelectedSchoolYearId} value={selectedSchoolYearId} disabled={isLoadingYears}>
+      <SelectTrigger id="school-year-select" className="w-[200px] bg-white">
+        <SelectValue placeholder="Sélectionner une année" />
+      </SelectTrigger>
+      <SelectContent>
+        {anneesAcademiques.map((annee) => (
+          <SelectItem key={annee.id} value={annee.id.toString()}>
+            {annee.libelle}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+  <ProfessorAttendance
+    selectedSchoolYearId={selectedSchoolYearId}
+    anneesAcademiques={anneesAcademiques}
+  />
+</TabsContent>
+       <TabsContent value="absenceTracking">
+  <div className="flex items-center gap-4 mb-6 mt-14">{/* <-- retire mt-4 */}
+    <label htmlFor="school-year-select" className="font-semibold text-gray-700">
+      Année Scolaire :
+    </label>
+    <Select onValueChange={setSelectedSchoolYearId} value={selectedSchoolYearId} disabled={isLoadingYears}>
+      <SelectTrigger id="school-year-select" className="w-[200px] bg-white">
+        <SelectValue placeholder="Sélectionner une année" />
+      </SelectTrigger>
+      <SelectContent>
+        {anneesAcademiques.map((annee) => (
+          <SelectItem key={annee.id} value={annee.id.toString()}>
+            {annee.libelle}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+  <AttendanceTracking
+    selectedSchoolYearId={selectedSchoolYearId}
+    anneesAcademiques={anneesAcademiques}
+  />
+</TabsContent>
+    </Tabs>
+  </div>
+);
 }
-
 interface ProfessorAttendanceProps {
   selectedSchoolYearId: string;
   anneesAcademiques: AnneeAcademique[];
@@ -445,8 +471,8 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
         <CardTitle className="text-xl font-semibold text-gray-800">Enregistrer les Présences du Jour</CardTitle>
         <CardDescription>Sélectionnez les détails de la séance et marquez la présence des élèves pour l'année {anneeScolaireSelectionnee}.</CardDescription>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6 p-4 border rounded-md bg-blue-50">
+      <CardContent className="pt-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 p-4 border rounded-lg bg-blue-50/50 dark:bg-gray-800/20">
           <div className="space-y-2">
             <label htmlFor="select-class-daily" className="text-sm font-medium text-gray-700">Classe</label>
             <Select onValueChange={setSelectedClass} value={selectedClass} disabled={isLoadingClasses || !selectedSchoolYearId}>
@@ -536,56 +562,91 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
                   <CardDescription className="text-green-800 font-semibold">
                     {classes.find(c => c.id.toString() === selectedClass)?.nom} -
                     {matieres.find(m => m.id.toString() === selectedSubject)?.nom} -
-                    {format(date, 'dd/MM/yyyy')} ({selectedTimeSlot})
+                    {format(date, 'dd/MM/yyyy')} ({selectedTimeSlot}) 
                     <span className="ml-4 px-2 py-1 bg-green-200 text-green-900 rounded-full text-xs font-bold">
                       {attendanceData.length} élèves | {absenceCount} absents
                     </span>
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  {attendanceData.length === 0 ? (
+                <CardContent className="p-4 md:p-6">
+                  {attendanceData.length === 0 ? ( 
                     <p className="text-center text-gray-600 py-4">Aucun élève trouvé pour cette classe ou cette année scolaire.</p>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <Table className="min-w-full bg-white rounded-lg shadow-sm">
-                        <TableHeader className="bg-gray-100">
-                          <TableRow>
-                            <TableHead className="w-1/2 text-gray-700">Élève</TableHead>
-                            <TableHead className="w-1/4 text-center text-gray-700">Présent</TableHead>
-                            <TableHead className="w-1/4 text-center text-gray-700">Absent</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {attendanceData.map((student) => (
-                            <TableRow key={student.etudiant_id} className="hover:bg-gray-50">
-                              <TableCell className="font-medium text-gray-800">
-                                {student.nom}
-                              </TableCell>
-                              <TableCell className="text-center">
+                    <>
+                      {/* Desktop View */}
+                      <div className="hidden md:block overflow-x-auto">
+                        <Table className="min-w-full bg-white rounded-lg shadow-sm">
+                          <TableHeader className="bg-gray-100">
+                            <TableRow>
+                              <TableHead className="w-1/2 text-gray-700">Élève</TableHead>
+                              <TableHead className="w-1/4 text-center text-gray-700">Présent(e)</TableHead>
+                              <TableHead className="w-1/4 text-center text-gray-700">Absence Justifiée</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {attendanceData.map((student) => (
+                              <TableRow key={student.etudiant_id} className="hover:bg-gray-50">
+                                <TableCell className="font-medium text-gray-800">{student.nom}</TableCell>
+                                <TableCell className="text-center">
+                                  <Checkbox
+                                    checked={student.present}
+                                    onCheckedChange={(checked) => handlePresentChange(student.etudiant_id, checked === true)}
+                                    aria-label={`Marquer ${student.nom} comme présent`}
+                                    className="w-5 h-5 border-2 border-blue-400 data-[state=checked]:bg-blue-500 data-[state=checked]:text-white"
+                                  />
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <Checkbox
+                                    checked={!student.present && student.justified}
+                                    onCheckedChange={(checked) => handleJustifiedChange(student.etudiant_id, checked === true)}
+                                    disabled={student.present}
+                                    aria-label={`Marquer ${student.nom} comme absent justifié`}
+                                    className="w-5 h-5 border-2 border-red-400 data-[state=checked]:bg-red-500 data-[state=checked]:text-white"
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      {/* Mobile View */}
+                      <div className="block md:hidden space-y-4">
+                        {attendanceData.map((student) => (
+                          <Card key={student.etudiant_id} className="p-4 bg-white shadow-sm">
+                            <p className="font-semibold text-base text-gray-800 mb-3">{student.nom}</p>
+<div className="flex flex-col gap-3 sm:flex-row">
+                              <Button
+                                variant={student.present ? 'default' : 'outline'}
+                                onClick={() => handlePresentChange(student.etudiant_id, true)}
+                                className={`justify-start gap-2 ${student.present ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-100'}`}
+                              >
                                 <Checkbox
                                   checked={student.present}
                                   onCheckedChange={(checked) => handlePresentChange(student.etudiant_id, checked === true)}
-                                  aria-label={`Marquer ${student.nom} comme présent`}
-                                  className="w-5 h-5 border-2 border-blue-400 data-[state=checked]:bg-blue-500 data-[state=checked]:text-white"
+                                  className="border-white data-[state=checked]:bg-white data-[state=checked]:text-green-600"
                                 />
-                              </TableCell>
-                              <TableCell className="text-center">
+                                <label className="font-medium">Présent(e)</label>
+                              </Button>
+                              <Button
+                                variant={!student.present ? 'destructive' : 'outline'}
+                                onClick={() => handlePresentChange(student.etudiant_id, false)}
+                                className={`justify-start gap-2 ${!student.present ? '' : 'bg-gray-100'}`}
+                              >
                                 <Checkbox
-                                  checked={!student.present && student.justified}
-                                  onCheckedChange={(checked) => handleJustifiedChange(student.etudiant_id, checked === true)}
-                                  disabled={student.present}
-                                  aria-label={`Marquer ${student.nom} comme absent justifié`}
-                                  className="w-5 h-5 border-2 border-red-400 data-[state=checked]:bg-red-500 data-[state=checked]:text-white"
+                                  checked={!student.present}
+                                  onCheckedChange={(checked) => handlePresentChange(student.etudiant_id, !checked)}
                                 />
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                                <label className="font-medium">Absent(e)</label>
+                              </Button>
+                            </div>
+                           
+                          </Card>
+                        ))}
+                      </div>
+                    </>
                   )}
-                  <div className="mt-6 flex justify-end">
-                    <Button onClick={saveAttendance} className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md transition-colors" disabled={attendanceData.length === 0}>
+                  <div className="mt-6 flex flex-col sm:flex-row justify-center sm:justify-end">
+                    <Button onClick={saveAttendance} className="w-full sm:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md transition-colors" disabled={attendanceData.length === 0}>
                       <Save className="mr-2 h-5 w-5" />
                       Enregistrer la Feuille
                     </Button>
@@ -739,11 +800,11 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
   return (
     <Card className="shadow-lg border border-gray-200">
       <CardHeader className="pb-4">
-        <CardTitle className="text-xl font-semibold text-gray-800">Consulter & Justifier les Absences</CardTitle>
+        <CardTitle className="text-xl font-semibold text-gray-800">Consulter et Justifier les Absences</CardTitle>
         <CardDescription>Recherchez et gérez les absences des élèves par classe et période pour l'année {anneeScolaireSelectionnee}.</CardDescription>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 p-4 border rounded-md bg-purple-50">
+      <CardContent className="pt-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 p-4 border rounded-lg bg-purple-50/50 dark:bg-gray-800/20">
           <div className="space-y-2">
             <label htmlFor="filter-class-tracking" className="text-sm font-medium text-gray-700">Classe</label>
             <Select onValueChange={setSelectedClass} value={selectedClass} disabled={isLoadingClasses || !selectedSchoolYearId}>
@@ -817,7 +878,7 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
 
         {isFilterComplete ? (
           <>
-            <div className="flex justify-end mt-6 mb-4">
+            <div className="flex justify-end my-4">
               <div className="relative w-64">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
                 <Input
@@ -829,80 +890,92 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
               </div>
             </div>
 
-            <div className="mt-6">
+            <div className="mt-4">
               {isLoading ? (
                 <p className="text-center text-gray-500">Chargement des données...</p>
-              ) : filteredAbsenceRecords.length > 0 ? (
-                <Card className="shadow-md">
-                  <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                      <Table className="min-w-full bg-white rounded-lg shadow-sm">
-                        <TableHeader className="bg-gray-100">
-                          <TableRow>
-                            <TableHead className="text-gray-700">Élève</TableHead>
-                            <TableHead className="text-gray-700">Classe</TableHead>
-                            <TableHead className="text-gray-700">Date</TableHead>
-                            <TableHead className="text-gray-700">Matière</TableHead>
-                            <TableHead className="text-gray-700">Statut</TableHead>
-                            <TableHead className="text-gray-700 min-w-[200px]">Justification</TableHead>
-                            <TableHead className="text-gray-700">Actions</TableHead>
+              ) : filteredAbsenceRecords.length > 0 ? ( 
+                <>
+                  {/* Desktop View */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <Table className="min-w-full bg-white rounded-lg shadow-sm">
+                      <TableHeader className="bg-gray-100">
+                        <TableRow>
+                          <TableHead className="text-gray-700">Élève</TableHead>
+                          <TableHead className="text-gray-700">Classe</TableHead>
+                          <TableHead className="text-gray-700">Date</TableHead>
+                          <TableHead className="text-gray-700">Matière</TableHead>
+                          <TableHead className="text-gray-700">Statut</TableHead>
+                          <TableHead className="text-gray-700 min-w-[200px]">Justification</TableHead>
+                          <TableHead className="text-gray-700">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredAbsenceRecords.map((record) => (
+                          <TableRow key={record.id} className="hover:bg-gray-50">
+                            <TableCell className="font-medium text-gray-800">{record.etudiant_nom}</TableCell>
+                            <TableCell className="text-gray-700">{record.etudiant_classe_nom}</TableCell>
+                            <TableCell className="text-gray-700">{format(new Date(record.date), 'dd/MM/yyyy')}</TableCell>
+                            <TableCell className="text-gray-700">{record.matiere_nom}</TableCell>
+                            <TableCell>
+                              {record.justified ? (
+                                <Badge className="bg-green-100 text-green-700 border-green-300 px-3 py-1 text-xs font-semibold">Justifiée</Badge>
+                              ) : (
+                                <Badge className="bg-red-100 text-red-700 border-red-300 px-3 py-1 text-xs font-semibold">Non justifiée</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                placeholder="Motif de l'absence..."
+                                value={record.justification}
+                                onChange={(e) => handleJustificationChange(record.id, e.target.value)}
+                                disabled={record.justified}
+                                className="w-full text-gray-800 bg-white"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {!record.justified && (
+                                <Button variant="secondary" size="sm" onClick={() => markAsJustified(record.id)} disabled={!record.justification?.trim()} className="bg-purple-100 text-purple-700 hover:bg-purple-200">
+                                  Justifier
+                                </Button>
+                              )}
+                            </TableCell>
                           </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredAbsenceRecords.map((record) => (
-                            <TableRow key={record.id} className="hover:bg-gray-50">
-                              <TableCell className="font-medium text-gray-800">
-                                {record.etudiant_nom}
-                              </TableCell>
-                              <TableCell className="text-gray-700">{record.etudiant_classe_nom}</TableCell>
-                              <TableCell className="text-gray-700">
-                                {format(new Date(record.date), 'dd/MM/yyyy')}
-                              </TableCell>
-                              <TableCell className="text-gray-700">
-                                {record.matiere_nom}
-                              </TableCell>
-                              <TableCell>
-                                {record.justified ? (
-                                  <Badge className="bg-green-100 text-green-700 border-green-300 px-3 py-1 text-xs font-semibold">
-                                    Justifiée
-                                  </Badge>
-                                ) : (
-                                  <Badge className="bg-red-100 text-red-700 border-red-300 px-3 py-1 text-xs font-semibold">
-                                    Non justifiée
-                                  </Badge>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  placeholder="Motif de l'absence..."
-                                  value={record.justification}
-                                  onChange={(e) =>
-                                    handleJustificationChange(record.id, e.target.value)
-                                  }
-                                  disabled={record.justified}
-                                  className="w-full text-gray-800 bg-white"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                {!record.justified && (
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => markAsJustified(record.id)}
-                                    disabled={!record.justification?.trim()}
-                                    className="bg-purple-100 text-purple-700 hover:bg-purple-200"
-                                  >
-                                    Justifier
-                                  </Button>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {/* Mobile View */}
+                  <div className="block md:hidden space-y-4">
+                    {filteredAbsenceRecords.map((record) => (
+                      <Card key={record.id} className="p-4 bg-white shadow-sm border">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <p className="font-bold text-base text-gray-800">{record.etudiant_nom}</p>
+                            <p className="text-sm text-gray-500">{record.etudiant_classe_nom}</p>
+                          </div>
+                          {record.justified ? (
+                            <Badge className="bg-green-100 text-green-800 border-green-200">Justifiée</Badge>
+                          ) : (
+                            <Badge className="bg-red-100 text-red-800 border-red-200">Non justifiée</Badge>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-600 mb-4 border-t pt-3">
+                          <p><strong>Date:</strong></p><p>{format(new Date(record.date), 'dd/MM/yyyy')}</p>
+                          <p><strong>Matière:</strong></p><p>{record.matiere_nom}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-gray-700">Motif de la justification :</label>
+                          <Input placeholder={record.justified ? "Absence déjà justifiée" : "Saisir le motif..."} value={record.justification} onChange={(e) => handleJustificationChange(record.id, e.target.value)} disabled={record.justified} className="w-full text-sm" />
+                          {!record.justified && (
+                            <Button size="sm" onClick={() => markAsJustified(record.id)} disabled={!record.justification?.trim()} className="w-full bg-purple-600 text-white hover:bg-purple-700">
+                              Justifier l'absence
+                            </Button>
+                          )}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </>
               ) : (
                 <div className="bg-white rounded-lg p-8 text-center shadow-inner border border-gray-200">
                   <p className="text-gray-600 text-lg font-medium">
