@@ -796,7 +796,7 @@ export function ScheduleManagement() {
     <div className="p-6 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
       <div className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-          <h1 className="text-3xl font-bold text-gray-800">Gestion des Emplois du Temps</h1>
+          <h1 className="text-2xl font-bold mb-6">Gestion des Emplois du Temps</h1>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={handlePreviousWeek} className="bg-white">
               <ChevronLeft className="h-4 w-4" />

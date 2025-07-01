@@ -111,7 +111,7 @@ export function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4 relative overflow-hidden">
       {/* Floating background icons */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {floatingIcons.map((icon) => (

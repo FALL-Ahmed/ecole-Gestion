@@ -1,5 +1,11 @@
 {
   "devDependencies": {
     "@types/estree": "^1.0.8"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss-animate": "^1.0.7",
+    "use-debounce": "^7.0.1"
   }
 }

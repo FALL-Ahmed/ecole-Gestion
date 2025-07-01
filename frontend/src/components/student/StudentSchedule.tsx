@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { format, parseISO, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, subWeeks, addWeeks, isValid, isToday } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { useAuth } from '@/contexts/AuthContext';
+
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@radix-ui/react-scroll-area';
@@ -183,10 +185,7 @@ const EmptySlot: React.FC = () => (
 );
 
 export function StudentSchedule() {
-    const [studentId, setStudentId] = useState<number | null>(null);
-    const [studentName, setStudentName] = useState<string>('');
     const [studentClassId, setStudentClassId] = useState<number | null>(null);
-    const [studentClassName, setStudentClassName] = useState<string>(''); // Nouvel état pour le nom de la classe
 
     const [currentAnneeAcademique, setCurrentAnneeAcademique] = useState<AnneeAcademique | null>(null);
     const [allMatieres, setAllMatieres] = useState<Matiere[]>([]);
@@ -201,6 +200,8 @@ export function StudentSchedule() {
     const [selectedDay, setSelectedDay] = useState<string>('');
     const [currentTime, setCurrentTime] = useState(new Date());
     const [weekOffset, setWeekOffset] = useState(0);
+  const { user } = useAuth();
+    const studentClassName = useMemo(() => allClasses.find(c => c.id === studentClassId)?.nom || 'Classe inconnue', [allClasses, studentClassId]);
 
     const currentWeekStart = useMemo(() =>
         startOfWeek(addWeeks(new Date(), weekOffset), { weekStartsOn: 1 }),
@@ -222,61 +223,75 @@ export function StudentSchedule() {
         setSelectedDay(todayFr.charAt(0).toUpperCase() + todayFr.slice(1));
     }, [currentTime]);
 
-    const fetchInitialData = useCallback(async () => {
+    // useEffect 1: Fetch static data and student's class info based on logged-in user
+    useEffect(() => {
+        const fetchStudentContextData = async () => {
+        if (!user || user.role !== 'eleve') {
+            setError("Accès refusé. Veuillez vous connecter en tant qu'élève.");
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         setError(null);
         try {
-            const userString = localStorage.getItem('user');
-            if (!userString) {
-                setError("Informations d'utilisateur introuvables. Veuillez vous reconnecter.");
-                return;
+            // Étape 1: Obtenir l'ID de l'année active depuis la configuration
+            const configRes = await fetch(`${API_URL}/api/configuration`);
+            if (!configRes.ok) throw new Error("Impossible de charger la configuration.");
+            
+            const configData: any | any[] = await configRes.json();
+            let activeAnneeId: number | undefined;
+
+            if (Array.isArray(configData) && configData.length > 0) {
+                activeAnneeId = configData[0].annee_academique_active_id || configData[0].annee_scolaire?.id;
+            } else if (configData && !Array.isArray(configData)) {
+                activeAnneeId = configData.annee_academique_active_id || configData.annee_scolaire?.id;
             }
-            const user: UserData = JSON.parse(userString);
 
-            if (user.role !== 'eleve' || !user.id) {
-                setError("Accès refusé : L'utilisateur n'est pas un élève ou l'ID est manquant.");
-                return;
-            }
+            let anneePourRequete: AnneeAcademique | null = null;
 
-            setStudentId(user.id);
-            setStudentName(`${user.prenom} ${user.nom}`);
-
-            const anneesRes: AnneeAcademique[] = await fetch(`${API_URL}/api/annees-academiques`).then(res => res.json());
-            const activeAnnee = anneesRes.find((an: AnneeAcademique) =>
-                new Date() >= parseISO(an.date_debut) && new Date() <= parseISO(an.date_fin)
-            );
-
-            if (!activeAnnee) {
-                const sortedAnnees = anneesRes.sort((a, b) => parseISO(b.date_fin).getTime() - parseISO(a.date_fin).getTime());
-                const fallbackAnnee = sortedAnnees.length > 0 ? sortedAnnees[0] : null;
-                if (fallbackAnnee) {
-                    setCurrentAnneeAcademique(fallbackAnnee);
-                    toast({
-                        title: "Année Académique",
-                        description: "Aucune année académique active trouvée. Affichage de l'emploi du temps pour la dernière année disponible.",
-                        variant: "default",
-                    });
-                } else {
-                    setError("Aucune année académique trouvée dans le système.");
-                    return;
+            if (activeAnneeId) {
+                // Étape 2: Charger les détails de l'année active
+                const anneeDetailsRes = await fetch(`${API_URL}/api/annees-academiques/${activeAnneeId}`);
+                if (!anneeDetailsRes.ok) {
+                    throw new Error(`Impossible de charger les détails de l'année active (ID: ${activeAnneeId}).`);
                 }
+                anneePourRequete = await anneeDetailsRes.json();
             } else {
-                setCurrentAnneeAcademique(activeAnnee);
+                // Logique de secours si la configuration est absente
+                toast({
+                    title: "Configuration",
+                    description: "Année active non trouvée dans la configuration, tentative de détection automatique.",
+                    variant: "default",
+                });
+                const anneesRes: AnneeAcademique[] = await fetch(`${API_URL}/api/annees-academiques`).then(res => res.json());
+                anneePourRequete = anneesRes.find((an: AnneeAcademique) =>
+                    new Date() >= parseISO(an.date_debut) && new Date() <= parseISO(an.date_fin)
+                ) || null;
+
+                if (!anneePourRequete) {
+                    const sortedAnnees = anneesRes.sort((a, b) => parseISO(b.date_fin).getTime() - parseISO(a.date_fin).getTime());
+                    anneePourRequete = sortedAnnees.length > 0 ? sortedAnnees[0] : null;
+                }
             }
 
-            const inscriptionsRes: Inscription[] = await fetch(`${API_URL}/api/inscriptions?utilisateurId=${user.id}&anneeScolaireId=${activeAnnee?.id || (anneesRes.length > 0 ? anneesRes[0].id : '')}`).then(res => res.json());
-            const studentInscription = inscriptionsRes.find(inscription =>
-                inscription.utilisateurId === user.id &&
-                inscription.anneeScolaireId === (activeAnnee?.id || (anneesRes.length > 0 ? anneesRes[0].id : -1)) &&
-                inscription.actif === true
-            );
+            if (!anneePourRequete) {
+                setError("Aucune année académique trouvée dans le système.");
+                setLoading(false);
+                return;
+            }
+            
+            setCurrentAnneeAcademique(anneePourRequete);
+
+            // Le reste de la fonction continue comme avant
+            const inscriptionsRes: Inscription[] = await fetch(`${API_URL}/api/inscriptions?utilisateurId=${user.id}&anneeScolaireId=${anneePourRequete.id}`).then(res => res.json());
+            const studentInscription = inscriptionsRes.find(inscription => inscription.actif === true);
 
             if (!studentInscription) {
                 setError("Aucune inscription active trouvée pour cet élève dans l'année académique actuelle. Veuillez contacter l'administration.");
                 return;
             }
             setStudentClassId(studentInscription.classeId);
-
             const [matieresRes, classesRes, usersRes] = await Promise.all([
                 fetch(`${API_URL}/api/matieres`).then(res => res.json()),
                 fetch(`${API_URL}/api/classes`).then(res => res.json()),
@@ -286,43 +301,32 @@ export function StudentSchedule() {
             setAllMatieres(matieresRes);
             setAllClasses(classesRes);
             setAllProfessors(usersRes.filter((u: UserData) => u.role === 'professeur'));
-
-            // Déterminer le nom de la classe de l'étudiant
-            if (studentInscription.classeId && classesRes.length > 0) {
-                const foundClass = classesRes.find(c => c.id === studentInscription.classeId);
-                if (foundClass) {
-                    setStudentClassName(foundClass.nom);
-                } else {
-                    setStudentClassName('Classe inconnue');
-                    console.warn(`[StudentSchedule] Classe ID ${studentInscription.classeId} not found in allClasses.`);
-                }
-            }
-
         } catch (err) {
             console.error("Erreur lors de l'initialisation des données:", err);
             toast({
                 title: "Erreur de chargement",
-                description: "Impossible de charger les données initiales ou de trouver votre classe. Vérifiez la connexion API.",
+                description: "Impossible de charger les données initiales. Vérifiez la connexion API.",
                 variant: "destructive",
             });
             setError("Échec du chargement des données initiales. Veuillez réessayer.");
-        } finally {
-            setLoading(false);
         }
-    }, []);
+                // setLoading(false) will be handled by the schedule fetcher
 
-    useEffect(() => {
-        fetchInitialData();
-    }, [fetchInitialData]);
+    };
+
+         fetchStudentContextData();
+    }, [user]);
+
 
     const fetchWeeklySchedule = useCallback(async () => {
         if (!studentClassId || !currentAnneeAcademique || !isValid(currentWeekStart) || !isValid(currentWeekEnd)) {
+                        if (loading) setLoading(false);
+
             return;
         }
 
-        if (!loading) {
-            setLoading(true);
-        }
+                setLoading(true);
+
         setError(null);
 
         const weekStartDate = format(currentWeekStart, 'yyyy-MM-dd');
@@ -348,7 +352,7 @@ export function StudentSchedule() {
         } finally {
             setLoading(false);
         }
-    }, [studentId, studentClassId, currentAnneeAcademique, currentWeekStart, currentWeekEnd, loading]);
+    }, [studentClassId, currentAnneeAcademique, currentWeekStart, currentWeekEnd]);
 
     useEffect(() => {
         fetchWeeklySchedule();
@@ -572,6 +576,16 @@ export function StudentSchedule() {
     }, 0) / 60;
 
    
+if (loading) {
+        return (
+            <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+                <Loader2 className="h-20 w-20 text-blue-600 animate-spin-slow drop-shadow-md" />
+                <p className="mt-8 text-2xl font-semibold text-gray-800">
+                    Chargement de votre emploi du temps...
+                </p>
+            </div>
+        );
+    }
 
     if (error) {
         return (

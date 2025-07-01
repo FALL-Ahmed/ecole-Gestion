@@ -499,7 +499,7 @@ export function ProfessorSchedule() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 md:p-4">
+    <div className="min-h-screen p-6 md:p-4">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 p-4 bg-white/70 backdrop-blur-md rounded-2xl border border-gray-100">
         <h1 className="text-2xl font-bold text-gray-900 leading-tight drop">
           Emploi du Temps de <span className="text-blue-700">{professorName || "Professeur"}</span>

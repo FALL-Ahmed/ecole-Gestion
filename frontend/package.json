@@ -15,7 +15,6 @@
     "lint": "eslint .",
     "preview": "vite preview"
   },
- 
   "engines": {
     "node": "20.x"
   },
@@ -69,6 +68,7 @@
     "sonner": "^1.5.0",
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
+    "use-debounce": "^8.0.0",
     "vaul": "^0.9.3",
     "zod": "^3.23.8"
   },

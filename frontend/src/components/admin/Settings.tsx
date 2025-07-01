@@ -433,20 +433,8 @@ export function Settings() {
 
                 <Separator />
 
-                <FormItem className="flex items-center justify-between space-y-0 w-full">
-                  <div className="space-y-1">
-                    <FormLabel>Nouvelles notes</FormLabel>
-                    <FormDescription>
-                      Notifier les enseignants lors de la publication de nouvelles notes
-                    </FormDescription>
-                  </div>
-                  <Switch
-                    checked={notificationSettings.gradeNotifications}
-                    onCheckedChange={(checked) => handleNotificationChange('gradeNotifications', checked)}
-                  />
-                </FormItem>
+                
 
-                <Separator />
 
                 <FormItem className="flex items-center justify-between space-y-0 w-full">
                   <div className="space-y-1">
@@ -611,14 +599,7 @@ export function Settings() {
 
                 <Separator />
 
-                <FormItem className="w-full">
-                  <FormLabel>Journalisation des activités</FormLabel>
-                  <div className="mt-2 w-full">
-                    <Button variant="outline" className="w-full">
-                      Voir les journaux d'activité
-                    </Button>
-                  </div>
-                </FormItem>
+                
               </div>
             </CardContent>
             <CardFooter className="flex justify-end">

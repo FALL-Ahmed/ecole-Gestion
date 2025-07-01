@@ -154,7 +154,7 @@ export function AttendanceManagement() {
     fetchAnnees();
   }, []);
 return (
-  <div className="bg-gray-50 min-h-screen w-full">
+  <div className="bg-gray-50 w-full">
     <CardHeader className="pb-4">
       <CardTitle className="text-2xl font-bold text-gray-800">
         Gestion des Présences et Absences
@@ -574,39 +574,38 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
                   ) : (
                     <>
                       {/* Desktop View */}
-                      <div className="hidden md:block overflow-x-auto">
+                      <div className="hidden md:block overflow-auto max-h-[60vh]">
                         <Table className="min-w-full bg-white rounded-lg shadow-sm">
-                          <TableHeader className="bg-gray-100">
+                          <TableHeader className="bg-gray-100 sticky top-0 z-10">
                             <TableRow>
                               <TableHead className="w-1/2 text-gray-700">Élève</TableHead>
                               <TableHead className="w-1/4 text-center text-gray-700">Présent(e)</TableHead>
-                              <TableHead className="w-1/4 text-center text-gray-700">Absence Justifiée</TableHead>
+                              <TableHead className="w-1/4 text-center text-gray-700">Absent(e)</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {attendanceData.map((student) => (
-                              <TableRow key={student.etudiant_id} className="hover:bg-gray-50">
-                                <TableCell className="font-medium text-gray-800">{student.nom}</TableCell>
-                                <TableCell className="text-center">
-                                  <Checkbox
-                                    checked={student.present}
-                                    onCheckedChange={(checked) => handlePresentChange(student.etudiant_id, checked === true)}
-                                    aria-label={`Marquer ${student.nom} comme présent`}
-                                    className="w-5 h-5 border-2 border-blue-400 data-[state=checked]:bg-blue-500 data-[state=checked]:text-white"
-                                  />
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  <Checkbox
-                                    checked={!student.present && student.justified}
-                                    onCheckedChange={(checked) => handleJustifiedChange(student.etudiant_id, checked === true)}
-                                    disabled={student.present}
-                                    aria-label={`Marquer ${student.nom} comme absent justifié`}
-                                    className="w-5 h-5 border-2 border-red-400 data-[state=checked]:bg-red-500 data-[state=checked]:text-white"
-                                  />
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
+    {attendanceData.map((student) => (
+      <TableRow key={student.etudiant_id} className="hover:bg-gray-50">
+        <TableCell className="font-medium text-gray-800">{student.nom}</TableCell>
+        <TableCell className="text-center">
+          <Checkbox
+            checked={student.present}
+            onCheckedChange={(checked) => handlePresentChange(student.etudiant_id, checked === true)}
+            aria-label={`Marquer ${student.nom} comme présent`}
+            className="w-5 h-5 border-2 border-blue-400 data-[state=checked]:bg-blue-500 data-[state=checked]:text-white"
+          />
+        </TableCell>
+        <TableCell className="text-center">
+          <Checkbox
+            checked={!student.present}
+            disabled
+            aria-label={`Marquer ${student.nom} comme absent`}
+            className="w-5 h-5 border-2 border-red-400 data-[state=checked]:bg-red-500 data-[state=checked]:text-white"
+          />
+        </TableCell>
+      </TableRow>
+    ))}
+  </TableBody>
                         </Table>
                       </div>
                       {/* Mobile View */}
@@ -896,9 +895,9 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
               ) : filteredAbsenceRecords.length > 0 ? ( 
                 <>
                   {/* Desktop View */}
-                  <div className="hidden md:block overflow-x-auto">
+                  <div className="hidden md:block overflow-auto max-h-[60vh]">
                     <Table className="min-w-full bg-white rounded-lg shadow-sm">
-                      <TableHeader className="bg-gray-100">
+                      <TableHeader className="bg-gray-100 sticky top-0 z-10">
                         <TableRow>
                           <TableHead className="text-gray-700">Élève</TableHead>
                           <TableHead className="text-gray-700">Classe</TableHead>

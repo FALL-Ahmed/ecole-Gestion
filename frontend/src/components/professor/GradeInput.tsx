@@ -704,7 +704,7 @@ export function GradeInput() {
 
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 md:p-4">
+    <div className="min-h-screen p-6 md:p-4">
       <div className="space-y-10">
         <h1 className="text-2xl font-bold mb-6">Portail de Saisie des Notes</h1>
 

@@ -1,48 +1,145 @@
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom"; // Ajout de useLocation
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { NotificationProvider } from "@/contexts/NotificationContext"; // NotificationBell sera importé dans MainContent
-import { EstablishmentInfoProvider } from './contexts/EstablishmentInfoContext'; // <-- Nouvelle importation
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 
-const queryClient = new QueryClient();
+import { Sidebar } from "@/components/Sidebar";
+import { Header } from "@/components/Header";
+import { MainContent } from "@/components/MainContent";
+import { LoginForm } from "@/components/LoginForm";
+import { useAuth } from "@/contexts/AuthContext";
+import { LanguageProvider, useLanguage } from "@/contexts/LanguageContext";
 
-const AppLayout = ({ children }: { children: React.ReactNode }) => {
-  const { user } = useAuth();
+// --- ROUTE GUARDS ---
 
+function PrivateRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return <div className="p-4 text-center">Chargement...</div>;
+  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+}
+
+function PublicRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return <div className="p-4 text-center">Chargement...</div>;
+  return !isAuthenticated ? <>{children}</> : <Navigate to="/" replace />;
+}
+
+// --- LAYOUT ---
+
+const AppLayout = ({
+  children,
+  isSidebarOpen,
+  toggleSidebar,
+  closeSidebar,
+  activeSection,
+  setActiveSection,
+  isMobile,
+}: {
+  children: React.ReactNode;
+  isSidebarOpen: boolean;
+  toggleSidebar: () => void;
+  closeSidebar: () => void;
+  activeSection: string;
+  setActiveSection: (section: string) => void;
+  isMobile: boolean;
+}) => {
+  const { language } = useLanguage();
+  const isRTL = language === "ar";
 
   return (
-    <div className="flex flex-col min-h-screen bg-muted/10 relative">
-      <main className="flex-1">{children}</main>
+    <div className="flex flex-col min-h-screen h-screen bg-background text-foreground transition-colors duration-300">
+      <Header isSidebarOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
+      <Sidebar
+        isSidebarOpen={isSidebarOpen}
+        onCloseSidebar={closeSidebar}
+        activeSection={activeSection}
+        onSectionChange={setActiveSection}
+        isMobile={isMobile}
+      />
+      <main
+        className={`flex-1 overflow-auto pt-[80px] transition-all duration-300 ${
+          isSidebarOpen && !isMobile
+            ? isRTL
+              ? "pr-64"  // padding-right quand sidebar à droite (arabe)
+              : "pl-64"  // padding-left quand sidebar à gauche (fr)
+            : "p-0"
+        }`}
+      >
+        {children}
+      </main>
     </div>
   );
 };
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <AuthProvider>
-        <EstablishmentInfoProvider> {/* Le Provider englobe maintenant tout ce qui en a besoin */}
-          <NotificationProvider>
-            <BrowserRouter>
-              <AppLayout>
-                <Routes>
-                  <Route path="/" element={<Index />} />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </AppLayout>
-            </BrowserRouter>
-            <Toaster />
-            <Sonner />
-          </NotificationProvider>
-        </EstablishmentInfoProvider>
-      </AuthProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+// --- APP PRINCIPAL ---
+
+const App = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
+  const [activeSection, setActiveSection] = useState("dashboard");
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth <= 768;
+      setIsMobile(mobile);
+      setIsSidebarOpen(!mobile);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarOpen((prev) => !prev);
+  }, []);
+
+  const closeSidebar = useCallback(() => {
+    if (isMobile) {
+      setIsSidebarOpen(false);
+    }
+  }, [isMobile]);
+
+  return (
+    <LanguageProvider initialLanguage="fr">
+      <BrowserRouter>
+        <Routes>
+          <Route
+            path="/login"
+            element={
+              <PublicRoute>
+                <LoginForm />
+              </PublicRoute>
+            }
+          />
+
+          <Route
+            path="/*"
+            element={
+              <PrivateRoute>
+                <AppLayout
+                  isSidebarOpen={isSidebarOpen}
+                  toggleSidebar={toggleSidebar}
+                  closeSidebar={closeSidebar}
+                  activeSection={activeSection}
+                  setActiveSection={setActiveSection}
+                  isMobile={isMobile}
+                >
+                  <MainContent
+                    activeSection={activeSection}
+                    onSectionChange={setActiveSection}
+                  />
+                </AppLayout>
+              </PrivateRoute>
+            }
+          />
+
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </LanguageProvider>
+  );
+};
 
 export default App;

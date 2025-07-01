@@ -533,9 +533,9 @@ export function ChapterProgressMonitoring() {
               ) : (
                 <>
                   {/* Desktop View */}
-                  <div className="hidden lg:block">
-                    <Table>
-                      <TableHeader>
+                  <div className="hidden lg:block overflow-y-scroll overflow-x-auto h-[20vh] border rounded-lg">
+                    <table className="w-full caption-bottom text-sm">
+                      <TableHeader className="bg-gray-50 sticky top-0 z-10">
                         <TableRow>
                           <TableHead>Chapitre</TableHead>
                           <TableHead>Classe</TableHead>
@@ -546,7 +546,7 @@ export function ChapterProgressMonitoring() {
                           <TableHead>Planning</TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
+                      <tbody className="[&_tr:last-child]:border-0">
                         {displayChapters.map((chapter) => {
                           const timelineStatus = calculateTimelineStatus(chapter);
                           return (
@@ -581,8 +581,8 @@ export function ChapterProgressMonitoring() {
                             </TableRow>
                           );
                         })}
-                      </TableBody>
-                    </Table>
+                      </tbody>
+                    </table>
                   </div>
                   {/* Mobile View */}
                   <div className="block lg:hidden space-y-4 p-4">
@@ -634,9 +634,9 @@ export function ChapterProgressMonitoring() {
               ) : teacherPerformanceData.length > 0 ? (
                 <>
                   {/* Desktop View */}
-                  <div className="hidden lg:block">
-                    <Table>
-                      <TableHeader>
+                  <div className="hidden lg:block overflow-y-scroll overflow-x-auto h-[20vh] border rounded-lg">
+                    <table className="w-full caption-bottom text-sm">
+                      <TableHeader className="bg-gray-50 sticky top-0 z-10">
                         <TableRow>
                           <TableHead>Enseignant</TableHead>
                           <TableHead>Matières</TableHead>
@@ -645,7 +645,7 @@ export function ChapterProgressMonitoring() {
                           <TableHead>Progression</TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
+                      <tbody className="[&_tr:last-child]:border-0">
                         {teacherPerformanceData.map((teacher) => (
                           <TableRow key={teacher.id}>
                             <TableCell className="font-medium">{teacher.name}</TableCell>
@@ -665,8 +665,8 @@ export function ChapterProgressMonitoring() {
                             </TableCell>
                           </TableRow>
                         ))}
-                      </TableBody>
-                    </Table>
+                      </tbody>
+                    </table>
                   </div>
                   {/* Mobile View */}
                   <div className="block lg:hidden space-y-4 p-4">

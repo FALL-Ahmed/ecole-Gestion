@@ -1134,10 +1134,10 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
   }
 
   return (
-    <div className="p-6">
+    <div className="p-6 h-[calc(100vh-80px)] overflow-y-auto">
       <h1 className="text-2xl font-bold mb-6">Statistiques</h1>
 <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
- <TabsList className="flex flex-row flex-wrap w-full gap-2 sm:gap-4 justify-center mb-8">
+ <TabsList className="flex flex-row flex-wrap w-full gap-2 sm:gap-4 justify-center">
   <TabsTrigger
     value="overview"
     className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
@@ -1157,8 +1157,7 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
     Assiduité
   </TabsTrigger>
 </TabsList>
-<div className="h-4 sm:h-8"></div>
-
+<div className="block sm:hidden h-4"></div>
 <Card className="mb-6">
   <CardHeader>
     <CardTitle>Filtres</CardTitle>
