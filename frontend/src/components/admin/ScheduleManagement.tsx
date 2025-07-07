@@ -32,7 +32,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-
+import { useLanguage } from '@/contexts/LanguageContext';
+import { Locale } from 'date-fns';
 import {
   format,
   parseISO,
@@ -43,19 +44,20 @@ import {
   endOfWeek,
   isSameDay,
 } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { fr, ar } from 'date-fns/locale';
 
-// Mock des interfaces et des données
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 interface AnneeAcademique { id: number; libelle: string; date_debut: string; date_fin: string; }
 interface Classe { id: number; nom: string; niveau: string; annee_scolaire_id: number; }
 interface Matiere { id: number; nom: string; code?: string; }
 interface User { id: number; nom: string; prenom: string; email: string; role: 'admin' | 'eleve' | 'professeur' | 'tuteur'; }
+type FrenchDay = 'Lundi' | 'Mardi' | 'Mercredi' | 'Jeudi' | 'Vendredi' | 'Samedi';
+
 interface Affectation { id: number; professeur: User; matiere: Matiere; classe: Classe; annee_scolaire: AnneeAcademique; }
 interface EmploiDuTempsEntry {
   id: number;
-  jour: 'Lundi' | 'Mardi' | 'Mercredi' | 'Jeudi' | 'Vendredi' | 'Samedi';
+  jour: FrenchDay; // Toujours en français dans la base
   heure_debut: string;
   heure_fin: string;
   classe_id: number;
@@ -84,17 +86,6 @@ type ModalMode = 'add' | 'edit';
 type ExceptionType = 'annulation' | 'remplacement_prof' | 'deplacement_cours' | 'jour_ferie' | 'evenement_special';
 type ScheduleManagementMode = 'base' | 'exception';
 
-const days = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-
-// Helper function to format academic year display
-const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string; date_fin: string }): string => {
-  if (!annee || !annee.date_debut || !annee.date_fin) {
-    return annee.libelle || "Année inconnue";
-  }
-  const startYear = new Date(annee.date_debut).getFullYear();
-  const endYear = new Date(annee.date_fin).getFullYear();
-  return annee.libelle && annee.libelle.includes(String(startYear)) && annee.libelle.includes(String(endYear)) ? annee.libelle : `${annee.libelle || ''} (${startYear}-${endYear})`.trim();
-};
 const timeSlots = ['08:00-10:00', '10:15-12:00', '12:15-14:00'];
 
 interface ScheduleItemData {
@@ -119,36 +110,37 @@ interface ScheduleItemProps {
 }
 
 const ScheduleItem: React.FC<ScheduleItemProps> = ({ day, date, timeSlot, data, onItemClick, scheduleMode, scheduleView }) => {
-  let bgColor = 'bg-gradient-to-r from-blue-400 to-blue-500';
-  let borderColor = 'border-blue-200';
-  let textColor = 'text-white';
+  const { t, language } = useLanguage();
+  const isRTL = language === 'ar';
+  
+ let bgColor = 'bg-gradient-to-r from-blue-400 to-blue-500 dark:from-blue-600 dark:to-blue-700';
+let borderColor = 'border-blue-200 dark:border-blue-300';
+let textColor = 'text-white';
   let cursorStyle = 'cursor-pointer hover:shadow-lg transform hover:scale-105 transition-transform duration-200';
 
   if (scheduleMode === 'exception') {
-    if (data && data.isException) {
-      if (data.isCanceled) {
-        bgColor = 'bg-gradient-to-r from-red-400 to-red-500';
-        borderColor = 'border-red-200';
-        textColor = 'text-white';
-      } else if (data.exceptionType === 'jour_ferie') {
-        bgColor = 'bg-gradient-to-r from-green-400 to-green-500';
-        borderColor = 'border-green-200';
-        textColor = 'text-white';
-      } else {
-        bgColor = 'bg-gradient-to-r from-yellow-400 to-yellow-500';
-        borderColor = 'border-yellow-200';
-        textColor = 'text-white';
-      }
-    } else if (data && !data.isException) {
-      bgColor = 'bg-gradient-to-r from-blue-300 to-blue-400';
-      borderColor = 'border-blue-300';
-      textColor = 'text-white';
+  if (data && data.isException) {
+    if (data.isCanceled) {
+      bgColor = 'bg-gradient-to-r from-red-400 to-red-500 dark:from-red-600 dark:to-red-700';
+      borderColor = 'border-red-200 dark:border-red-300';
+    } else if (data.exceptionType === 'jour_ferie') {
+      bgColor = 'bg-gradient-to-r from-green-400 to-green-500 dark:from-green-600 dark:to-green-700';
+      borderColor = 'border-green-200 dark:border-green-300';
     } else {
-      bgColor = 'bg-gradient-to-r from-gray-200 to-gray-300';
-      borderColor = 'border-gray-300';
-      textColor = 'text-gray-600';
+      bgColor = 'bg-gradient-to-r from-yellow-400 to-yellow-500 dark:from-yellow-600 dark:to-yellow-700';
+      borderColor = 'border-yellow-200 dark:border-yellow-300';
     }
+  } else if (data && !data.isException) {
+    bgColor = 'bg-gradient-to-r from-blue-300 to-blue-400 dark:from-blue-500 dark:to-blue-600';
+    borderColor = 'border-blue-300 dark:border-blue-400';
   } else {
+    
+  bgColor = 'bg-gradient-to-r from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-600';
+  borderColor = 'border-gray-300 dark:border-gray-600';
+  textColor = 'text-gray-600 dark:text-gray-400';
+}
+}
+ else {
     if (data) {
       bgColor = 'bg-gradient-to-r from-blue-400 to-blue-500';
       borderColor = 'border-blue-200';
@@ -163,9 +155,24 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ day, date, timeSlot, data, 
   if (scheduleMode === 'base' && scheduleView === 'teacher') {
     cursorStyle = 'cursor-not-allowed opacity-50';
   } else if (scheduleMode === 'base' && !data && (day === 'Dimanche')) {
-
     cursorStyle = 'cursor-not-allowed opacity-50';
   }
+
+  const getSubjectDisplayName = (subjectName: string) => {
+    const subjectTranslations: Record<string, string> = {
+      'Mathématiques': t.schedule.subjects.math,
+      'Physique Chimie': t.schedule.subjects.physics,
+      'Arabe': t.schedule.subjects.arabic,
+      'Français': t.schedule.subjects.french,
+      'Anglais': t.schedule.subjects.english,
+      'Éducation Islamique': t.schedule.subjects.islamic,
+      'Histoire Géographie': t.schedule.subjects.history,
+      'Éducation Civique': t.schedule.subjects.civics,
+      'Éducation Physique et Sportive': t.schedule.subjects.sport,
+      'Philosophie': t.schedule.subjects.philosophy
+    };
+    return subjectTranslations[subjectName] || subjectName;
+  };
 
   return (
     <TooltipProvider>
@@ -174,10 +181,13 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ day, date, timeSlot, data, 
           <div
             className={`${bgColor} ${borderColor} ${textColor} border rounded-lg p-4 h-full flex flex-col justify-between ${cursorStyle}`}
             onClick={() => onItemClick(day, date, timeSlot, data)}
+            style={{ direction: isRTL ? 'rtl' : 'ltr' }}
           >
             {data ? (
               <>
-                <p className="font-medium text-sm break-words">{data.subjectName}</p>
+                <p className="font-medium text-sm break-words">
+                  {getSubjectDisplayName(data.subjectName)}
+                </p>
                 <p className="text-xs mt-1 break-words">{data.teacherName}</p>
                 {data.isException && (
                   <Badge
@@ -188,10 +198,11 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ day, date, timeSlot, data, 
                       'bg-yellow-100 text-yellow-800'
                     }`}
                   >
-                    {data.exceptionType === 'annulation' ? 'Annulé' :
-                     data.exceptionType === 'jour_ferie' ? 'Férié' :
-                     data.exceptionType === 'remplacement_prof' ? 'Remplacement' :
-                     data.exceptionType === 'deplacement_cours' ? 'Déplacé' : 'Événement'}
+                    {data.exceptionType === 'annulation' ? t.schedule.status.canceled :
+                     data.exceptionType === 'jour_ferie' ? t.schedule.status.holiday :
+                     data.exceptionType === 'remplacement_prof' ? t.schedule.status.replaced :
+                     data.exceptionType === 'deplacement_cours' ? t.schedule.status.moved : 
+                     t.schedule.status.special}
                   </Badge>
                 )}
               </>
@@ -202,22 +213,24 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ day, date, timeSlot, data, 
             )}
           </div>
         </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-[200px] bg-white text-gray-800 border border-gray-200 shadow-lg">
-          {data ? (
+<TooltipContent 
+  side="top" 
+  className="max-w-[200px] bg-white dark:bg-gray-800 text-gray-800 dark:text-white border border-gray-200 dark:border-gray-700 shadow-lg">         {data ? (
             <>
-              <p className="font-semibold">{data.subjectName}</p>
+              <p className="font-semibold">{getSubjectDisplayName(data.subjectName)}</p>
               <p>{data.teacherName}</p>
               {data.isException && (
                 <p className="text-xs mt-1">
-                  {data.exceptionType === 'annulation' ? 'Cours annulé' :
-                   data.exceptionType === 'jour_ferie' ? 'Jour férié' :
-                   data.exceptionType === 'remplacement_prof' ? 'Remplacement' :
-                   data.exceptionType === 'deplacement_cours' ? 'Cours déplacé' : 'Événement spécial'}
+                  {data.exceptionType === 'annulation' ? t.schedule.exceptionTypes.annulation :
+                   data.exceptionType === 'jour_ferie' ? t.schedule.exceptionTypes.jour_ferie :
+                   data.exceptionType === 'remplacement_prof' ? t.schedule.exceptionTypes.remplacement_prof :
+                   data.exceptionType === 'deplacement_cours' ? t.schedule.exceptionTypes.deplacement_cours : 
+                   t.schedule.exceptionTypes.evenement_special}
                 </p>
               )}
             </>
           ) : (
-            <p>Cliquez pour ajouter</p>
+            <p>{t.common.add}</p>
           )}
         </TooltipContent>
       </Tooltip>
@@ -226,6 +239,10 @@ const ScheduleItem: React.FC<ScheduleItemProps> = ({ day, date, timeSlot, data, 
 };
 
 export function ScheduleManagement() {
+  const { t, language } = useLanguage();
+  const currentLocale = language === 'ar' ? ar : fr;
+  const isRTL = language === 'ar';
+
   // États
   const [anneesAcademiques, setAnneesAcademiques] = useState<AnneeAcademique[]>([]);
   const [classes, setClasses] = useState<Classe[]>([]);
@@ -245,10 +262,8 @@ export function ScheduleManagement() {
   const [modalMode, setModalMode] = useState<ModalMode>('add');
   const [editingBaseEntryId, setEditingBaseEntryId] = useState<number | null>(null);
   const [editingExceptionId, setEditingExceptionId] = useState<number | null>(null);
-
-  const [currentDay, setCurrentDay] = useState<string>('');
+const [currentModalDate, setCurrentModalDate] = useState<Date | null>(null);
   const [currentTimeSlot, setCurrentTimeSlot] = useState<string>('');
-  const [currentModalDate, setCurrentModalDate] = useState<Date | null>(null);
 
   const [formMatiereId, setFormMatiereId] = useState<string>('');
   const [formProfesseurId, setFormProfesseurId] = useState<string>('');
@@ -258,21 +273,82 @@ export function ScheduleManagement() {
   const [filteredMatieres, setFilteredMatieres] = useState<Matiere[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const convertToFrenchDay = (date: Date): FrenchDay => {
+  const dayMap: Record<string, FrenchDay> = {
+    'Monday': 'Lundi',
+    'Tuesday': 'Mardi',
+    'Wednesday': 'Mercredi',
+    'Thursday': 'Jeudi',
+    'Friday': 'Vendredi',
+    'Saturday': 'Samedi'
+  };
+  const englishDay = format(date, 'EEEE');
+  return dayMap[englishDay];
+};
 
+const getLocalizedDayName = (date: Date, locale: Locale): string => {
+  return format(date, 'EEEE', { locale });
+};
+// Fonction helper pour formater l'affichage des années académiques
+const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string; date_fin: string }): string => {
+  if (!annee || !annee.date_debut || !annee.date_fin) {
+    return annee?.libelle || t.common.unknownYear;
+  }
+  
+  const startYear = new Date(annee.date_debut).getFullYear();
+  const endYear = new Date(annee.date_fin).getFullYear();
+  
+  // Formatage selon la langue
+  if (language === 'ar') {
+    return annee.libelle || `${startYear}-${endYear}`;
+  }
+  
+  return annee.libelle?.includes(String(startYear)) 
+    ? annee.libelle 
+    : `${annee.libelle || ''} (${startYear}-${endYear})`.trim();
+};
   // Navigation de la semaine
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 1 }));
 
   const handlePreviousWeek = () => setCurrentWeekStart(subWeeks(currentWeekStart, 1));
   const handleNextWeek = () => setCurrentWeekStart(addWeeks(currentWeekStart, 1));
 
-  const currentWeekDaysInfo = eachDayOfInterval({
+  const getDayNames = () => {
+    return [
+        t.schedule.days.monday,
+        t.schedule.days.tuesday,
+        t.schedule.days.wednesday,
+        t.schedule.days.thursday,
+        t.schedule.days.friday,
+        t.schedule.days.saturday
+    ];
+};
+
+ const currentWeekDaysInfo = eachDayOfInterval({
     start: currentWeekStart,
     end: endOfWeek(currentWeekStart, { weekStartsOn: 1 }),
-  }).map(date => ({
-    date,
-    dayName: format(date, 'EEEE', { locale: fr }),
-    dayNameCapitalized: format(date, 'EEEE', { locale: fr }).charAt(0).toUpperCase() + format(date, 'EEEE', { locale: fr }).slice(1),
-  })).filter(dayInfo => days.includes(dayInfo.dayNameCapitalized));
+  }).map(date => {
+    // Using English day name for logic is more robust for keys.
+    const dayKey = format(date, 'EEEE').toLowerCase() as 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday';
+    
+    const dayOrderMap: { [key: string]: number } = {
+      'monday': 0,
+      'tuesday': 1,
+      'wednesday': 2,
+      'thursday': 3,
+      'friday': 4,
+      'saturday': 5,
+    };
+    
+    return {
+        date,
+        dayNameCapitalized: dayKey.charAt(0).toUpperCase() + dayKey.slice(1), // e.g., "Monday"
+        dayNameDisplay: t.schedule.days[dayKey] || dayKey, // Translated name
+        dayOrder: dayOrderMap[dayKey],
+        isToday: isSameDay(date, new Date()),
+    };
+  }).filter(dayInfo => dayInfo.dayOrder !== undefined) // This will filter out Sunday
+    .sort((a, b) => isRTL ? b.dayOrder - a.dayOrder : a.dayOrder - b.dayOrder);
 
   // Récupération des données initiales
   useEffect(() => {
@@ -285,7 +361,7 @@ export function ScheduleManagement() {
           matieresRes,
           usersRes,
           affectationsRes,
-        ] = await Promise.all([ // Changed from API_BASE_URL
+        ] = await Promise.all([
           fetch(`${API_URL}/api/annees-academiques`).then(res => res.json()),
           fetch(`${API_URL}/api/classes`).then(res => res.json()),
           fetch(`${API_URL}/api/matieres`).then(res => res.json()),
@@ -311,8 +387,8 @@ export function ScheduleManagement() {
 
       } catch (error) {
         toast({
-          title: "Erreur de chargement",
-          description: "Impossible de charger les données initiales.",
+          title: t.common.error,
+          description: t.schedule.errorLoading,
           variant: "destructive",
         });
       } finally {
@@ -339,16 +415,16 @@ export function ScheduleManagement() {
     }
 
     setIsLoading(true);
-    try { // Changed from API_BASE_URL
-      let baseScheduleUrl = `${API_URL}/api/emploi-du-temps?annee_academique_id=${currentAnneeIdNum}`;
+    try {
+      let baseScheduleUrl = `${API_URL}/api/emploi-du-temps?annee_scolaire_id=${currentAnneeIdNum}`;
       if (scheduleView === 'class') baseScheduleUrl += `&classe_id=${currentClassIdNum}`;
       else baseScheduleUrl += `&professeur_id=${currentTeacherIdNum}`;
 
-  const etdRes: EmploiDuTempsEntry[] = await fetch(baseScheduleUrl).then(res => res.json());
+      const etdRes: EmploiDuTempsEntry[] = await fetch(baseScheduleUrl).then(res => res.json());
       setEmploisDuTemps(etdRes);
 
-     const weekStartDate = format(currentWeekStart, 'yyyy-MM-dd'); // Changed from API_BASE_URL
-      const weekEndDate = format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'yyyy-MM-dd'); // Changed from API_BASE_URL
+      const weekStartDate = format(currentWeekStart, 'yyyy-MM-dd');
+      const weekEndDate = format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'yyyy-MM-dd');
       let exceptionsUrl = `${API_URL}/api/exception-emploi-du-temps?start_date=${weekStartDate}&end_date=${weekEndDate}`;
 
       if (scheduleView === 'class') exceptionsUrl += `&classe_id=${currentClassIdNum}`;
@@ -359,14 +435,14 @@ export function ScheduleManagement() {
 
     } catch (error) {
       toast({
-        title: "Erreur de chargement",
-        description: "Impossible de charger l'emploi du temps.",
+        title: t.common.error,
+        description: t.schedule.errorLoading,
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
-  }, [selectedAnneeAcademiqueId, selectedClassId, selectedTeacherId, scheduleView, currentWeekStart]);
+  }, [selectedAnneeAcademiqueId, selectedClassId, selectedTeacherId, scheduleView, currentWeekStart, t]);
 
   useEffect(() => {
     if (anneesAcademiques.length > 0) fetchEmploiDuTemps();
@@ -390,6 +466,16 @@ export function ScheduleManagement() {
 
   // Obtenir les données de l'emploi du temps pour un créneau spécifique
   const getScheduleItemData = (day: string, date: Date, timeSlot: string): ScheduleItemData | null => {
+    const dayMapping: { [key: string]: EmploiDuTempsEntry['jour'] } = {
+      'Monday': 'Lundi',
+      'Tuesday': 'Mardi',
+      'Wednesday': 'Mercredi',
+      'Thursday': 'Jeudi',
+      'Friday': 'Vendredi',
+      'Saturday': 'Samedi',
+    };
+    const frenchDay = dayMapping[day as keyof typeof dayMapping];
+
     const [startHourStr, endHourStr] = timeSlot.split('-');
     const heureDebutFormatted = format(parseISO(`2000-01-01T${startHourStr}:00`), 'HH:mm:ss');
     const heureFinFormatted = format(parseISO(`2000-01-01T${endHourStr}:00`), 'HH:mm:ss');
@@ -400,7 +486,7 @@ export function ScheduleManagement() {
     // Vérifier les exceptions en premier
     const exception = exceptionsEmploisDuTemps.find(ex =>
       isSameDay(parseISO(ex.date_exception), date) &&
-      ex.jour === day &&
+      ex.jour === frenchDay &&
       ex.heure_debut === heureDebutFormatted &&
       ex.heure_fin === heureFinFormatted &&
       (scheduleView === 'class' ? (ex.classe_id === null || ex.classe_id === currentClassIdNum) : (ex.professeur_id === null || ex.professeur_id === currentTeacherIdNum))
@@ -409,8 +495,8 @@ export function ScheduleManagement() {
     if (exception) {
       if (exception.type_exception === 'annulation') {
         return {
-          subjectName: 'Cours Annulé',
-          teacherName: `Motif: ${exception.motif || 'Non spécifié'}`,
+          subjectName: t.schedule.status.canceled,
+          teacherName: `${t.schedule.reason}: ${exception.motif || t.common.unknown}`,
           isException: true,
           isCanceled: true,
           entryId: exception.id,
@@ -425,8 +511,8 @@ export function ScheduleManagement() {
         };
       } else if (exception.type_exception === 'jour_ferie') {
         return {
-          subjectName: 'Jour Férié',
-          teacherName: `Motif: ${exception.motif || 'Non spécifié'}`,
+          subjectName: t.schedule.exceptionTypes.jour_ferie,
+          teacherName: `${t.schedule.reason}: ${exception.motif || t.common.unknown}`,
           isException: true,
           isCanceled: false,
           entryId: exception.id,
@@ -458,7 +544,7 @@ export function ScheduleManagement() {
 
     // Vérifier l'emploi du temps de base
     const baseEntry = emploisDuTemps.find(entry =>
-      entry.jour === day &&
+      entry.jour === frenchDay &&
       entry.heure_debut === heureDebutFormatted &&
       entry.heure_fin === heureFinFormatted &&
       (scheduleView === 'class' ? entry.classe_id === currentClassIdNum : entry.professeur_id === currentTeacherIdNum)
@@ -483,24 +569,23 @@ export function ScheduleManagement() {
   const handleItemClick = (day: string, date: Date, timeSlot: string, existingData?: ScheduleItemData) => {
     if (scheduleMode === 'base' && scheduleView === 'teacher') {
       toast({
-        title: "Action non permise",
-        description: "L'ajout/modification de cours de base se fait via la vue par classe.",
+        title: t.schedule.teacherViewNotAllowedTitle,
+        description: t.schedule.teacherViewNotAllowed,
         variant: "default",
       });
       return;
     }
 
-       if (scheduleMode === 'base' && !existingData && (day === 'Dimanche')) {
-
+    if (scheduleMode === 'base' && !existingData && (day === 'Dimanche')) {
       toast({
-        title: "Action non permise",
-        description: "L'ajout de cours de base n'est autorisé que du Lundi au Samedi.",
+        title: t.schedule.weekendNotAllowedTitle,
+        description: t.schedule.weekendNotAllowed,
         variant: "default",
       });
       return;
     }
 
-    setCurrentDay(day);
+    setCurrentModalDate(date);
     setCurrentTimeSlot(timeSlot);
     setCurrentModalDate(date);
 
@@ -563,71 +648,89 @@ export function ScheduleManagement() {
 
   // Sauvegarder l'emploi du temps de base
   const handleSaveBaseSchedule = async () => {
-    const selectedClassIdNum = parseInt(selectedClassId);
-    const formMatiereIdNum = parseInt(formMatiereId);
-    const formProfesseurIdNum = parseInt(formProfesseurId);
+  const selectedClassIdNum = parseInt(selectedClassId);
+  const formMatiereIdNum = parseInt(formMatiereId);
+  const formProfesseurIdNum = parseInt(formProfesseurId);
 
-    if (!selectedClassIdNum || !formMatiereIdNum || !formProfesseurIdNum || !currentDay || !currentTimeSlot) {
-      toast({
-        title: "Champs manquants",
-        description: "Veuillez remplir tous les champs requis.",
-        variant: "destructive",
-      });
-      return;
-    }
+  if (!selectedClassIdNum || !formMatiereIdNum || !formProfesseurIdNum || !currentModalDate || !currentTimeSlot) {
+    toast({
+      title: t.common.requiredFieldsErrorTitle,
+      description: t.common.requiredFieldsError,
+      variant: "destructive",
+    });
+    return;
+  }
 
-    const [startHourStr, endHourStr] = currentTimeSlot.split('-');
-    const heureDebutFormatted = format(parseISO(`2000-01-01T${startHourStr}:00`), 'HH:mm:ss');
-    const heureFinFormatted = format(parseISO(`2000-01-01T${endHourStr}:00`), 'HH:mm:ss');
+  const [startHourStr, endHourStr] = currentTimeSlot.split('-');
+  const heureDebutFormatted = format(parseISO(`2000-01-01T${startHourStr}:00`), 'HH:mm:ss');
+  const heureFinFormatted = format(parseISO(`2000-01-01T${endHourStr}:00`), 'HH:mm:ss');
 
-    const payload = {
-      jour: currentDay,
-      heure_debut: heureDebutFormatted,
-      heure_fin: heureFinFormatted,
-      classe_id: selectedClassIdNum,
-      matiere_id: formMatiereIdNum,
-      professeur_id: formProfesseurIdNum,
-      annee_academique_id: parseInt(selectedAnneeAcademiqueId)
-    };
-
-    setIsSaving(true);
-    try {
-      let response;
-      if (modalMode === 'add') { // Changed from API_BASE_URL
-        response = await fetch(`${API_URL}/api/emploi-du-temps`, {
-      
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      } else {
-        if (!editingBaseEntryId) throw new Error("ID d'entrée de base manquant.");
-        response = await fetch(`${API_URL}/api/emploi-du-temps/${editingBaseEntryId}`, { // Changed from API_BASE_URL
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      }
-
-      if (!response.ok) throw new Error(await response.text());
-
-      toast({
-        title: `Cours ${modalMode === 'add' ? 'ajouté' : 'mis à jour'} !`,
-        description: "L'emploi du temps a été enregistré.",
-      });
-      await fetchEmploiDuTemps();
-
-    } catch (error: any) {
-      toast({
-        title: "Erreur",
-        description: error.message || "Échec de l'enregistrement.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
-      setModalOpen(false);
-    }
+  // Conversion du jour en français pour l'API
+  const frenchDays = {
+    'Monday': 'Lundi',
+    'Tuesday': 'Mardi',
+    'Wednesday': 'Mercredi',
+    'Thursday': 'Jeudi',
+    'Friday': 'Vendredi',
+    'Saturday': 'Samedi'
   };
+  const englishDay = format(currentModalDate, 'EEEE'); // Récupère le jour en anglais
+  const frenchDay = frenchDays[englishDay as keyof typeof frenchDays]; // Convertit en français
+
+  const payload = {
+    jour: frenchDay, // Envoi toujours en français à l'API
+    heure_debut: heureDebutFormatted,
+    heure_fin: heureFinFormatted,
+    classe_id: selectedClassIdNum,
+    matiere_id: formMatiereIdNum,
+    professeur_id: formProfesseurIdNum,
+    annee_academique_id: parseInt(selectedAnneeAcademiqueId)
+  };
+
+  setIsSaving(true);
+  try {
+    const token = localStorage.getItem('token');
+    let response;
+    if (modalMode === 'add') {
+      response = await fetch(`${API_URL}/api/emploi-du-temps`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      if (!editingBaseEntryId) throw new Error(t.schedule.missingEntryId);
+      response = await fetch(`${API_URL}/api/emploi-du-temps/${editingBaseEntryId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+    }
+
+    if (!response.ok) throw new Error(await response.text());
+
+    toast({
+      title: t.schedule.successSaveTitle,
+      description: t.schedule.successSaveDescription,
+    });
+    await fetchEmploiDuTemps();
+
+  } catch (error: any) {
+    toast({
+      title: t.common.error,
+      description: error.message || t.schedule.errorSave,
+      variant: "destructive",
+    });
+  } finally {
+    setIsSaving(false);
+    setModalOpen(false);
+  }
+};
 
   // Supprimer l'emploi du temps de base
   const handleDeleteBaseSchedule = async () => {
@@ -635,22 +738,26 @@ export function ScheduleManagement() {
 
     setIsSaving(true);
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_URL}/api/emploi-du-temps/${editingBaseEntryId}`, {
         method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       if (!response.ok) throw new Error(await response.text());
 
       toast({
-        title: "Cours supprimé !",
-        description: "Le cours a été retiré de l'emploi du temps.",
+        title: t.schedule.successDeleteTitle,
+        description: t.schedule.successDeleteDescription,
       });
       await fetchEmploiDuTemps();
 
     } catch (error: any) {
       toast({
-        title: "Erreur",
-        description: error.message || "Échec de la suppression.",
+        title: t.common.error,
+        description: error.message || t.schedule.errorDelete,
         variant: "destructive",
       });
     } finally {
@@ -667,8 +774,8 @@ export function ScheduleManagement() {
 
     if (!selectedClassIdNum || !currentModalDate) {
       toast({
-        title: "Champs manquants",
-        description: "Veuillez remplir tous les champs requis.",
+        title: t.common.requiredFieldsErrorTitle,
+        description: t.common.requiredFieldsError,
         variant: "destructive",
       });
       return;
@@ -676,8 +783,8 @@ export function ScheduleManagement() {
 
     if ((formExceptionType === 'remplacement_prof' || formExceptionType === 'deplacement_cours' || formExceptionType === 'evenement_special') && (!formMatiereIdNum || !formProfesseurIdNum)) {
       toast({
-        title: "Matière ou Professeur manquant",
-        description: "La matière et le professeur sont obligatoires pour ce type d'événement.",
+        title: t.schedule.missingSubjectOrTeacherTitle,
+        description: t.schedule.missingSubjectOrTeacher,
         variant: "destructive",
       });
       return;
@@ -685,8 +792,8 @@ export function ScheduleManagement() {
 
     if ((formExceptionType === 'annulation' || formExceptionType === 'jour_ferie' || formExceptionType === 'evenement_special') && !formMotif) {
       toast({
-        title: "Motif manquant",
-        description: "Un motif est requis pour ce type d'exception.",
+        title: t.schedule.missingReasonTitle,
+        description: t.schedule.missingReason,
         variant: "destructive",
       });
       return;
@@ -706,7 +813,7 @@ export function ScheduleManagement() {
 
     const payload = {
       date_exception: dateExceptionFormatted,
-      jour: currentDay,
+      jour: currentModalDate,
       heure_debut: heureDebutFormatted,
       heure_fin: heureFinFormatted,
       classe_id: selectedClassIdNum,
@@ -717,24 +824,31 @@ export function ScheduleManagement() {
       nouvelle_heure_debut: formExceptionType === 'deplacement_cours' ? heureDebutFormatted : null,
       nouvelle_heure_fin: formExceptionType === 'deplacement_cours' ? heureFinFormatted : null,
       nouvelle_classe_id: formExceptionType === 'deplacement_cours' ? selectedClassIdNum : null,
-      nouveau_jour: formExceptionType === 'deplacement_cours' ? currentDay : null,
+      nouveau_jour: formExceptionType === 'deplacement_cours' ? currentModalDate : null,
       motif: formMotif || null,
     };
 
     setIsSaving(true);
     try {
+      const token = localStorage.getItem('token');
       let response;
       if (modalMode === 'add') {
         response = await fetch(`${API_URL}/api/exception-emploi-du-temps`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify(payload),
         });
       } else {
-        if (!editingExceptionId) throw new Error("ID d'exception manquant.");
+        if (!editingExceptionId) throw new Error(t.schedule.missingExceptionId);
         response = await fetch(`${API_URL}/api/exception-emploi-du-temps/${editingExceptionId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify(payload),
         });
       }
@@ -742,15 +856,15 @@ export function ScheduleManagement() {
       if (!response.ok) throw new Error(await response.text());
 
       toast({
-        title: `Exception ${modalMode === 'add' ? 'ajoutée' : 'mise à jour'} !`,
-        description: "L'exception a été enregistrée.",
+        title: t.schedule.successSaveTitle,
+        description: t.schedule.successSaveDescription,
       });
       await fetchEmploiDuTemps();
 
     } catch (error: any) {
       toast({
-        title: "Erreur",
-        description: error.message || "Échec de l'enregistrement.",
+        title: t.common.error,
+        description: error.message || t.schedule.errorSave,
         variant: "destructive",
       });
     } finally {
@@ -765,22 +879,26 @@ export function ScheduleManagement() {
 
     setIsSaving(true);
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_URL}/api/exception-emploi-du-temps/${editingExceptionId}`, {
         method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       if (!response.ok) throw new Error(await response.text());
 
       toast({
-        title: "Exception supprimée !",
-        description: "L'exception a été retirée.",
+        title: t.schedule.successDeleteTitle,
+        description: t.schedule.successDeleteDescription,
       });
       await fetchEmploiDuTemps();
 
     } catch (error: any) {
       toast({
-        title: "Erreur",
-        description: error.message || "Échec de la suppression.",
+        title: t.common.error,
+        description: error.message || t.schedule.errorDelete,
         variant: "destructive",
       });
     } finally {
@@ -793,41 +911,42 @@ export function ScheduleManagement() {
   const filteredClassesForSelect = classes.filter(cls => cls.annee_scolaire_id === parseInt(selectedAnneeAcademiqueId));
 
   return (
-    <div className="p-6 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
-      <div className="w-full">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-          <h1 className="text-2xl font-bold mb-6">Gestion des Emplois du Temps</h1>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handlePreviousWeek} className="bg-white">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="font-medium text-gray-700">
-              Semaine du {format(currentWeekStart, 'dd MMMM yyyy', { locale: fr })}
-            </span>
-            <Button variant="outline" size="sm" onClick={handleNextWeek} className="bg-white">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+<div className={`p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 min-h-screen ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>      <div className="w-full">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6" dir={isRTL ? 'rtl' : 'ltr'}>
+          <h1 className="text-2xl font-bold mb-6">
+            {t.schedule.title}
+          </h1>
+          <div className="flex items-center gap-2 dark:text-white">
+  <Button variant="outline" size="sm" onClick={handlePreviousWeek} className="bg-white dark:bg-gray-800">
+    {isRTL ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+  </Button>
+  <span className="font-medium text-gray-700 dark:text-white">
+    {t.schedule.weekOf} {format(currentWeekStart, language === 'ar' ? 'dd MMMM yyyy' : 'dd MMMM yyyy', { locale: currentLocale })}
+  </span>
+  <Button variant="outline" size="sm" onClick={handleNextWeek} className="bg-white dark:bg-gray-800">
+    {isRTL ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+  </Button>
+</div>
         </div>
 
-        <Card className="mb-6 shadow-lg">
-          <CardHeader>
-            <CardTitle>Configuration</CardTitle>
-            <CardDescription>Sélectionnez les paramètres d'affichage et de gestion</CardDescription>
+<Card className="mb-6 shadow-lg dark:bg-gray-800 dark:border-gray-700">
+            <CardHeader>
+            <CardTitle>{t.schedule.configuration}</CardTitle>
+            <CardDescription>{t.schedule.configDescription}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 dark:text-white">
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-700">Année Académique</label>
+                <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">{t.schoolManagement.schoolYears.title}</label>
                 <Select
                   value={selectedAnneeAcademiqueId}
                   onValueChange={setSelectedAnneeAcademiqueId}
                   disabled={isLoading}
                 >
-                  <SelectTrigger className="bg-white">
-                    <SelectValue placeholder="Sélectionner une année" />
+<SelectTrigger className="bg-white dark:bg-gray-800 dark:border-gray-700">
+                    <SelectValue placeholder={t.common.selectAYear} />
                   </SelectTrigger>
-                  <SelectContent className="bg-white">
+<SelectContent className="bg-white dark:bg-gray-800 dark:border-gray-700">
                     {anneesAcademiques.map((annee) => (
                       <SelectItem key={annee.id} value={String(annee.id)}>
                         {formatAcademicYearDisplay(annee)}
@@ -838,27 +957,30 @@ export function ScheduleManagement() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-700">Vue</label>
+              <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">{t.common.view}</label>
                 <Tabs value={scheduleView} onValueChange={setScheduleView} className="w-full">
-                  <TabsList className="grid w-full grid-cols-2 bg-white">
-                    <TabsTrigger value="class">Par Classe</TabsTrigger>
-                    <TabsTrigger value="teacher">Par Professeur</TabsTrigger>
+<TabsList className="grid w-full grid-cols-2 bg-white dark:bg-gray-800">                    <TabsTrigger value="class">
+                      {t.schedule.viewClass}
+                    </TabsTrigger>
+                    <TabsTrigger value="teacher">
+                      {t.schedule.viewTeacher}
+                    </TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>
 
               {scheduleView === 'class' ? (
                 <div>
-                  <label className="block text-sm font-medium mb-1 text-gray-700">Classe</label>
+                  <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">{t.common.class}</label>
                   <Select
                     value={selectedClassId}
                     onValueChange={setSelectedClassId}
                     disabled={isLoading || filteredClassesForSelect.length === 0}
                   >
-                    <SelectTrigger className="bg-white">
-                      <SelectValue placeholder="Sélectionner une classe" />
+<SelectTrigger className="bg-white dark:bg-gray-800 dark:border-gray-700">
+                      <SelectValue placeholder={t.common.selectAClass} />
                     </SelectTrigger>
-                    <SelectContent className="bg-white">
+<SelectContent className="bg-white dark:bg-gray-800 dark:border-gray-700">
                       {filteredClassesForSelect.length > 0 ? (
                         filteredClassesForSelect.map((cls) => (
                           <SelectItem key={cls.id} value={String(cls.id)}>
@@ -867,7 +989,7 @@ export function ScheduleManagement() {
                         ))
                       ) : (
                         <SelectItem value="no-classes" disabled>
-                          Aucune classe disponible
+                          {t.common.noDataAvailable}
                         </SelectItem>
                       )}
                     </SelectContent>
@@ -875,16 +997,16 @@ export function ScheduleManagement() {
                 </div>
               ) : (
                 <div>
-                  <label className="block text-sm font-medium mb-1 text-gray-700">Professeur</label>
+                 <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">{t.common.teacher}</label>
                   <Select
                     value={selectedTeacherId}
                     onValueChange={setSelectedTeacherId}
                     disabled={isLoading || teachers.length === 0}
                   >
-                    <SelectTrigger className="bg-white">
-                      <SelectValue placeholder="Sélectionner un professeur" />
+<SelectTrigger className="bg-white dark:bg-gray-800 dark:border-gray-700">
+                      <SelectValue placeholder={t.common.selectATeacher} />
                     </SelectTrigger>
-                    <SelectContent className="bg-white">
+<SelectContent className="bg-white dark:bg-gray-800 dark:border-gray-700">
                       {teachers.length > 0 ? (
                         teachers.map((teacher) => (
                           <SelectItem key={teacher.id} value={String(teacher.id)}>
@@ -893,7 +1015,7 @@ export function ScheduleManagement() {
                         ))
                       ) : (
                         <SelectItem value="no-teachers" disabled>
-                          Aucun professeur disponible
+                          {t.common.noDataAvailable}
                         </SelectItem>
                       )}
                     </SelectContent>
@@ -902,18 +1024,18 @@ export function ScheduleManagement() {
               )}
 
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-700">Mode de Gestion</label>
+               <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">{t.schedule.managementMode}</label>
                 <Select
                   value={scheduleMode}
                   onValueChange={(value: ScheduleManagementMode) => setScheduleMode(value)}
                   disabled={isLoading}
                 >
-                  <SelectTrigger className="bg-white">
-                    <SelectValue placeholder="Sélectionner un mode" />
+<SelectTrigger className="bg-white dark:bg-gray-800 dark:border-gray-700">
+                    <SelectValue placeholder={t.common.selectAnOption} />
                   </SelectTrigger>
-                  <SelectContent className="bg-white">
-                    <SelectItem value="base">Emploi du Temps de Base</SelectItem>
-                    <SelectItem value="exception">Exceptions Ponctuelles</SelectItem>
+<SelectContent className="bg-white dark:bg-gray-800 dark:border-gray-700">
+                    <SelectItem value="base">{t.schedule.baseSchedule}</SelectItem>
+                    <SelectItem value="exception">{t.schedule.exceptions}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -923,11 +1045,9 @@ export function ScheduleManagement() {
 
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle>Emploi du Temps</CardTitle>
+            <CardTitle>{t.schedule.title}</CardTitle>
             <CardDescription>
-              {scheduleMode === 'base'
-                ? 'Gestion de l\'emploi du temps récurrent'
-                : 'Gestion des exceptions ponctuelles'}
+              {scheduleMode === 'base' ? t.schedule.baseScheduleDescription : t.schedule.exceptionsDescription}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -939,133 +1059,199 @@ export function ScheduleManagement() {
               <>
                 {/* Desktop View: Grid */}
                 <div className="hidden lg:block">
-                  <ScrollArea className="h-[calc(100vh-400px)] rounded-md border p-4 bg-white">
-                    <div className="grid grid-cols-[100px_repeat(6,1fr)] gap-2 mb-2">
-                      <div className="font-semibold text-gray-500"></div>
-                      {currentWeekDaysInfo.map((dayInfo, index) => (
-                        <div key={index} className="font-semibold text-center py-2 bg-gray-100 rounded">
-                          {dayInfo.dayNameCapitalized}
-                          <div className="text-xs font-normal text-gray-500">
+<ScrollArea className="h-[calc(100vh-400px)] rounded-md border p-4 bg-white dark:bg-gray-800 dark:border-gray-700">                    {/* En-tête des jours */}
+                    {/* En-tête des jours */}
+<div className={`grid ${isRTL ? 'grid-cols-[1fr_100px]' : 'grid-cols-[100px_1fr]'} gap-2 mb-2`}>
+    {isRTL ? (
+        <>
+            <div className="grid grid-cols-6 gap-2">
+                {currentWeekDaysInfo.map((dayInfo) => (
+                    <div key={dayInfo.date.toISOString()}
+className={`font-semibold text-center py-2 rounded-lg transition-colors ${dayInfo.isToday 
+  ? 'bg-blue-600 text-white shadow' 
+  : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white'}`}                    >
+                        {dayInfo.dayNameDisplay}
+                        <div className={`text-xs font-normal ${dayInfo.isToday ? 'text-blue-100' : 'text-gray-500 dark:text-gray-300'}`}>
                             {format(dayInfo.date, 'dd/MM')}
-                          </div>
                         </div>
-                      ))}
                     </div>
-
-                    {timeSlots.map((timeSlot) => (
-                      <div key={timeSlot} className="grid grid-cols-[100px_repeat(6,1fr)] gap-2 mb-2">
-                        <div className="text-sm font-medium text-gray-500 py-2 flex items-center">
-                          {timeSlot}
+                ))}
+            </div>
+            <div className="font-semibold text-gray-500"></div>
+        </>
+    ) : (
+        <>
+            <div className="font-semibold text-gray-500"></div>
+            <div className="grid grid-cols-6 gap-2">
+                {currentWeekDaysInfo.map((dayInfo) => (
+                    <div key={dayInfo.date.toISOString()}
+className={`font-semibold text-center py-2 rounded-lg transition-colors ${dayInfo.isToday ? 'bg-blue-600 text-white shadow' : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'}`}                    >
+                        {dayInfo.dayNameDisplay}
+                        <div className={`text-xs font-normal ${dayInfo.isToday ? 'text-blue-100' : 'text-gray-500'}`}>
+                            {format(dayInfo.date, 'dd/MM')}
                         </div>
-                        {currentWeekDaysInfo.map((dayInfo) => (
-                          <div key={`${dayInfo.dayNameCapitalized}-${timeSlot}`} className="min-h-[100px]">
-                            <ScheduleItem
-                              day={dayInfo.dayNameCapitalized}
-                              date={dayInfo.date}
-                              timeSlot={timeSlot}
-                              data={getScheduleItemData(dayInfo.dayNameCapitalized, dayInfo.date, timeSlot)}
-                              onItemClick={handleItemClick}
-                              scheduleMode={scheduleMode}
-                              scheduleView={scheduleView}
-                            />
-                          </div>
-                        ))}
+                    </div>
+                ))}
+            </div>
+        </>
+    )}
+</div>
+
+                    {/* Corps du tableau */}
+                    {timeSlots.map((timeSlot) => (
+                      <div key={timeSlot} className={`grid ${isRTL ? 'grid-cols-[1fr_100px]' : 'grid-cols-[100px_1fr]'} gap-2 mb-2`}>
+                        {isRTL ? (
+                          <>
+                            <div className="grid grid-cols-6 gap-2">
+                              {currentWeekDaysInfo.map((dayInfo) => (
+                                <div key={`${dayInfo.dayNameCapitalized}-${timeSlot}`} 
+                                     className="min-h-[100px]"
+                                     style={{ direction: 'rtl' }}>
+                                  <ScheduleItem
+                                    day={dayInfo.dayNameCapitalized}
+                                    date={dayInfo.date}
+                                    timeSlot={timeSlot}
+                                    data={getScheduleItemData(dayInfo.dayNameCapitalized, dayInfo.date, timeSlot)}
+                                    onItemClick={handleItemClick}
+                                    scheduleMode={scheduleMode}
+                                    scheduleView={scheduleView}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                            <div className="text-sm font-medium text-gray-500 py-2 flex items-center justify-center">
+                              {timeSlot}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-sm font-medium text-gray-500 py-2 flex items-center">
+                              {timeSlot}
+                            </div>
+                            <div className="grid grid-cols-6 gap-2">
+                              {currentWeekDaysInfo.map((dayInfo) => (
+                                <div key={`${dayInfo.dayNameCapitalized}-${timeSlot}`} className="min-h-[100px]">
+                                  <ScheduleItem
+                                    day={dayInfo.dayNameCapitalized}
+                                    date={dayInfo.date}
+                                    timeSlot={timeSlot}
+                                    data={getScheduleItemData(dayInfo.dayNameCapitalized, dayInfo.date, timeSlot)}
+                                    onItemClick={handleItemClick}
+                                    scheduleMode={scheduleMode}
+                                    scheduleView={scheduleView}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
                       </div>
                     ))}
                   </ScrollArea>
                 </div>
 
                 {/* Mobile View: List */}
-                <div className="block lg:hidden">
-                  <ScrollArea className="h-[calc(100vh-400px)] rounded-md border p-4 bg-white">
-                    {currentWeekDaysInfo.map((dayInfo) => (
-                      <div key={dayInfo.date.toISOString()} className="mb-6">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-3 sticky top-0 bg-white py-2 z-10 border-b">
-                          {dayInfo.dayNameCapitalized} - {format(dayInfo.date, 'dd/MM')}
-                        </h3>
-                        <div className="space-y-4">
-                          {timeSlots.map((timeSlot) => (
-                            <div key={timeSlot} className="flex flex-col gap-2">
-                              <div className="text-sm font-medium text-gray-600">{timeSlot}</div>
-                              <div className="min-h-[90px]">
-                                <ScheduleItem
-                                  day={dayInfo.dayNameCapitalized}
-                                  date={dayInfo.date}
-                                  timeSlot={timeSlot}
-                                  data={getScheduleItemData(dayInfo.dayNameCapitalized, dayInfo.date, timeSlot)}
-                                  onItemClick={handleItemClick}
-                                  scheduleMode={scheduleMode}
-                                  scheduleView={scheduleView}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </ScrollArea>
-                </div>
+<div className="block lg:hidden">
+  <ScrollArea className="h-[calc(100vh-400px)] rounded-md border p-4 bg-white dark:bg-gray-800 dark:border-gray-700">
+    {currentWeekDaysInfo.map((dayInfo) => (
+      <div key={dayInfo.date.toISOString()} className="mb-6">
+        {/* En-tête du jour centré avec texte en gras */}
+        <h3 className={`
+          text-lg font-semibold mb-3 sticky top-0 py-2 z-10 border-b
+          ${dayInfo.isToday 
+            ? 'bg-blue-600 text-white dark:bg-blue-700' 
+            : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'}
+          border-gray-200 dark:border-gray-600
+          text-center
+        `}>
+          <span className="font-bold">
+            {dayInfo.dayNameDisplay} {/* Nom du jour */}
+            <span className="opacity-80 mx-2">-</span> {/* Séparateur */}
+            {format(dayInfo.date, 'dd/MM')} {/* Date formatée */}
+          </span>
+        </h3>
+
+        {/* Créneaux horaires */}
+        <div className="space-y-4">
+          {timeSlots.map((timeSlot) => (
+            <div key={timeSlot} className="flex flex-col gap-2">
+              <div className={`text-sm font-medium text-gray-600 dark:text-gray-300 ${isRTL ? 'text-right' : 'text-left'}`}>
+                {timeSlot}
+              </div>
+              <div className="min-h-[90px]">
+                <ScheduleItem
+                  day={dayInfo.dayNameCapitalized}
+                  date={dayInfo.date}
+                  timeSlot={timeSlot}
+                  data={getScheduleItemData(dayInfo.dayNameCapitalized, dayInfo.date, timeSlot)}
+                  onItemClick={handleItemClick}
+                  scheduleMode={scheduleMode}
+                  scheduleView={scheduleView}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    ))}
+  </ScrollArea>
+</div>
               </>
             )}
           </CardContent>
         </Card>
 
         <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-          <DialogContent className="sm:max-w-[600px] bg-white">
-            <DialogHeader>
-              <DialogTitle>
-                {scheduleMode === 'base'
-                  ? modalMode === 'add'
-                    ? 'Ajouter un cours récurrent'
-                    : 'Modifier un cours récurrent'
-                  : modalMode === 'add'
-                  ? 'Ajouter une exception ponctuelle'
-                  : 'Modifier une exception ponctuelle'}
-              </DialogTitle>
-              <DialogDescription>
-                {currentDay} {currentModalDate ? format(currentModalDate, 'dd/MM/yyyy', { locale: fr }) : ''} {currentTimeSlot} pour{' '}
-                {scheduleView === 'class'
-                  ? classes.find((c) => c.id === parseInt(selectedClassId))?.nom || 'la classe sélectionnée'
-                  : teachers.find((t) => t.id === parseInt(selectedTeacherId))
-                    ? `${teachers.find((t) => t.id === parseInt(selectedTeacherId))?.prenom} ${teachers.find((t) => t.id === parseInt(selectedTeacherId))?.nom}`
-                    : 'le professeur sélectionné'}
-              </DialogDescription>
-            </DialogHeader>
-
+          <DialogContent className="sm:max-w-[600px] bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+  <DialogHeader>
+    <DialogTitle className="dark:text-white">
+      {scheduleMode === 'base'
+        ? modalMode === 'add'
+          ? t.schedule.addBaseSchedule
+          : t.schedule.editBaseSchedule
+        : modalMode === 'add'
+        ? t.schedule.addException
+        : t.schedule.editException}
+    </DialogTitle>
+    <DialogDescription className="dark:text-gray-300">
+      {currentModalDate ? format(currentModalDate, 'EEEE', { locale: currentLocale }) : ''}
+      {currentModalDate ? format(currentModalDate, ' dd/MM/yyyy', { locale: currentLocale }) : ''}
+      {currentTimeSlot} {t.common.forLabel}{' '}
+      {scheduleView === 'class'
+        ? classes.find((c) => c.id === parseInt(selectedClassId))?.nom || t.common.selectedClass
+        : teachers.find((t) => t.id === parseInt(selectedTeacherId))
+          ? `${teachers.find((t) => t.id === parseInt(selectedTeacherId))?.prenom} ${teachers.find((t) => t.id === parseInt(selectedTeacherId))?.nom}`
+          : t.common.selectedTeacher}
+    </DialogDescription>
+  </DialogHeader>
             <div className="grid gap-4 py-4">
               {scheduleMode === 'base' ? (
                 <>
                   <div className="grid grid-cols-4 items-center gap-4">
-                    <label htmlFor="matiere" className="text-right text-sm font-medium text-gray-700">
-                      Matière
-                    </label>
-                    <Select
-                      value={formMatiereId}
-                      onValueChange={handleFormMatiereChange}
-                      disabled={isSaving || scheduleView === 'teacher'}
-                    >
-                      <SelectTrigger className="col-span-3 bg-gray-50">
-                        <SelectValue placeholder="Sélectionner une matière" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white">
-                        {filteredMatieres.length > 0 ? (
-                          filteredMatieres.map((matiere) => (
-                            <SelectItem key={matiere.id} value={String(matiere.id)}>
-                              {matiere.nom}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="no-matieres" disabled>
-                            Aucune matière disponible
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
+    <label htmlFor="matiere" className="text-right text-sm font-medium text-gray-700 dark:text-gray-300">
+      {t.common.subject}
+    </label>
+    <Select>
+      <SelectTrigger className="col-span-3 bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+        <SelectValue placeholder={t.common.selectASubject} />
+      </SelectTrigger>
+      <SelectContent className="bg-white dark:bg-gray-800 dark:border-gray-700">
+        {filteredMatieres.map((matiere) => (
+          <SelectItem 
+            key={matiere.id} 
+            value={String(matiere.id)}
+            className="dark:hover:bg-gray-700 dark:focus:bg-gray-700"
+          >
+            {matiere.nom}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
 
                   <div className="grid grid-cols-4 items-center gap-4">
                     <label htmlFor="professeur" className="text-right text-sm font-medium text-gray-700">
-                      Professeur
+                      {t.common.teacher}
                     </label>
                     <Select
                       value={formProfesseurId}
@@ -1073,7 +1259,7 @@ export function ScheduleManagement() {
                       disabled={isSaving || true}
                     >
                       <SelectTrigger className="col-span-3 bg-gray-50">
-                        <SelectValue placeholder="Sélectionner un professeur" />
+                        <SelectValue placeholder={t.common.selectATeacher} />
                       </SelectTrigger>
                       <SelectContent className="bg-white">
                         {formProfesseurId ? (
@@ -1086,7 +1272,7 @@ export function ScheduleManagement() {
                             ))
                         ) : (
                           <SelectItem value="no-professeur" disabled>
-                            Sélectionnez une matière
+                            {t.schedule.selectSubjectFirst}
                           </SelectItem>
                         )}
                       </SelectContent>
@@ -1097,7 +1283,7 @@ export function ScheduleManagement() {
                 <>
                   <div className="grid grid-cols-4 items-center gap-4">
                     <label htmlFor="exceptionType" className="text-right text-sm font-medium text-gray-700">
-                      Type d'exception
+                      {t.schedule.exceptionType}
                     </label>
                     <Select
                       value={formExceptionType}
@@ -1105,14 +1291,14 @@ export function ScheduleManagement() {
                       disabled={isSaving}
                     >
                       <SelectTrigger className="col-span-3 bg-gray-50">
-                        <SelectValue placeholder="Sélectionner le type" />
+                        <SelectValue placeholder={t.common.selectAnOption} />
                       </SelectTrigger>
                       <SelectContent className="bg-white">
-                        <SelectItem value="remplacement_prof">Remplacement / Modification</SelectItem>
-                        <SelectItem value="annulation">Annulation</SelectItem>
-                        <SelectItem value="deplacement_cours">Déplacement / Ajout Ponctuel</SelectItem>
-                        <SelectItem value="jour_ferie">Jour Férié</SelectItem>
-                        <SelectItem value="evenement_special">Événement Spécial</SelectItem>
+                        <SelectItem value="remplacement_prof">{t.schedule.exceptionTypes.remplacement_prof}</SelectItem>
+                        <SelectItem value="annulation">{t.schedule.exceptionTypes.annulation}</SelectItem>
+                        <SelectItem value="deplacement_cours">{t.schedule.exceptionTypes.deplacement_cours}</SelectItem>
+                        <SelectItem value="jour_ferie">{t.schedule.exceptionTypes.jour_ferie}</SelectItem>
+                        <SelectItem value="evenement_special">{t.schedule.exceptionTypes.evenement_special}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1121,7 +1307,7 @@ export function ScheduleManagement() {
                     <>
                       <div className="grid grid-cols-4 items-center gap-4">
                         <label htmlFor="subject" className="text-right text-sm font-medium text-gray-700">
-                          Matière (Nouvelle)
+                          {t.schedule.newSubject}
                         </label>
                         <Select
                           value={formMatiereId}
@@ -1129,7 +1315,7 @@ export function ScheduleManagement() {
                           disabled={isSaving}
                         >
                           <SelectTrigger className="col-span-3 bg-gray-50">
-                            <SelectValue placeholder="Sélectionner une matière" />
+                            <SelectValue placeholder={t.common.selectASubject} />
                           </SelectTrigger>
                           <SelectContent className="bg-white">
                             {filteredMatieres.length > 0 ? (
@@ -1140,7 +1326,7 @@ export function ScheduleManagement() {
                               ))
                             ) : (
                               <SelectItem value="no-matieres" disabled>
-                                Aucune matière disponible
+                                {t.common.noDataAvailable}
                               </SelectItem>
                             )}
                           </SelectContent>
@@ -1149,7 +1335,7 @@ export function ScheduleManagement() {
 
                       <div className="grid grid-cols-4 items-center gap-4">
                         <label htmlFor="teacher" className="text-right text-sm font-medium text-gray-700">
-                          Professeur (Nouveau)
+                          {t.schedule.newTeacher}
                         </label>
                         <Select
                           value={formProfesseurId}
@@ -1157,7 +1343,7 @@ export function ScheduleManagement() {
                           disabled={isSaving || true}
                         >
                           <SelectTrigger className="col-span-3 bg-gray-50">
-                            <SelectValue placeholder="Sélectionner un professeur" />
+                            <SelectValue placeholder={t.common.selectATeacher} />
                           </SelectTrigger>
                           <SelectContent className="bg-white">
                             {formProfesseurId ? (
@@ -1170,7 +1356,7 @@ export function ScheduleManagement() {
                                 ))
                             ) : (
                               <SelectItem value="no-professeur" disabled>
-                                Sélectionnez une matière
+                                {t.schedule.selectSubjectFirst}
                               </SelectItem>
                             )}
                           </SelectContent>
@@ -1181,14 +1367,14 @@ export function ScheduleManagement() {
 
                   <div className="grid grid-cols-4 items-center gap-4">
                     <label htmlFor="motif" className="text-right text-sm font-medium text-gray-700">
-                      Motif
+                      {t.schedule.reason}
                     </label>
                     <Textarea
                       id="motif"
                       value={formMotif}
                       onChange={(e) => setFormMotif(e.target.value)}
-                      placeholder="Ex: Professeur en formation, Salle occupée, Jour férié..."
-                      className="col-span-3 bg-gray-50"
+                      placeholder={t.schedule.reasonPlaceholder}
+className="col-span-3 bg-gray-50 dark:bg-gray-800 dark:border-gray-700"
                       disabled={isSaving}
                     />
                   </div>
@@ -1198,8 +1384,9 @@ export function ScheduleManagement() {
 
             <DialogFooter>
               <DialogClose asChild>
-                <Button variant="outline" disabled={isSaving} className="bg-gray-200">
-                  Annuler
+                <Button variant="outline" disabled={isSaving}       className="bg-gray-200 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600"
+>
+                  {t.common.cancel}
                 </Button>
               </DialogClose>
               {scheduleMode === 'base' ? (
@@ -1212,16 +1399,16 @@ export function ScheduleManagement() {
                       className="bg-red-500 hover:bg-red-600"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
-                      Supprimer
+                      {t.common.delete}
                     </Button>
                   )}
                   <Button
                     onClick={handleSaveBaseSchedule}
                     disabled={isSaving || !formMatiereId || !formProfesseurId}
-                    className="bg-blue-500 hover:bg-blue-600 text-white"
+    className="bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-600 dark:hover:bg-blue-700"
                   >
                     <Save className="h-4 w-4 mr-2" />
-                    {modalMode === 'add' ? 'Ajouter' : 'Enregistrer'}
+                    {modalMode === 'add' ? t.common.add : t.common.save}
                   </Button>
                 </>
               ) : (
@@ -1234,7 +1421,7 @@ export function ScheduleManagement() {
                       className="bg-red-500 hover:bg-red-600"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
-                      Supprimer
+                      {t.common.delete}
                     </Button>
                   )}
                   <Button
@@ -1253,7 +1440,7 @@ export function ScheduleManagement() {
                     className="bg-blue-500 hover:bg-blue-600 text-white"
                   >
                     <Save className="h-4 w-4 mr-2" />
-                    {modalMode === 'add' ? 'Ajouter' : 'Enregistrer'}
+                    {modalMode === 'add' ? t.common.add : t.common.save}
                   </Button>
                 </>
               )}

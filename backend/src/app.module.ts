@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule, ConfigService } from '@nestjs/config'; // Importez ConfigService
+import { ConfigModule, ConfigService } from '@nestjs/config';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ClasseModule } from './classe/classe.module';
@@ -17,45 +18,49 @@ import { EvaluationModule } from './evaluation/evaluation.module';
 import { NoteModule } from './note/note.module';
 import { ConfigurationModule } from './configuration/configuration.module';
 import { EmploiDuTempsModule } from './emploidutemps/emploidutemps.module';
-import { ExceptionEmploiDuTempsModule } from './exceptionemploidutemps/exceptionemploidutemps.module'; // Nouvelle importation
-import { AbsenceModule } from './absence/absence.module'; // Adaptez le chemin
-import { ChapitreModule } from './chapitre/chapitre.module'; // Assurez-vous que le chemin est correct
+import { ExceptionEmploiDuTempsModule } from './exceptionemploidutemps/exceptionemploidutemps.module';
+import { AbsenceModule } from './absence/absence.module';
+import { ChapitreModule } from './chapitre/chapitre.module';
 import { EtablissementInfoModule } from './etablissement/etablissement-info.module';
+import { AuditLogModule } from './historique/historique.module';
 
-
+import { AuditSubscriber } from './subscribers/audit.subscriber'; // 🔥 Ajout ici
 
 @Module({
   imports: [
-     ConfigModule.forRoot({
-      isGlobal: true, // Rend les variables d'environnement disponibles globalement
-      envFilePath: '.env', // Chemin vers votre fichier .env local
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
     }),
+
     TypeOrmModule.forRootAsync({
-      imports: [ConfigModule], // Importez ConfigModule pour utiliser ConfigService
+      imports: [ConfigModule],
+      inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        type: 'mysql', // Ou 'mariadb' si c'est le cas
+        type: 'mysql',
         host: configService.get<string>('DB_HOST'),
         port: configService.get<number>('DB_PORT'),
         username: configService.get<string>('DB_USER'),
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_NAME'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'], // Chemin vers vos entités
-        // Ne jamais utiliser synchronize: true en production !
-synchronize: false,
-logging: false,
-            ssl: configService.get<string>('DB_HOST')?.includes('railway')
-  ? { rejectUnauthorized: false }
-  : false
+        entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        synchronize: false,
+        logging: false,
+        ssl: configService.get<string>('DB_HOST')?.includes('railway')
+          ? { rejectUnauthorized: false }
+          : false,
+        subscribers: [AuditSubscriber], // ✅ Déclaration du subscriber ici aussi
       }),
-      inject: [ConfigService], // Injectez ConfigService dans la factory
     }),
+
+    // Modules fonctionnels
     AuthModule,
     UsersModule,
     ClasseModule,
     AnneeAcademiqueModule,
     InscriptionModule,
     MatiereModule,
-    AffectationModule, 
+    AffectationModule,
     CoefficientClasseModule,
     TrimestreModule,
     EvaluationModule,
@@ -65,9 +70,13 @@ logging: false,
     ExceptionEmploiDuTempsModule,
     AbsenceModule,
     ChapitreModule,
-    EtablissementInfoModule 
+    EtablissementInfoModule,
+    AuditLogModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    AuditSubscriber, // ✅ Pour que Nest puisse injecter correctement
+  ],
 })
 export class AppModule {}

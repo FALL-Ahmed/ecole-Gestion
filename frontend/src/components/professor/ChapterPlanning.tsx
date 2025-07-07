@@ -425,9 +425,13 @@ const handleSaveChapter = async () => {
     console.log('Final payload sent to API:', JSON.stringify(payload, null, 2));
 
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(url, {
         method: method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       });
       if (!response.ok) {
@@ -503,9 +507,13 @@ const handleSaveChapter = async () => {
   }
 
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/chapitres/${chapterId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       });
       if (!response.ok) throw new Error('Failed to update chapter status');

@@ -1,8 +1,15 @@
 {
   "devDependencies": {
-    "@types/estree": "^1.0.8"
+    "@types/estree": "^1.0.8",
+    "@types/passport-jwt": "^4.0.1"
   },
   "dependencies": {
+    "@nestjs/jwt": "^11.0.0",
+    "@nestjs/passport": "^11.0.5",
+    "cls-hooked": "^4.2.2",
+    "flag-icons": "^7.5.0",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwindcss-animate": "^1.0.7",

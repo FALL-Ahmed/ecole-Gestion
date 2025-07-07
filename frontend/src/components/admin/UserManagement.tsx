@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Search, Check, X, ChevronDown, ChevronUp, Loader2, Shield, User, GraduationCap, BookOpen, Upload, Info, Eye, EyeOff } from 'lucide-react';
+import { Plus, Search, Check, X, ChevronDown, ChevronUp, Loader2, Shield, User, GraduationCap, BookOpen, Upload, Info, Eye, EyeOff, Users as UsersIcon } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Skeleton } from '../ui/skeleton';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -127,6 +127,7 @@ export default function UserManagement() {
   const { t, language } = useLanguage(); // Destructurez language
 
   const [activeTab, setActiveTab] = useState<'users' | 'inscriptions'>('users');
+  const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
   const [inscriptions, setInscriptions] = useState<Inscription[]>([]);
   const [generatedPassword, setGeneratedPassword] = useState<{
     password: string;
@@ -304,9 +305,13 @@ export default function UserManagement() {
       }
 
       if (editUser) {
+        const token = localStorage.getItem('token');
         const response = await fetch(`${API_URL}/api/users/${editUser.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify(userData),
         });
 
@@ -332,9 +337,13 @@ export default function UserManagement() {
         return;
       }
 
+      const token = localStorage.getItem('token');
       const userResponse = await fetch(`${API_URL}/api/users`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(userData),
       });
 
@@ -413,9 +422,13 @@ export default function UserManagement() {
         throw new Error(t.userManagement.toasts.selectStudentClassYearError);
       }
 
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_URL}/api/inscriptions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           utilisateur_id: parseInt(inscriptionFormData.utilisateur_id),
           classe_id: parseInt(inscriptionFormData.classe_id),
@@ -496,13 +509,13 @@ export default function UserManagement() {
 
   const filteredUsers = useMemo(() => {
     return sortedUsers.filter(user =>
-      user.nom.toLowerCase().includes(searchTermUsers.toLowerCase()) ||
-      user.prenom.toLowerCase().includes(searchTermUsers.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTermUsers.toLowerCase()) ||
-      user.role.toLowerCase().includes(searchTermUsers.toLowerCase()) ||
-      (user.tuteurNom && user.tuteurNom.toLowerCase().includes(searchTermUsers.toLowerCase()))
+      (filterRole === 'all' || user.role === filterRole) &&
+      (user.nom.toLowerCase().includes(searchTermUsers.toLowerCase()) ||
+        user.prenom.toLowerCase().includes(searchTermUsers.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchTermUsers.toLowerCase()) ||
+        (user.tuteurNom && user.tuteurNom.toLowerCase().includes(searchTermUsers.toLowerCase())))
     );
-  }, [sortedUsers, searchTermUsers]);
+  }, [sortedUsers, searchTermUsers, filterRole]);
 
   const requestSortInscriptions = (key: 'utilisateur' | 'classe' | 'annee_scolaire' | 'actif') => {
     let direction: 'ascending' | 'descending' = 'ascending';
@@ -1059,20 +1072,55 @@ export default function UserManagement() {
           
           <Card className="border border-gray-200 dark:border-gray-700 shadow-sm">
             <CardHeader className="border-b border-gray-200 dark:border-gray-700">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <CardTitle className="text-lg text-gray-900 dark:text-white">
-                  {t.userManagement.userList}
-                </CardTitle>
-                <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
-                  <Input
-                    placeholder={t.userManagement.searchUserPlaceholder}
-                    value={searchTermUsers}
-                    onChange={(e) => setSearchTermUsers(e.target.value)}
-                    className="pl-10 w-full focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  />
-                </div>
-              </div>
+             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 py-6">
+  {/* Titre */}
+  <CardTitle className="text-2xl font-semibold text-gray-900 dark:text-white tracking-tight">
+    {t.userManagement.userList}
+  </CardTitle>
+
+  {/* Filtres + Recherche */}
+  <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto items-start sm:items-center">
+    {/* Boutons filtres */}
+    <div className="flex flex-wrap gap-2 px-2 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm">
+      {[
+        { key: 'all', icon: <UsersIcon className="h-4 w-4" />, label: t.userManagement.userForm.roles?.all || 'Tous' },
+        { key: 'admin', icon: <Shield className="h-4 w-4" />, label: t.userManagement.userForm.admin },
+        { key: 'professeur', icon: <GraduationCap className="h-4 w-4" />, label: t.userManagement.userForm.teacher },
+        { key: 'eleve', icon: <BookOpen className="h-4 w-4" />, label: t.userManagement.userForm.student },
+      ].map(({ key, icon, label }) => {
+        const isActive = filterRole === key;
+        return (
+          <button
+            key={key}
+onClick={() => setFilterRole(key as "all" | UserRole)}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-colors duration-200
+              ${
+                isActive
+                  ? "bg-blue-600 text-white shadow hover:bg-blue-700"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+              }`}
+          >
+            {icon}
+            {label}
+          </button>
+        );
+      })}
+    </div>
+
+    {/* Barre de recherche */}
+    <div className="relative w-full sm:w-64">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
+      <input
+        type="text"
+        placeholder={t.userManagement.searchUserPlaceholder}
+        value={searchTermUsers}
+        onChange={(e) => setSearchTermUsers(e.target.value)}
+        className="pl-10 pr-4 py-2 w-full text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+      />
+    </div>
+  </div>
+</div>
+
             </CardHeader>
             <CardContent className="p-0">
               {isLoadingUsers ? (
@@ -1146,12 +1194,12 @@ export default function UserManagement() {
                               {user.actif ? (
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
                                   <Check className="h-3 w-3 mr-1" />
-                                  {t.common.active}
+                                  {t.common.status.active}
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
                                   <X className="h-3 w-3 mr-1" />
-                                  {t.common.inactive}
+                                  {t.common.status.inactive}
                                 </span>
                               )}
                             </td>
@@ -1210,11 +1258,11 @@ export default function UserManagement() {
                               </span>
                               {user.actif ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                                  <Check className="h-3 w-3 mr-1" /> {t.common.active}
+                                  <Check className="h-3 w-3 mr-1" /> {t.common.status.active}
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-                                  <X className="h-3 w-3 mr-1" /> {t.common.inactive}
+                                  <X className="h-3 w-3 mr-1" /> {t.common.status.inactive}
                                 </span>
                               )}
                             </div>
@@ -1513,11 +1561,11 @@ export default function UserManagement() {
                             <td className="px-6 py-4 whitespace-nowrap">
                               {inscription.actif ? (
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                                  <Check className="h-3 w-3 mr-1" />{t.common.active}
+                                  <Check className="h-3 w-3 mr-1" />{t.common.status.active}
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-                                  <X className="h-3 w-3 mr-1" />{t.common.inactive}
+                                  <X className="h-3 w-3 mr-1" />{t.common.status.inactive}
                                 </span>
                               )}
                             </td>
@@ -1582,11 +1630,11 @@ export default function UserManagement() {
                               </span>
                               {inscription.actif ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                                  <Check className="h-3 w-3 mr-1" /> {t.common.active}
+                                  <Check className="h-3 w-3 mr-1" /> {t.common.status.active}
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-                                  <X className="h-3 w-3 mr-1" /> {t.common.inactive}
+                                  <X className="h-3 w-3 mr-1" /> {t.common.status.inactive}
                                 </span>
                               )}
                             </div>

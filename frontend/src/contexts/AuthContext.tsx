@@ -1,4 +1,3 @@
-// src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 export type Role = 'admin' | 'professeur' | 'eleve';
@@ -9,7 +8,7 @@ export interface User {
   nom: string;
   prenom: string;
   email: string;
-  role: Role; // 'admin', 'professeur', 'eleve'
+  role: Role;
   genre?: Genre | null;
   adresse?: string | null;
   tuteurNom?: string | null;
@@ -28,43 +27,46 @@ interface AuthContextType {
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   logout: () => void;
   isAuthenticated: boolean;
-  isLoading: boolean; // Ajout de l'état de chargement
+  isLoading: boolean;
+  token: string | null;
+  setToken: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // Initialisé à true
+  const [token, setToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const loadUserFromLocalStorage = () => {
-      try {
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-          setUser(JSON.parse(storedUser));
-        }
-      } catch (error) {
-        console.error("Erreur lors de la lecture de l'utilisateur depuis localStorage:", error);
-        localStorage.removeItem('user'); // Nettoyer les données corrompues
-      } finally {
-        setIsLoading(false); // Indique que le chargement initial est terminé
+    try {
+      const storedUser = localStorage.getItem('user');
+      const storedToken = localStorage.getItem('token');
+      if (storedUser && storedToken) {
+        setUser(JSON.parse(storedUser));
+        setToken(storedToken);
       }
-    };
-
-    loadUserFromLocalStorage();
+    } catch (error) {
+      console.error("❌ Erreur de lecture dans localStorage :", error);
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   const logout = () => {
     setUser(null);
+    setToken(null);
     localStorage.removeItem('user');
-    // Une redirection pourrait être gérée ici ou dans les composants consommateurs
+    localStorage.removeItem('token');
   };
 
-  const isAuthenticated = !!user; // true si user n'est pas null
+  const isAuthenticated = !!token;
 
   return (
-    <AuthContext.Provider value={{ user, setUser, logout, isAuthenticated, isLoading }}>
+    <AuthContext.Provider value={{ user, setUser, token, setToken, logout, isAuthenticated, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

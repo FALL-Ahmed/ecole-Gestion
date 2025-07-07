@@ -20,10 +20,13 @@ import { Button } from '@/components/ui/button';
 
 import { toast } from '@/hooks/use-toast';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { fr, ar } from 'date-fns/locale';
+import { useLanguage } from '@/contexts/LanguageContext';
+
 // Utilisez la variable d'environnement VITE_API_BASE_URL configurée sur Vercel
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const API_BASE_URL = `${API_URL}/api`;
+
 // --- Interface Definitions ---
 interface AnneeAcademique {
   id: number;
@@ -44,10 +47,11 @@ interface Trimestre {
   nom: string;
   date_debut: string;
   date_fin: string;
-anneeScolaire: { // Align with other components for consistency
+  anneeScolaire: {
     id: number;
-    libelle?: string; // Optional, but good to have if available
-  };}
+    libelle?: string;
+  };
+}
 
 interface User {
   id: number;
@@ -58,8 +62,9 @@ interface User {
 }
 
 interface StudentWithClass extends User {
-  classe?: Classe; // Added during student data processing
+  classe?: Classe;
 }
+
 interface Inscription {
   id: number;
   utilisateur: User;
@@ -80,15 +85,12 @@ interface Evaluation {
   annee_scolaire_id: number;
   id: number;
   type: string;
-  date_eval: string; // Corrected to match API response ('date_eval')
+  date_eval: string;
   matiere?: { id: number; nom: string };
   classe_id?: number;
-// annee_scolaire_id is not directly on evaluation in the expanded note,
-  // it's nested within evaluation.classe
   trimestreId?: number;
-// Add the nested 'classe' structure as seen in the API log
   classe?: {
-    id: number; // Or other properties of classe if needed
+    id: number;
     annee_scolaire_id: number;
   };
 }
@@ -102,10 +104,9 @@ interface Note {
 
 interface Absence {
   id: number;
-  date: string; // YYYY-MM-DD
+  date: string;
   etudiant_id: number;
-  justification?: string | null; // Pour déterminer si l'absence est justifiée
-  // Add other relevant fields if needed for stats, e.g., matiere_id
+  justification?: string | null;
 }
 
 // Chart data types
@@ -113,76 +114,87 @@ interface NameValueChartItem {
   name: string;
   value: number;
 }
+
 interface NameValueColorChartItem extends NameValueChartItem {
   color: string;
 }
+
 interface AttendanceChartItem {
   name: string;
   tauxAssiduite: number;
   tauxAbsenceNonJustifiee: number;
 }
+
 interface GradeChartItem {
   name: string;
   moyenne: number;
 }
+
 interface SubjectSuccessRateItem {
   name: string;
   taux: number;
 }
 
-// Helper function to format academic year display
-const formatAcademicYearDisplay = (annee: { libelle: string; date_debut?: string; date_fin?: string }): string => {
-  if (!annee || !annee.date_debut || !annee.date_fin) {
-    return annee.libelle || "Année inconnue";
-  }
-  const startYear = new Date(annee.date_debut).getFullYear();
-  const endYear = new Date(annee.date_fin).getFullYear();
-  return annee.libelle && annee.libelle.includes(String(startYear)) && annee.libelle.includes(String(endYear)) ? annee.libelle : `${annee.libelle || ''} (${startYear}-${endYear})`.trim();
-};
-
-// --- Helper Functions ---
 const COLORS_PIE = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#A28CF2', '#FF6699'];
 
-const calculateSchoolDays = (startDateStr: string, endDateStr: string): number => {
-  try {
-    const start = parseISO(startDateStr);
-    const end = parseISO(endDateStr);
-
-    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
-      console.warn("Invalid dates for school day calculation:", startDateStr, endDateStr);
-      return 0;
-    }
-    let count = 0;
-    let currentDate = new Date(start.valueOf()); // Clone start date
-    while (currentDate <= end) {
-      const dayOfWeek = currentDate.getDay(); // 0 (Sunday) to 6 (Saturday)
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Exclude Sunday and Saturday
-        count++;
-      }
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-    return count;
-  } catch (e) {
-    console.error("Error calculating school days:", e, { startDateStr, endDateStr });
-    return 0; // Fallback
-  }
-};
-
 export function Statistics() {
+  const { t, language } = useLanguage();
+  const getAlignmentClass = () => language === 'ar' ? 'text-right' : 'text-left';
   const [academicYears, setAcademicYears] = useState<AnneeAcademique[]>([]);
   const [selectedAcademicYearId, setSelectedAcademicYearId] = useState<string>('');
-
   const [classesForYear, setClassesForYear] = useState<Classe[]>([]);
-  const [selectedClassId, setSelectedClassId] = useState<string>('all'); // 'all' or class ID
+  const [selectedClassId, setSelectedClassId] = useState<string>('all');
+  const [classSearchTerm, setClassSearchTerm] = useState('');
+const [studentSearchTerm, setStudentSearchTerm] = useState('');
 
   const [termsForYear, setTermsForYear] = useState<Trimestre[]>([]);
-  const [selectedTermId, setSelectedTermId] = useState<string>('all'); // 'all' or term ID
-
+  const [selectedTermId, setSelectedTermId] = useState<string>('all');
   const [studentsInYear, setStudentsInYear] = useState<StudentWithClass[]>([]);
   const [gradesInYear, setGradesInYear] = useState<Note[]>([]);
   const [absencesInYear, setAbsencesInYear] = useState<Absence[]>([]);
-  const [selectedStudentId, setSelectedStudentId] = useState<string>('all'); // 'all' ou ID de l'élève
+  const [selectedStudentId, setSelectedStudentId] = useState<string>('all');
   const [coefficients, setCoefficients] = useState<CoefficientClasse[]>([]);
+  const getTextAlignment = (language: string) => {
+  return language === 'ar' ? 'text-right' : 'text-left';
+};
+const translateTerm = (termName: string): string => {
+  switch(termName.toLowerCase()) {
+    case 'trimestre 1':
+    case 'term 1':
+      return t.gradeManagement.term1;
+    case 'trimestre 2': 
+    case 'term 2':
+      return t.gradeManagement.term2;
+    case 'trimestre 3':
+    case 'term 3':
+      return t.gradeManagement.term3;
+    default:
+      return termName;
+  }
+};
+const translateSubject = (subjectName: string): string => {
+  const cleanedName = subjectName.toLowerCase().trim();
+  
+  // Correspondance exacte
+  const exactMatch = Object.entries(t.schedule.subjects).find(
+    ([key]) => cleanedName === key.toLowerCase()
+  );
+  if (exactMatch) return exactMatch[1];
+
+  // Correspondance partielle
+  const partialMatch = Object.entries(t.schedule.subjects).find(
+    ([key]) => cleanedName.includes(key.toLowerCase())
+  );
+  if (partialMatch) return partialMatch[1];
+
+  // Cas particuliers
+  if (cleanedName.includes('math')) return t.schedule.subjects.math;
+  if (cleanedName.includes('physique') || cleanedName.includes('physics')) return t.schedule.subjects.physics;
+  if (cleanedName.includes('arab')) return t.schedule.subjects.arabic;
+  
+  // Par défaut, retourner le nom original
+  return subjectName;
+};
 
   const [loading, setLoading] = useState({
     initial: true,
@@ -192,11 +204,49 @@ export function Statistics() {
     students: false,
     grades: false,
     absences: false,
-        coefficients: false,
-
+    coefficients: false,
   });
+
   const [error, setError] = useState<string | null>(null);
   const [selectedTab, setSelectedTab] = useState<string>('overview');
+
+  // Helper functions with language support
+  const formatAcademicYearDisplay = (annee: { libelle: string; date_debut?: string; date_fin?: string }): string => {
+    if (!annee || !annee.date_debut || !annee.date_fin) {
+      return annee.libelle || t.common.unknownYear;
+    }
+    const startYear = new Date(annee.date_debut).getFullYear();
+    const endYear = new Date(annee.date_fin).getFullYear();
+    return annee.libelle && annee.libelle.includes(String(startYear)) && annee.libelle.includes(String(endYear)) 
+      ? annee.libelle 
+      : `${annee.libelle || ''} (${startYear}-${endYear})`.trim();
+  };
+
+  const calculateSchoolDays = (startDateStr: string, endDateStr: string): number => {
+    try {
+      const start = parseISO(startDateStr);
+      const end = parseISO(endDateStr);
+
+      if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
+        console.warn("Invalid dates for school day calculation:", startDateStr, endDateStr);
+        return 0;
+      }
+
+      let count = 0;
+      let currentDate = new Date(start.valueOf());
+      while (currentDate <= end) {
+        const dayOfWeek = currentDate.getDay();
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+          count++;
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      return count;
+    } catch (e) {
+      console.error("Error calculating school days:", e, { startDateStr, endDateStr });
+      return 0;
+    }
+  };
 
   const fetchData = useCallback(async (endpoint: string, setLoadingKey?: keyof typeof loading) => {
     if (setLoadingKey) setLoading(prev => ({ ...prev, [setLoadingKey]: true }));
@@ -209,117 +259,116 @@ export function Statistics() {
       return await response.json();
     } catch (err: any) {
       console.error(`Error fetching ${endpoint}:`, err);
-      toast({ title: "Erreur de chargement", description: err.message, variant: "destructive" });
-      setError(`Impossible de charger: ${endpoint}`);
+      toast({ 
+        title: t.common.error, 
+        description: err.message, 
+        variant: "destructive" 
+      });
+      setError(`${t.common.errorLoading}: ${endpoint}`);
       return [];
     } finally {
       if (setLoadingKey) setLoading(prev => ({ ...prev, [setLoadingKey]: false }));
     }
-  }, []);
+  }, [t]);
 
   // Fetch Academic Years and set default
   useEffect(() => {
     const fetchInitialYears = async () => {
       const years: AnneeAcademique[] = await fetchData('annees-academiques', 'academicYears');
       setAcademicYears(years);
+      
       if (years.length > 0) {
-        // Try to find current year from configuration
         try {
           const config = await fetchData('configuration');
           const activeYearId = config?.annee_scolaire?.id || config?.annee_academique_active_id;
+          
           if (activeYearId && years.some(y => y.id === activeYearId)) {
             setSelectedAcademicYearId(String(activeYearId));
           } else {
-            // Fallback to the latest year by date_debut or just the first one
-             const sortedYears = [...years].sort((a, b) => new Date(b.date_debut).getTime() - new Date(a.date_debut).getTime());
+            const sortedYears = [...years].sort((a, b) => 
+              new Date(b.date_debut).getTime() - new Date(a.date_debut).getTime());
             setSelectedAcademicYearId(String(sortedYears[0]?.id || years[0]?.id));
           }
         } catch (configError) {
           console.warn("Could not fetch configuration for active year, defaulting.", configError);
-          const sortedYears = [...years].sort((a, b) => new Date(b.date_debut).getTime() - new Date(a.date_debut).getTime());
+          const sortedYears = [...years].sort((a, b) => 
+            new Date(b.date_debut).getTime() - new Date(a.date_debut).getTime());
           setSelectedAcademicYearId(String(sortedYears[0]?.id || years[0]?.id));
         }
       }
       setLoading(prev => ({ ...prev, initial: false, academicYears: false }));
     };
+    
     fetchInitialYears();
-  }, [fetchData]);
+  }, [fetchData, t]);
 
   // Fetch data dependent on selectedAcademicYearId
   useEffect(() => {
-  if (!selectedAcademicYearId) return;
+    if (!selectedAcademicYearId) return;
 
-  const yearId = parseInt(selectedAcademicYearId);
+    const yearId = parseInt(selectedAcademicYearId);
 
-  const loadYearData = async () => {
-    setClassesForYear([]);
-    setSelectedClassId('all');
-    setTermsForYear([]);
-    setSelectedTermId('all');
+    const loadYearData = async () => {
+      setClassesForYear([]);
+      setSelectedClassId('all');
+      setTermsForYear([]);
+      setSelectedTermId('all');
 
-    // 1. Fetch Classes (et attendre le résultat)
-    const allClasses: Classe[] = await fetchData('classes', 'classes');
-    const filteredClasses = allClasses.filter(cls => cls.annee_scolaire_id === yearId);
-    setClassesForYear(filteredClasses);
+      // 1. Fetch Classes
+      const allClasses: Classe[] = await fetchData('classes', 'classes');
+      const filteredClasses = allClasses.filter(cls => cls.annee_scolaire_id === yearId);
+      setClassesForYear(filteredClasses);
 
-    // 2. Fetch Terms
-    fetchData(`trimestres?anneeScolaireId=${yearId}`, 'terms').then(setTermsForYear);
+      // 2. Fetch Terms
+      fetchData(`trimestres?anneeScolaireId=${yearId}`, 'terms').then(setTermsForYear);
 
-    // 3. Fetch Students
-    setLoading(prev => ({ ...prev, students: true }));
-    fetchData(`inscriptions?anneeScolaireId=${yearId}&_expand=utilisateur&_expand=classe`)
-      .then((inscriptions: Inscription[]) => {
-        const students: StudentWithClass[] = inscriptions.map(insc => ({
-          ...insc.utilisateur,
-          classe: insc.classe,
-        }));
-        setStudentsInYear(students);
-      })
-      .finally(() => setLoading(prev => ({ ...prev, students: false })));
+      // 3. Fetch Students
+      setLoading(prev => ({ ...prev, students: true }));
+      fetchData(`inscriptions?anneeScolaireId=${yearId}&_expand=utilisateur&_expand=classe`)
+        .then((inscriptions: Inscription[]) => {
+          const students: StudentWithClass[] = inscriptions.map(insc => ({
+            ...insc.utilisateur,
+            classe: insc.classe,
+          }));
+          setStudentsInYear(students);
+        })
+        .finally(() => setLoading(prev => ({ ...prev, students: false })));
 
-    // 4. Fetch Grades
-    setLoading(prev => ({ ...prev, grades: true }));
-    fetchData(`notes?_expand=evaluation`)
-      .then(data => {
-        console.log(`[Statistics.tsx] Fetched grades for year ${yearId} (raw from API, count: ${data.length}):`, data.slice(0, 5));
-        setGradesInYear(data);
-      })
-      .finally(() => setLoading(prev => ({ ...prev, grades: false })));
+      // 4. Fetch Grades
+      setLoading(prev => ({ ...prev, grades: true }));
+      fetchData(`notes?_expand=evaluation`)
+        .then(data => {
+          setGradesInYear(data);
+        })
+        .finally(() => setLoading(prev => ({ ...prev, grades: false })));
 
-    // 5. Fetch Absences
-    const selectedYear = academicYears.find(ay => ay.id === yearId);
-    if (selectedYear) {
-      setLoading(prev => ({ ...prev, absences: true }));
-      fetchData(`absences?annee_scolaire_id=${yearId}&date_gte=${selectedYear.date_debut}&date_lte=${selectedYear.date_fin}`)
-        .then(setAbsencesInYear)
-        .finally(() => setLoading(prev => ({ ...prev, absences: false })));
-    }
+      // 5. Fetch Absences
+      const selectedYear = academicYears.find(ay => ay.id === yearId);
+      if (selectedYear) {
+        setLoading(prev => ({ ...prev, absences: true }));
+        fetchData(`absences?annee_scolaire_id=${yearId}&date_gte=${selectedYear.date_debut}&date_lte=${selectedYear.date_fin}`)
+          .then(setAbsencesInYear)
+          .finally(() => setLoading(prev => ({ ...prev, absences: false })));
+      }
 
-    // 6. Fetch Coefficients (après avoir les classes)
-    setLoading(prev => ({ ...prev, coefficients: true }));
-    const allCoeffs: CoefficientClasse[] = await fetchData(`coefficientclasse?_expand=matiere&_expand=classe`);
-    console.log("[Coeffs] Raw Coefficients fetched from API (allCoeffs):", JSON.stringify(allCoeffs, null, 2)); // Log tous les coeffs bruts
-   // Mapping correct pour garantir la présence de classe_id et matiere_id
-const mappedCoeffs = allCoeffs.map(c => ({
-  ...c,
-  classe_id: c.classe?.id ?? c.classe_id,
-  matiere_id: c.matiere?.id ?? c.matiere_id,
-}));
-    const classIdsForYear = filteredClasses.map(cls => cls.id);
-    console.log("[Coeffs] classIdsForYear used for filtering coefficients:", classIdsForYear);
-   const yearCoeffs = mappedCoeffs.filter(c => classIdsForYear.includes(Number(c.classe_id)));
-console.log("[Coeffs] Coefficients after filtering by classIdsForYear (yearCoeffs):", JSON.stringify(yearCoeffs, null, 2));
-setCoefficients(yearCoeffs);
-console.log("[Coeffs] State `coefficients` set with count:", yearCoeffs.length);
-setLoading(prev => ({ ...prev, coefficients: false }));
-  };
+      // 6. Fetch Coefficients
+      setLoading(prev => ({ ...prev, coefficients: true }));
+      const allCoeffs: CoefficientClasse[] = await fetchData(`coefficientclasse?_expand=matiere&_expand=classe`);
+      const mappedCoeffs = allCoeffs.map(c => ({
+        ...c,
+        classe_id: c.classe?.id ?? c.classe_id,
+        matiere_id: c.matiere?.id ?? c.matiere_id,
+      }));
+      const classIdsForYear = filteredClasses.map(cls => cls.id);
+      const yearCoeffs = mappedCoeffs.filter(c => classIdsForYear.includes(Number(c.classe_id)));
+      setCoefficients(yearCoeffs);
+      setLoading(prev => ({ ...prev, coefficients: false }));
+    };
 
-  loadYearData();
-}, [selectedAcademicYearId, fetchData, academicYears]);
+    loadYearData();
+  }, [selectedAcademicYearId, fetchData, academicYears, t]);
 
-
-  // --- Memoized data processing for charts ---
-// Helper function to calculate a student's average for a specific subject and term
+  // Calculate student subject average for term with language support
   const calculateStudentSubjectAverageForTerm = useCallback((
     studentId: number,
     subjectId: number,
@@ -329,118 +378,84 @@ setLoading(prev => ({ ...prev, coefficients: false }));
     allEvalsForYear: Evaluation[],
     allTermsForAcademicYear: Trimestre[]
   ): number => {
-     // --- DEBUG LOGS ---
-    console.log(`[calcAvg] Student: ${studentId}, Subject: ${subjectId}, Term: ${termId}, Year: ${academicYearId}`);
-    console.log(`[calcAvg] allNotesForYear count: ${allNotesForYear.length}, allEvalsForYear count: ${allEvalsForYear.length}, allTermsForAcademicYear count: ${allTermsForAcademicYear.length}`);
+    const currentTermObj = allTermsForAcademicYear.find(t => t.id === termId);
+    if (!currentTermObj) return 0;
 
-    const currentTermObj = allTermsForAcademicYear.find(t => t.id === termId); // termId est le trimestre pour lequel on calcule
- if (!currentTermObj) {
-      console.warn(`[calcAvg] Current term object not found for termId: ${termId}`);
-      return 0;
-    }
     let currentTrimestreNumero = 0;
     if (currentTermObj.nom.toLowerCase().includes("trimestre 1") || currentTermObj.nom.includes("1")) currentTrimestreNumero = 1;
     else if (currentTermObj.nom.toLowerCase().includes("trimestre 2") || currentTermObj.nom.includes("2")) currentTrimestreNumero = 2;
     else if (currentTermObj.nom.toLowerCase().includes("trimestre 3") || currentTermObj.nom.includes("3")) currentTrimestreNumero = 3;
-    if (currentTrimestreNumero === 0) {
-      console.warn(`[calcAvg] Could not determine trimestre number for term: ${currentTermObj.nom}`);
-      return 0;
-    }
-    console.log(`[calcAvg] currentTrimestreNumero: ${currentTrimestreNumero}`);
-
-
-
+    if (currentTrimestreNumero === 0) return 0;
 
     const studentNotesForSubjectCurrentTerm = allNotesForYear.filter(note =>
       note.etudiant?.id === studentId &&
       note.evaluation?.matiere?.id === subjectId &&
       note.evaluation?.trimestreId === termId
     );
-     console.log(`[calcAvg] studentNotesForSubjectCurrentTerm (count: ${studentNotesForSubjectCurrentTerm.length}):`, studentNotesForSubjectCurrentTerm.slice(0,2));
 
     let totalPointsDevoirsCurrentTerm = 0;
     let countDevoirsCurrentTerm = 0;
     let compositionNoteValueCurrentTerm: number | null = null;
-
 
     studentNotesForSubjectCurrentTerm.forEach(note => {
       const evalType = note.evaluation?.type?.toLowerCase() || "";
       if (evalType.includes("devoir")) {
         totalPointsDevoirsCurrentTerm += note.note;
         countDevoirsCurrentTerm++;
-      
       } else if (evalType.includes("composition") || evalType.includes("compo")) {
         compositionNoteValueCurrentTerm = note.note;
       }
     });
 
     const avgDevoirsCurrentTerm = countDevoirsCurrentTerm > 0 ? totalPointsDevoirsCurrentTerm / countDevoirsCurrentTerm : 0;
-    console.log(`[calcAvg] avgDevoirsCurrentTerm: ${avgDevoirsCurrentTerm}, compositionNoteValueCurrentTerm: ${compositionNoteValueCurrentTerm}`);
-
     let compoT1Note: number | null = null;
     let compoT2Note: number | null = null;
 
     if (currentTrimestreNumero === 2 || currentTrimestreNumero === 3) {
-  const trimestre1Obj = allTermsForAcademicYear.find(t => 
+      const trimestre1Obj = allTermsForAcademicYear.find(t => 
         (t.nom.toLowerCase().includes("trimestre 1") || t.nom.includes("1")) && 
         t.anneeScolaire.id === academicYearId
-      );      if (trimestre1Obj) {
-                console.log(`[calcAvg] Found trimestre1Obj for T1 compo:`, trimestre1Obj);
-
+      );
+      if (trimestre1Obj) {
         const compoT1Eval = allEvalsForYear.find(e =>
           e.matiere?.id === subjectId &&
           e.trimestreId === trimestre1Obj.id &&
           (e.type?.toLowerCase().includes("composition") || e.type?.toLowerCase().includes("compo")) &&
-          e.classe?.annee_scolaire_id === academicYearId // Assurer que l'évaluation est de la bonne année scolaire
+          e.classe?.annee_scolaire_id === academicYearId
         );
         if (compoT1Eval) {
-                     console.log(`[calcAvg] Found compoT1Eval:`, compoT1Eval);
-
           const noteT1 = allNotesForYear.find(n => n.etudiant?.id === studentId && n.evaluation?.id === compoT1Eval.id);
           compoT1Note = noteT1 ? noteT1.note : null;
-                    console.log(`[calcAvg] compoT1Note: ${compoT1Note}`);
-
         }
- } else {
-       console.warn(`[calcAvg] Trimestre 1 object not found for year ${academicYearId} to fetch T1 compo.`);
-      }    }
+      }
+    }
 
     if (currentTrimestreNumero === 3) {
-const trimestre2Obj = allTermsForAcademicYear.find(t => 
+      const trimestre2Obj = allTermsForAcademicYear.find(t => 
         (t.nom.toLowerCase().includes("trimestre 2") || t.nom.includes("2")) && 
         t.anneeScolaire.id === academicYearId
-      );      if (trimestre2Obj) {
-                console.log(`[calcAvg] Found trimestre2Obj for T2 compo:`, trimestre2Obj);
-
+      );
+      if (trimestre2Obj) {
         const compoT2Eval = allEvalsForYear.find(e =>
           e.matiere?.id === subjectId &&
           e.trimestreId === trimestre2Obj.id &&
           (e.type?.toLowerCase().includes("composition") || e.type?.toLowerCase().includes("compo")) &&
-          e.classe?.annee_scolaire_id === academicYearId // Assurer que l'évaluation est de la bonne année scolaire
+          e.classe?.annee_scolaire_id === academicYearId
         );
         if (compoT2Eval) {
-                    console.log(`[calcAvg] Found compoT2Eval:`, compoT2Eval);
-
           const noteT2 = allNotesForYear.find(n => n.etudiant?.id === studentId && n.evaluation?.id === compoT2Eval.id);
           compoT2Note = noteT2 ? noteT2.note : null;
-                    console.log(`[calcAvg] compoT2Note: ${compoT2Note}`);
-
         }
-            } else {
-        // console.warn(`[calcAvg] Trimestre 2 object not found for year ${academicYearId} to fetch T2 compo.`);
       }
-
     }
 
     let moyenneMatiere = 0;
     if (currentTrimestreNumero === 1) {
-       let somme = 0;
+      let somme = 0;
       let poids = 0;
       if (countDevoirsCurrentTerm > 0) { somme += avgDevoirsCurrentTerm * 3; poids += 3; }
       if (compositionNoteValueCurrentTerm !== null) { somme += compositionNoteValueCurrentTerm; poids += 1; }
       moyenneMatiere = poids > 0 ? somme / poids : 0;
-          console.log(`[calcAvg] Final - Somme: ${somme}, Poids: ${poids}, MoyenneMatiere: ${moyenneMatiere.toFixed(2)}`);
-
     } else if (currentTrimestreNumero === 2) {
       let somme = 0;
       let poids = 0;
@@ -449,7 +464,7 @@ const trimestre2Obj = allTermsForAcademicYear.find(t =>
       if (compoT1Note !== null) { somme += compoT1Note; poids += 1; }
       moyenneMatiere = poids > 0 ? somme / poids : 0;
     } else if (currentTrimestreNumero === 3) {
-           let somme = 0;
+      let somme = 0;
       let poids = 0;
       if (countDevoirsCurrentTerm > 0) { somme += avgDevoirsCurrentTerm * 3; poids += 3; }
       if (compositionNoteValueCurrentTerm !== null) { somme += compositionNoteValueCurrentTerm; poids += 1; }
@@ -461,133 +476,118 @@ const trimestre2Obj = allTermsForAcademicYear.find(t =>
     return parseFloat(moyenneMatiere.toFixed(2));
   }, []);
 
-
+  // Memoized data processing for charts
   const studentDistributionData = useMemo((): NameValueColorChartItem[] => {
     if (loading.students || studentsInYear.length === 0) return [];
+    
     const distribution: { [key: string]: number } = {};
     studentsInYear.forEach(student => {
-      const niveau = student.classe?.niveau || 'N/A';
+      const niveau = student.classe?.niveau || t.common.unknownClass;
       distribution[niveau] = (distribution[niveau] || 0) + 1;
     });
+    
     return Object.entries(distribution).map(([name, value], index) => ({
       name,
       value,
       color: COLORS_PIE[index % COLORS_PIE.length],
     }));
-  }, [studentsInYear, loading.students]);
+  }, [studentsInYear, loading.students, t]);
 
   const studentsForFilter = useMemo(() => {
     if (!selectedAcademicYearId) return [];
-    if (selectedClassId === 'all') {
-      // Pour l'instant, on ne peuple le filtre élève que si une classe est sélectionnée
-      // Si vous souhaitez afficher tous les élèves de l'année ici:
-      // return studentsInYear;
-      return [];
-    }
+    if (selectedClassId === 'all') return [];
     return studentsInYear.filter(student => String(student.classe?.id) === selectedClassId);
   }, [studentsInYear, selectedClassId, selectedAcademicYearId]);
 
   const genderDistributionData = useMemo((): NameValueColorChartItem[] => {
-    if (loading.students || studentsInYear.length === 0) return [];
+  if (loading.students || studentsInYear.length === 0) return [];
 
-    const studentsToProcess = selectedClassId === 'all'
-      ? studentsInYear
-      : studentsInYear.filter(s => String(s.classe?.id) === selectedClassId);
+  const studentsToProcess = selectedClassId === 'all'
+    ? studentsInYear
+    : studentsInYear.filter(s => String(s.classe?.id) === selectedClassId);
 
-    if (studentsToProcess.length === 0) return [];
+  if (studentsToProcess.length === 0) return [];
 
-    const distribution: { [key: string]: number } = { Filles: 0, Garçons: 0, Autre: 0 };
-    studentsToProcess.forEach(student => {
-      if (student.genre === 'feminin') distribution.Filles++;
-      else if (student.genre === 'masculin') distribution.Garçons++;
-      else distribution.Autre++;
-    });
+  // Initialisation avec les traductions
+  const distribution = {
+    [t.common.gender.female]: 0, 
+    [t.common.gender.male]: 0, 
+    [t.common.gender.other]: 0 
+  };
 
-    return [
-      { name: 'Filles', value: distribution.Filles, color: '#FF8042' },
-      { name: 'Garçons', value: distribution.Garçons, color: '#0088FE' },
-      { name: 'Autre', value: distribution.Autre, color: '#FFBB28' },
-    ].filter(item => item.value > 0);
-  }, [studentsInYear, loading.students, selectedClassId]); // selectedStudentId n'est pas pertinent ici directement, car on filtre studentsToProcess
+  studentsToProcess.forEach(student => {
+    switch(student.genre) {
+      case 'feminin':
+        distribution[t.common.gender.female]++;
+        break;
+      case 'masculin':
+        distribution[t.common.gender.male]++;
+        break;
+      default:
+        distribution[t.common.gender.other]++;
+    }
+  });
 
+  return [
+    { 
+      name: t.common.gender.female, 
+      value: distribution[t.common.gender.female], 
+      color: '#FF8042' 
+    },
+    { 
+      name: t.common.gender.male, 
+      value: distribution[t.common.gender.male], 
+      color: '#0088FE' 
+    },
+    { 
+      name: t.common.gender.other, 
+      value: distribution[t.common.gender.other], 
+      color: '#FFBB28' 
+    },
+  ].filter(item => item.value > 0);
+}, [studentsInYear, loading.students, selectedClassId, t]);
 
   const filteredGrades = useMemo(() => {
-     console.log("[Statistics.tsx] --- filteredGrades useMemo ---");
-    // console.log("gradesInYear (before filter, first 5):", JSON.stringify(gradesInYear.slice(0, 5), null, 2));
-    console.log("[Statistics.tsx] gradesInYear raw count (before filter):", gradesInYear.length);
-    if (gradesInYear.length > 0) {
-      console.log("[Statistics.tsx] First grade object in gradesInYear:", JSON.stringify(gradesInYear[0], null, 2));
-    }
-    console.log("[Statistics.tsx] selectedAcademicYearId for filtering:", selectedAcademicYearId);
-
-    let tempGrades = gradesInYear;
-if (!selectedAcademicYearId) {
-      console.log("[Statistics.tsx] No selectedAcademicYearId, returning empty for filteredGrades");
-      return [];
-    }
+    if (!selectedAcademicYearId) return [];
     const yearIdNum = parseInt(selectedAcademicYearId);
 
-    // Filter grades by the selected academic year first
-tempGrades = gradesInYear.filter(grade => {
-      // Correction : l'année scolaire est dans grade.evaluation.classe.annee_scolaire_id
-  const evalYearId = grade.evaluation?.classe?.annee_scolaire_id ?? grade.evaluation?.annee_scolaire_id;
-  return evalYearId === yearIdNum;
-});
-    console.log("[Statistics.tsx] tempGrades after year filter count:", tempGrades.length);
-
+    let tempGrades = gradesInYear.filter(grade => {
+      const evalYearId = grade.evaluation?.classe?.annee_scolaire_id ?? grade.evaluation?.annee_scolaire_id;
+      return evalYearId === yearIdNum;
+    });
 
     const currentTerm = termsForYear.find(t => String(t.id) === selectedTermId);
-
-   // Apply term filter only if a specific term is selected
     if (currentTerm && selectedTermId !== 'all') {
       const termIdNum = parseInt(selectedTermId);
       tempGrades = tempGrades.filter(grade =>
         grade.evaluation?.trimestreId === termIdNum
       );
-      console.log("[Statistics.tsx] tempGrades after termId filter count:", tempGrades.length);
     }
 
-    // --- AJOUT DES LOGS DE DEBUG SUGGÉRÉS ---
-    console.log("[DEBUG] selectedTermId:", selectedTermId);
-    console.log("[DEBUG] filteredGrades (final):", tempGrades.map(g => ({
-      id: g.id,
-      note: g.note,
-      etudiant: g.etudiant?.id,
-      matiere: g.evaluation?.matiere?.id,
-      trimestre: g.evaluation?.trimestreId, // Vérifiez ce champ !
-      date_eval: g.evaluation?.date_eval // Vérifiez ce champ !
-    })));
-    // --- FIN DES LOGS DE DEBUG ---
-
-    console.log("[Statistics.tsx] Final filteredGrades to be returned, count:", tempGrades.length);
-    
     return tempGrades;
-  }, [gradesInYear, selectedAcademicYearId, selectedTermId, termsForYear]); // selectedClassId est géré par studentsToProcess dans les graphiques
+  }, [gradesInYear, selectedAcademicYearId, selectedTermId, termsForYear]);
 
   const classAveragesData = useMemo((): GradeChartItem[] => {
-    console.log("--- classAveragesData useMemo (new logic) ---");
-    console.log("[classAveragesData] All Coefficients Loaded:", JSON.stringify(coefficients, null, 2)); // Log pour voir tous les coefficients
-    console.log("[classAveragesData] Coefficients count:", coefficients.length); // Log coefficients count
-
-    if (loading.grades || loading.students || loading.classes || loading.coefficients || studentsInYear.length === 0 || !selectedAcademicYearId || !selectedTermId) {
-      return []; // selectedStudentId n'est pas une condition pour retourner vide ici
+    if (loading.grades || loading.students || loading.classes || loading.coefficients || 
+        studentsInYear.length === 0 || !selectedAcademicYearId || !selectedTermId) {
+      return [];
     }
 
     const yearIdNum = parseInt(selectedAcademicYearId);
     const termIdNum = selectedTermId === 'all' ? null : parseInt(selectedTermId);
+    const allEvalsForYear = gradesInYear.map(g => g.evaluation).filter((e): e is Evaluation => e !== undefined);
 
     // Fallback to simple average if "Année complète" is selected
-    // ...dans classAveragesData useMemo...
-    if (!termIdNum) { // "Année complète"
-      // Si un élève est sélectionné, on affiche sa moyenne annuelle générale.
-      // Sinon, on affiche la moyenne de chaque classe.
+    if (!termIdNum) {
       if (selectedStudentId !== 'all') {
         const studentIdNum = parseInt(selectedStudentId);
         const student = studentsInYear.find(s => s.id === studentIdNum);
         if (!student || !student.classe) return [];
 
         const studentClassCoefficients = coefficients.filter(c => Number(c.classe_id) === Number(student.classe?.id));
-        const subjectIdsInClass = Array.from(new Set(studentClassCoefficients.filter(c => c.matiere_id != null).map(c => c.matiere_id as number)));
+        const subjectIdsInClass = Array.from(new Set(
+          studentClassCoefficients.filter(c => c.matiere_id != null).map(c => c.matiere_id as number)
+        ));
         
         let sumAnnualStudentAverage = 0;
         let countTermsForStudent = 0;
@@ -599,7 +599,7 @@ tempGrades = gradesInYear.filter(grade => {
             const coeff = studentClassCoefficients.find(c => c.matiere_id === subjectId)?.coefficient || 1;
             const avg = calculateStudentSubjectAverageForTerm(
               student.id, subjectId, term.id, yearIdNum, gradesInYear,
-              gradesInYear.map(g => g.evaluation).filter((e): e is Evaluation => e !== undefined),
+              allEvalsForYear,
               termsForYear
             );
             termTotalWeighted += avg * coeff;
@@ -611,172 +611,162 @@ tempGrades = gradesInYear.filter(grade => {
           }
         });
 
-        const finalAnnualAverage = countTermsForStudent > 0 ? parseFloat((sumAnnualStudentAverage / countTermsForStudent).toFixed(2)) : 0;
-        return finalAnnualAverage > 0 ? [{ name: `${student.prenom} ${student.nom} (Moy. Annuelle)`, moyenne: finalAnnualAverage }] : [];
+        const finalAnnualAverage = countTermsForStudent > 0 ? 
+          parseFloat((sumAnnualStudentAverage / countTermsForStudent).toFixed(2)) : 0;
+        return finalAnnualAverage > 0 ? 
+          [{ name: `${student.prenom} ${student.nom} (${t.statistics.annualAverage})`, moyenne: finalAnnualAverage }] : [];
       }
-      // Sinon (tous les élèves), on calcule la moyenne par classe comme avant
-  // Nouvelle logique : moyenne des moyennes générales des 3 trimestres
-  const gradesByClass: { [classId: number]: { sumAnnualAverages: number; count: number; className: string } } = {};
 
-  classesForYear.forEach(classe => {
-    const studentsInThisClass = studentsInYear.filter(s => s.classe?.id === classe.id);
-    if (studentsInThisClass.length === 0) return;
+      // Calculate average for all classes
+      const gradesByClass: { [classId: number]: { sumAnnualAverages: number; count: number; className: string } } = {};
 
-    const classCoefficients = coefficients.filter(c => Number(c.classe_id) === Number(classe.id));
-    const subjectIdsInClass = Array.from(new Set(classCoefficients.filter(c => c.matiere_id != null).map(c => c.matiere_id as number)));
+      classesForYear.forEach(classe => {
+        const studentsInThisClass = studentsInYear.filter(s => s.classe?.id === classe.id);
+        if (studentsInThisClass.length === 0) return;
 
-    let sumAnnualAverages = 0;
-    let countStudents = 0;
+        const classCoefficients = coefficients.filter(c => Number(c.classe_id) === Number(classe.id));
+        const subjectIdsInClass = Array.from(new Set(
+          classCoefficients.filter(c => c.matiere_id != null).map(c => c.matiere_id as number)
+        ));
 
-    studentsInThisClass.forEach(student => {
-      let sumTrimestreMoyennes = 0;
-      let countTrimestres = 0;
+        let sumAnnualAverages = 0;
+        let countStudents = 0;
 
-      termsForYear.forEach(term => {
-        let totalWeighted = 0;
-        let totalCoeff = 0;
-        subjectIdsInClass.forEach(subjectId => {
-          const coeff = classCoefficients.find(c => c.matiere_id === subjectId)?.coefficient || 1;
-          const avg = calculateStudentSubjectAverageForTerm(
-            student.id,
-            subjectId,
-            term.id,
-            parseInt(selectedAcademicYearId),
-            gradesInYear,
-            gradesInYear.map(g => g.evaluation).filter((e): e is Evaluation => e !== undefined),
-            termsForYear
-          );
-          totalWeighted += avg * coeff;
-          totalCoeff += coeff;
+        studentsInThisClass.forEach(student => {
+          let sumTrimestreMoyennes = 0;
+          let countTrimestres = 0;
+
+          termsForYear.forEach(term => {
+            let totalWeighted = 0;
+            let totalCoeff = 0;
+            subjectIdsInClass.forEach(subjectId => {
+              const coeff = classCoefficients.find(c => c.matiere_id === subjectId)?.coefficient || 1;
+              const avg = calculateStudentSubjectAverageForTerm(
+                student.id,
+                subjectId,
+                term.id,
+                parseInt(selectedAcademicYearId),
+                gradesInYear,
+                allEvalsForYear,
+                termsForYear
+              );
+              totalWeighted += avg * coeff;
+              totalCoeff += coeff;
+            });
+            if (totalCoeff > 0) {
+              sumTrimestreMoyennes += totalWeighted / totalCoeff;
+              countTrimestres++;
+            }
+          });
+
+          if (countTrimestres > 0) {
+            const annualAverage = sumTrimestreMoyennes / countTrimestres;
+            sumAnnualAverages += annualAverage;
+            countStudents++;
+          }
         });
-        if (totalCoeff > 0) {
-          sumTrimestreMoyennes += totalWeighted / totalCoeff;
-          countTrimestres++;
+
+        if (countStudents > 0) {
+          gradesByClass[classe.id] = {
+            sumAnnualAverages,
+            count: countStudents,
+            className: classe.nom,
+          };
         }
       });
 
-      if (countTrimestres > 0) {
-        const annualAverage = sumTrimestreMoyennes / countTrimestres;
-        sumAnnualAverages += annualAverage;
-        countStudents++;
-      }
-    });
-
-    if (countStudents > 0) {
-      gradesByClass[classe.id] = {
-        sumAnnualAverages,
-        count: countStudents,
-        className: classe.nom,
-      };
+      return Object.values(gradesByClass)
+        .map(data => ({
+          name: data.className,
+          moyenne: data.count > 0 ? parseFloat((data.sumAnnualAverages / data.count).toFixed(2)) : 0,
+        }))
+        .filter(item => item.moyenne > 0);
     }
-  });
-
-  const result = Object.values(gradesByClass)
-    .map(data => ({
-      name: data.className,
-      moyenne: data.count > 0 ? parseFloat((data.sumAnnualAverages / data.count).toFixed(2)) : 0,
-    }))
-    .filter(item => item.moyenne > 0);
-
-  return result;
-}
 
     // Complex average calculation for a specific term
-   
     let classesToProcess = classesForYear;
     if (selectedClassId !== 'all') {
       classesToProcess = classesForYear.filter(c => String(c.id) === selectedClassId);
     } else if (selectedStudentId !== 'all') {
-      // Si un élève est sélectionné et "Toutes les classes", on se concentre sur la classe de cet élève
       const student = studentsInYear.find(s => String(s.id) === selectedStudentId);
       classesToProcess = student?.classe ? [student.classe] : [];
     }
-const allEvalsForYear = gradesInYear.map(g => g.evaluation).filter((e): e is Evaluation => e !== undefined);
-console.log("[classAveragesData] allEvalsForYear count:", allEvalsForYear.length);
 
-const studentOverallAveragesByClass: { [classId: string]: { sumOfStudentAverages: number; studentCount: number; className: string } } = {};
+    const studentOverallAveragesByClass: { [classId: string]: { 
+      sumOfStudentAverages: number; 
+      studentCount: number; 
+      className: string 
+    } } = {};
 
-classesToProcess.forEach(classe => {
-  const studentsInThisClass = studentsInYear.filter(s => s.classe?.id === classe.id);
-  
-  const studentsForThisClassAverage = selectedStudentId === 'all'
-    ? studentsInThisClass
-    : studentsInThisClass.filter(s => String(s.id) === selectedStudentId);
-  if (studentsForThisClassAverage.length === 0) return;
-  console.log(`[classAveragesData] Processing class: ${classe.nom}, students count: ${studentsInThisClass.length}`);
+    classesToProcess.forEach(classe => {
+      const studentsInThisClass = studentsInYear.filter(s => s.classe?.id === classe.id);
+      const studentsForThisClassAverage = selectedStudentId === 'all'
+        ? studentsInThisClass
+        : studentsInThisClass.filter(s => String(s.id) === selectedStudentId);
+      if (studentsForThisClassAverage.length === 0) return;
 
-const classCoefficients = coefficients.filter(c => Number(c.classe_id) === Number(classe.id));     console.log(`[classAveragesData] Class ${classe.nom}, coefficients count: ${classCoefficients.length}, coefficients data:`, classCoefficients);
-  let sumOfStudentAveragesInClass = 0;
-  let countOfStudentsWithAveragesInClass = 0;
+      const classCoefficients = coefficients.filter(c => Number(c.classe_id) === Number(classe.id));
+      let sumOfStudentAveragesInClass = 0;
+      let countOfStudentsWithAveragesInClass = 0;
 
+      studentsForThisClassAverage.forEach(student => {
+        let studentTotalWeightedScore = 0;
+        let studentTotalCoefficients = 0;
 
-  // ...dans classAveragesData useMemo...
+        const subjectIdsInClass = Array.from(new Set(
+          classCoefficients.filter(c => c.matiere_id != null).map(c => c.matiere_id as number)
+        ));
 
-studentsForThisClassAverage.forEach(student => {
-  let studentTotalWeightedScore = 0;
-  let studentTotalCoefficients = 0;
+        subjectIdsInClass.forEach(subjectId => {
+          const subjectCoeff = classCoefficients.find(c => c.matiere_id === subjectId)?.coefficient || 1;
+          const subjectAverage = termIdNum
+            ? calculateStudentSubjectAverageForTerm(
+                student.id,
+                subjectId,
+                termIdNum,
+                yearIdNum,
+                gradesInYear,
+                allEvalsForYear,
+                termsForYear
+              )
+            : 0;
 
-  // Get unique subject IDs for the student's class from coefficients
-  const subjectIdsInClass = Array.from(new Set(classCoefficients.filter(c => c.matiere_id != null).map(c => c.matiere_id as number)));
-  let debugSubjects: any[] = [];
-  console.log(`[classAveragesData] Student ${student.id} in Class ${classe.nom}, Subject IDs with coefficients:`, subjectIdsInClass);
+          studentTotalWeightedScore += subjectAverage * subjectCoeff;
+          studentTotalCoefficients += subjectCoeff;
+        });
 
-  subjectIdsInClass.forEach(subjectId => {
-    const subjectCoeff = classCoefficients.find(c => c.matiere_id === subjectId)?.coefficient || 1;
-    const subjectAverage = termIdNum
-      ? calculateStudentSubjectAverageForTerm(
-          student.id,
-          subjectId,
-          termIdNum,
-          yearIdNum,
-          gradesInYear,
-          allEvalsForYear,
-          termsForYear
-        )
-      : 0;
+        if (studentTotalCoefficients > 0) {
+          const studentOverallAverage = studentTotalWeightedScore / studentTotalCoefficients;
+          sumOfStudentAveragesInClass += studentOverallAverage;
+          countOfStudentsWithAveragesInClass++;
+        }
+      });
 
-    // Toujours ajouter le coefficient, même si la moyenne est 0
-    studentTotalWeightedScore += subjectAverage * subjectCoeff;
-    studentTotalCoefficients += subjectCoeff;
-    debugSubjects.push({ subjectId, subjectCoeff, subjectAverage });
-  });
-
-  if (studentTotalCoefficients > 0) {
-    const studentOverallAverage = studentTotalWeightedScore / studentTotalCoefficients;
-    sumOfStudentAveragesInClass += studentOverallAverage;
-    countOfStudentsWithAveragesInClass++;
-    console.log(`[Moyenne élève] Classe: ${classe.nom}, Élève: ${student.nom} ${student.prenom}, Moyenne: ${studentOverallAverage.toFixed(2)}, Détail:`, debugSubjects);
-  }
-});
-
-  if (countOfStudentsWithAveragesInClass > 0) {
-    studentOverallAveragesByClass[String(classe.id)] = {
-      sumOfStudentAverages: sumOfStudentAveragesInClass,
-      studentCount: countOfStudentsWithAveragesInClass,
-      className: classe.nom,
-    };
-        console.log(`[Moyenne classe] ${classe.nom} : Moyenne générale = ${(sumOfStudentAveragesInClass / countOfStudentsWithAveragesInClass).toFixed(2)} sur ${countOfStudentsWithAveragesInClass} élèves`);
-
-  }
-});
+      if (countOfStudentsWithAveragesInClass > 0) {
+        studentOverallAveragesByClass[String(classe.id)] = {
+          sumOfStudentAverages: sumOfStudentAveragesInClass,
+          studentCount: countOfStudentsWithAveragesInClass,
+          className: classe.nom,
+        };
+      }
+    });
 
     return Object.values(studentOverallAveragesByClass)
-  .map(data => ({
-    name: data.className,
-    moyenne: data.studentCount > 0 ? parseFloat((data.sumOfStudentAverages / data.studentCount).toFixed(2)) : 0,
-  }))
-  .filter(item => item.moyenne > 0);
-}, [
+      .map(data => ({
+        name: data.className,
+        moyenne: data.studentCount > 0 ? parseFloat((data.sumOfStudentAverages / data.studentCount).toFixed(2)) : 0,
+      }))
+      .filter(item => item.moyenne > 0);
+  }, [
     filteredGrades, gradesInYear, studentsInYear, classesForYear, termsForYear, coefficients,
     selectedAcademicYearId, selectedClassId, selectedTermId, selectedStudentId, academicYears,
-    loading, calculateStudentSubjectAverageForTerm
+    loading, calculateStudentSubjectAverageForTerm, t
   ]);
 
-   const subjectAverageData = useMemo((): SubjectSuccessRateItem[] => {
-if (loading.grades || loading.students || loading.coefficients || !selectedAcademicYearId) {
+  const subjectAverageData = useMemo((): SubjectSuccessRateItem[] => {
+    if (loading.grades || loading.students || loading.coefficients || !selectedAcademicYearId) {
       return [];
     }
-    console.log("--- subjectAverageData useMemo ---");
 
     const yearIdNum = parseInt(selectedAcademicYearId);
     const termIdNum = parseInt(selectedTermId);
@@ -793,22 +783,29 @@ if (loading.grades || loading.students || loading.coefficients || !selectedAcade
 
     if (studentsToProcess.length === 0) return [];
 
-    let relevantSubjectIds: number[] = []; // Subject IDs that have coefficients in the relevant classes
-   if (selectedClassId !== 'all') {
-  relevantSubjectIds = Array.from(new Set(
-    coefficients
-      .filter(c => Number(c.classe_id) === Number(selectedClassId))
-      .map(c => c.matiere_id)
-      .filter(id => id != null)
-  )) as number[];
-} else {
-  relevantSubjectIds = Array.from(new Set(coefficients.map(c => c.matiere_id).filter(id => id != null))) as number[];
-}
+    let relevantSubjectIds: number[] = [];
+    if (selectedClassId !== 'all') {
+      relevantSubjectIds = Array.from(new Set(
+        coefficients
+          .filter(c => Number(c.classe_id) === Number(selectedClassId))
+          .map(c => c.matiere_id)
+          .filter(id => id != null)
+      )) as number[];
+    } else {
+      relevantSubjectIds = Array.from(new Set(
+        coefficients.map(c => c.matiere_id).filter(id => id != null)
+      )) as number[];
+    }
 
-    const averagesBySubject: { [subjectId: number]: { totalStudentSubjectAverages: number; studentCount: number; subjectName: string } } = {};
+    const averagesBySubject: { [subjectId: number]: { 
+      totalStudentSubjectAverages: number; 
+      studentCount: number; 
+      subjectName: string 
+    } } = {};
 
     relevantSubjectIds.forEach(subjectId => {
-      const matiereInfo = coefficients.find(c => c.matiere_id === subjectId)?.matiere || allEvalsForYear.find(e => e.matiere?.id === subjectId)?.matiere;
+      const matiereInfo = coefficients.find(c => c.matiere_id === subjectId)?.matiere || 
+        allEvalsForYear.find(e => e.matiere?.id === subjectId)?.matiere;
       if (!matiereInfo) return;
 
       averagesBySubject[subjectId] = {
@@ -819,25 +816,25 @@ if (loading.grades || loading.students || loading.coefficients || !selectedAcade
 
       studentsToProcess.forEach(student => {
         if (selectedClassId === 'all') {
-const studentClassCoeffs = coefficients.filter(c => Number(c.classe_id) === Number(student.classe?.id));          if (!studentClassCoeffs.some(c => c.matiere_id === subjectId)) {
+          const studentClassCoeffs = coefficients.filter(c => 
+            Number(c.classe_id) === Number(student.classe?.id));
+          if (!studentClassCoeffs.some(c => c.matiere_id === subjectId)) {
             return; 
           }
         }
+        
         const studentSubjectAverage = isAllYear
-  ? (() => {
-      // Moyenne simple sur toutes les notes de la matière pour l'élève sur l'année
-      const notes = gradesInYear.filter(
-        n =>
-          n.etudiant?.id === student.id &&
-          n.evaluation?.matiere?.id === subjectId
-      );
-      if (notes.length === 0) return 0;
-      const sum = notes.reduce((acc, n) => acc + n.note, 0);
-      return parseFloat((sum / notes.length).toFixed(2));
-    })()
-  : calculateStudentSubjectAverageForTerm(
-      student.id, subjectId, termIdNum, yearIdNum, gradesInYear, allEvalsForYear, termsForYear
-    );
+          ? (() => {
+              const notes = gradesInYear.filter(
+                n => n.etudiant?.id === student.id && n.evaluation?.matiere?.id === subjectId
+              );
+              if (notes.length === 0) return 0;
+              const sum = notes.reduce((acc, n) => acc + n.note, 0);
+              return parseFloat((sum / notes.length).toFixed(2));
+            })()
+          : calculateStudentSubjectAverageForTerm(
+              student.id, subjectId, termIdNum, yearIdNum, gradesInYear, allEvalsForYear, termsForYear
+            );
 
         if (studentSubjectAverage > 0) { 
           averagesBySubject[subjectId].totalStudentSubjectAverages += studentSubjectAverage;
@@ -847,18 +844,20 @@ const studentClassCoeffs = coefficients.filter(c => Number(c.classe_id) === Numb
     });
 
     return Object.values(averagesBySubject)
-      .map(data => ({ name: data.subjectName, taux: data.studentCount > 0 ? parseFloat((data.totalStudentSubjectAverages / data.studentCount).toFixed(2)) : 0, }))
-      .filter(item => item.taux > 0);
-}, [
+    .map(data => ({ 
+      name: translateSubject(data.subjectName), // Utilisation de la fonction de traduction
+      taux: data.studentCount > 0 ? parseFloat((data.totalStudentSubjectAverages / data.studentCount).toFixed(2)) : 0, 
+    }))
+    .filter(item => item.taux > 0);
+  }, [
     gradesInYear, studentsInYear, coefficients, termsForYear,
     selectedAcademicYearId, selectedClassId, selectedTermId, selectedStudentId,
     calculateStudentSubjectAverageForTerm, loading.grades, loading.students, loading.coefficients, loading.terms
   ]);
- 
 
   const averageEvolutionData = useMemo(() => {
-    console.log("--- averageEvolutionData useMemo (new logic) ---");
-    if (loading.grades || loading.students || loading.terms || loading.coefficients || studentsInYear.length === 0 || !selectedAcademicYearId || termsForYear.length === 0) {
+    if (loading.grades || loading.students || loading.terms || loading.coefficients || 
+        studentsInYear.length === 0 || !selectedAcademicYearId || termsForYear.length === 0) {
       return [];
     }
 
@@ -874,10 +873,6 @@ const studentClassCoeffs = coefficients.filter(c => Number(c.classe_id) === Numb
     }
 
     if (studentsToProcess.length === 0) return [];
-        console.log("[averageEvolutionData] Students to process count:", studentsToProcess.length);
-
-
-
     
     return termsForYear.map(term => {
       const termIdNum = term.id;
@@ -889,13 +884,13 @@ const studentClassCoeffs = coefficients.filter(c => Number(c.classe_id) === Numb
         if (!studentClassId) return;
 
         const studentClassCoefficients = coefficients.filter(c => c.classe_id === studentClassId);
-        console.log(`[averageEvolutionData] Student ${student.id}, Term ${term.nom}, Class ${studentClassId}, Coefficients count: ${studentClassCoefficients.length}, coefficients data:`, studentClassCoefficients);
-        if (studentClassCoefficients.length === 0) return; // Skip student if their class has no coefficients
+        if (studentClassCoefficients.length === 0) return;
 
         let studentTotalWeightedScore = 0;
         let studentTotalCoefficients = 0;
-        const subjectIdsInClass = Array.from(new Set(studentClassCoefficients.filter(c => c.matiere_id != null).map(c => c.matiere_id as number)));
-        console.log(`[averageEvolutionData] Student ${student.id}, Term ${term.nom}, Subject IDs in class:`, subjectIdsInClass);
+        const subjectIdsInClass = Array.from(new Set(
+          studentClassCoefficients.filter(c => c.matiere_id != null).map(c => c.matiere_id as number)
+        ));
 
         subjectIdsInClass.forEach(subjectId => {
           const subjectCoeff = studentClassCoefficients.find(c => c.matiere_id === subjectId)?.coefficient || 1;
@@ -908,10 +903,9 @@ const studentClassCoeffs = coefficients.filter(c => Number(c.classe_id) === Numb
             allEvalsForYear,
             termsForYear
           );
-          // Toujours ajouter le coefficient, même si subjectAverage = 0
-  studentTotalWeightedScore += subjectAverage * subjectCoeff;
-  studentTotalCoefficients += subjectCoeff;
-});
+          studentTotalWeightedScore += subjectAverage * subjectCoeff;
+          studentTotalCoefficients += subjectCoeff;
+        });
 
         if (studentTotalCoefficients > 0) {
           const studentOverallAverage = studentTotalWeightedScore / studentTotalCoefficients;
@@ -920,46 +914,46 @@ const studentClassCoeffs = coefficients.filter(c => Number(c.classe_id) === Numb
         }
       });
 
-
-
       return {
-        name: term.nom,
-        moyenne: countOfStudentsWithAveragesForTerm > 0
-          ? parseFloat((totalOfStudentOverallAveragesForTerm / countOfStudentsWithAveragesForTerm).toFixed(2))
-          : 0,      };
-        }).filter(item => item.moyenne > 0); // Filter out terms with 0 average
-  }, [gradesInYear, termsForYear, selectedAcademicYearId, selectedClassId, selectedStudentId, studentsInYear, coefficients, calculateStudentSubjectAverageForTerm, loading.grades, loading.terms, loading.coefficients, loading.students]);
+      name: translateTerm(term.nom), // Utilisation de la fonction de traduction
+      moyenne: countOfStudentsWithAveragesForTerm > 0
+        ? parseFloat((totalOfStudentOverallAveragesForTerm / countOfStudentsWithAveragesForTerm).toFixed(2))
+        : 0,
+    };
+  }).filter(item => item.moyenne > 0);
 
+  }, [
+    gradesInYear, termsForYear, selectedAcademicYearId, selectedClassId, selectedStudentId, 
+    studentsInYear, coefficients, calculateStudentSubjectAverageForTerm, loading.grades, 
+    loading.terms, loading.coefficients, loading.students
+  ]);
 
   const filteredAbsences = useMemo(() => {
     let tempAbsences = absencesInYear;
-     if (!selectedAcademicYearId) return [];
+    if (!selectedAcademicYearId) return [];
 
     const yearIdNum = parseInt(selectedAcademicYearId);
-    // Assuming absencesInYear is already filtered by academic year from its fetch.
-    // If not, add: tempAbsences = absencesInYear.filter(abs => abs.annee_scolaire_id === yearIdNum);
-
     const currentTerm = termsForYear.find(t => String(t.id) === selectedTermId);
 
     let studentsToFilterAbsencesFor = studentsInYear;
     if (selectedClassId !== 'all') {
       const classIdNum = parseInt(selectedClassId);
-      studentsToFilterAbsencesFor = studentsToFilterAbsencesFor.filter(s => s.classe?.id === classIdNum && s.classe?.annee_scolaire_id === yearIdNum);
+      studentsToFilterAbsencesFor = studentsToFilterAbsencesFor.filter(s => 
+        s.classe?.id === classIdNum && s.classe?.annee_scolaire_id === yearIdNum);
     }
     if (selectedStudentId !== 'all') {
       studentsToFilterAbsencesFor = studentsToFilterAbsencesFor.filter(s => String(s.id) === selectedStudentId);
     }
 
     const studentIdsToConsider = studentsToFilterAbsencesFor.map(s => s.id);
-tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(absence.etudiant_id));
+    tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(absence.etudiant_id));
     
-   if (currentTerm && selectedTermId !== 'all') {
+    if (currentTerm && selectedTermId !== 'all') {
       try {
         const termStartDate = parseISO(currentTerm.date_debut);
         const termEndDate = parseISO(currentTerm.date_fin);
 
         if (isNaN(termStartDate.getTime()) || isNaN(termEndDate.getTime())) {
-          console.warn(`Invalid date format for term ${currentTerm.nom} in absences: S=${currentTerm.date_debut}, E=${currentTerm.date_fin}`);
           return tempAbsences;
         }
         
@@ -972,27 +966,24 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
           } catch (e) { return false; }
         });
       } catch (e) {
-         console.warn(`Error parsing term dates for ${currentTerm.nom} in absences`, e);
+        console.warn(`Error parsing term dates for ${currentTerm.nom} in absences`, e);
       }
-
     }
     return tempAbsences;
- }, [absencesInYear, selectedAcademicYearId, selectedClassId, selectedStudentId, selectedTermId, termsForYear, studentsInYear]);
-
+  }, [absencesInYear, selectedAcademicYearId, selectedClassId, selectedStudentId, selectedTermId, termsForYear, studentsInYear]);
 
   const classAttendanceData = useMemo((): AttendanceChartItem[] => {
     if (loading.absences || loading.students || loading.classes || studentsInYear.length === 0) return [];
-    // Filtrer les classes à traiter en fonction de selectedClassId
+    
     let classesToProcess = classesForYear;
     if (selectedClassId !== 'all') {
       classesToProcess = classesForYear.filter(c => String(c.id) === selectedClassId);
     } else if (selectedStudentId !== 'all') {
-      // Si un élève est sélectionné et "Toutes les classes", on se concentre sur la classe de cet élève
       const student = studentsInYear.find(s => String(s.id) === selectedStudentId);
       classesToProcess = student?.classe ? [student.classe] : [];
     }
 
-  const selectedYear = academicYears.find(ay => String(ay.id) === selectedAcademicYearId);
+    const selectedYear = academicYears.find(ay => String(ay.id) === selectedAcademicYearId);
     const selectedTerm = termsForYear.find(t => String(t.id) === selectedTermId);
 
     let schoolDaysInPeriod = 0;
@@ -1002,15 +993,17 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
       schoolDaysInPeriod = calculateSchoolDays(selectedTerm.date_debut, selectedTerm.date_fin);
     }
 
-    if (schoolDaysInPeriod === 0) return []; // Not enough info to calculate
+    if (schoolDaysInPeriod === 0) return [];
 
-    const attendanceByClass: { [classId: string]: { totalPossible: number; totalAbsences: number; totalNonJustifiedAbsences: number; className: string } } = {};
+    const attendanceByClass: { [classId: string]: { 
+      totalPossible: number; 
+      totalAbsences: number; 
+      totalNonJustifiedAbsences: number; 
+      className: string 
+    } } = {};
 
-   
-  
     classesToProcess.forEach(classe => {
       const studentsInThisClass = studentsInYear.filter(s => s.classe?.id === classe.id);
-      
       const studentsForThisClassAttendance = selectedStudentId === 'all'
         ? studentsInThisClass
         : studentsInThisClass.filter(s => String(s.id) === selectedStudentId);
@@ -1020,25 +1013,24 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
       let currentClassNonJustifiedAbsences = 0;
 
       studentsInThisClass.forEach(student => {
-         const studentAbsences = filteredAbsences.filter(abs => abs.etudiant_id === student.id);
+        const studentAbsences = filteredAbsences.filter(abs => abs.etudiant_id === student.id);
         currentClassTotalAbsences += studentAbsences.length;
         currentClassNonJustifiedAbsences += studentAbsences.filter(
           abs => !abs.justification || abs.justification.trim() === ''
         ).length;
       });
-     // N = studentsInThisClass.length, M = schoolDaysInPeriod
+
       const totalPossibleJoursEleve = studentsForThisClassAttendance.length * schoolDaysInPeriod;
 
       attendanceByClass[String(classe.id)] = {
-        
-      className: classe.nom,
-       totalPossible: totalPossibleJoursEleve,
+        className: classe.nom,
+        totalPossible: totalPossibleJoursEleve,
         totalAbsences: currentClassTotalAbsences,
         totalNonJustifiedAbsences: currentClassNonJustifiedAbsences,
       };
     });
 
-     return Object.values(attendanceByClass).map(data => {
+    return Object.values(attendanceByClass).map(data => {
       const tauxAssiduite = data.totalPossible > 0
         ? parseFloat((( (data.totalPossible - data.totalAbsences) / data.totalPossible) * 100).toFixed(2))
         : 0;
@@ -1054,13 +1046,12 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
   }, [
     filteredAbsences, studentsInYear, classesForYear, 
     selectedAcademicYearId, selectedTermId, selectedStudentId, termsForYear, academicYears,
-     selectedClassId, // Ajout de selectedClassId comme dépendance
-    loading.absences, loading.students, loading.classes
+    selectedClassId, loading.absences, loading.students, loading.classes
   ]);
 
   const monthlyAbsenceEvolutionData = useMemo(() => {
     if (loading.absences || filteredAbsences.length === 0) return [];
-    const absencesByMonth: { [month: string]: number } = {};
+    
     let studentsToConsider = studentsInYear;
     if (selectedClassId !== 'all') {
       studentsToConsider = studentsToConsider.filter(s => String(s.classe?.id) === selectedClassId);
@@ -1071,23 +1062,23 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
 
     if (studentsToConsider.length === 0) return [];
 
-       const schoolDaysPerMonth = 20; // M (jours scolaires par mois)
-
+    const schoolDaysPerMonth = 20;
     const absencesByMonthAndTotalPossible: {
       [monthYearKey: string]: { totalAbsences: number; nonJustifiedAbsences: number; totalPossible: number }
     } = {};
 
-
     filteredAbsences.forEach(absence => {
-       const month = getMonth(parseISO(absence.date));
+      const month = getMonth(parseISO(absence.date));
       const year = getYear(parseISO(absence.date));
-      const monthYearKey = format(new Date(year, month), 'MMM yyyy', { locale: fr });
+      const monthYearKey = format(new Date(year, month), 'MMM yyyy', { 
+        locale: language === 'ar' ? ar : fr 
+      });
 
       if (!absencesByMonthAndTotalPossible[monthYearKey]) {
         absencesByMonthAndTotalPossible[monthYearKey] = {
           totalAbsences: 0,
           nonJustifiedAbsences: 0,
-          totalPossible: studentsToConsider.length * schoolDaysPerMonth, // N * M
+          totalPossible: studentsToConsider.length * schoolDaysPerMonth,
         };
       }
       absencesByMonthAndTotalPossible[monthYearKey].totalAbsences++;
@@ -1099,26 +1090,21 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
     return Object.entries(absencesByMonthAndTotalPossible)
       .map(([monthYearKey, data]) => {
         const tauxAssiduite = data.totalPossible > 0
-        ? parseFloat((((data.totalPossible - data.totalAbsences) / data.totalPossible) * 100).toFixed(2))
-        
-        : 0;
-     return {
+          ? parseFloat((((data.totalPossible - data.totalAbsences) / data.totalPossible) * 100).toFixed(2))
+          : 0;
+        return {
           name: monthYearKey,
           tauxAssiduite: tauxAssiduite,
         };
       })
-      .sort((a, b) => { // Sort by date
-        return parseISO(`01 ${a.name}`).getTime() - parseISO(`01 ${b.name}`).getTime(); // Parse as first day of month for sorting
-      });
-  }, [filteredAbsences, studentsInYear, selectedClassId, selectedStudentId, loading.absences]);
-
-
+      .sort((a, b) => parseISO(`01 ${a.name}`).getTime() - parseISO(`01 ${b.name}`).getTime());
+  }, [filteredAbsences, studentsInYear, selectedClassId, selectedStudentId, loading.absences, language]);
 
   if (loading.initial || loading.academicYears) {
     return (
       <div className="flex flex-col items-center justify-center h-screen">
         <Loader2 className="h-16 w-16 animate-spin text-blue-500" />
-        <p className="mt-4 text-lg">Chargement des données initiales...</p>
+        <p className="mt-4 text-lg">{t.common.loadingInitialData}</p>
       </div>
     );
   }
@@ -1127,124 +1113,189 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
     return (
       <div className="flex flex-col items-center justify-center h-screen text-red-500">
         <AlertCircle className="h-16 w-16" />
-        <p className="mt-4 text-lg">Erreur: {error}</p>
-        <Button onClick={() => window.location.reload()} className="mt-4">Réessayer</Button>
+        <p className="mt-4 text-lg">{t.common.error}: {error}</p>
+        <Button onClick={() => window.location.reload()} className="mt-4">
+          {t.common.tryAgain}
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="p-6 h-[calc(100vh-80px)] overflow-y-auto">
-      <h1 className="text-2xl font-bold mb-6">Statistiques</h1>
-<Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
- <TabsList className="flex flex-row flex-wrap w-full gap-2 sm:gap-4 justify-center">
-  <TabsTrigger
-    value="overview"
-    className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
-  >
-    Vue d'ensemble
-  </TabsTrigger>
-  <TabsTrigger
-    value="grades"
-    className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
-  >
-    Notes et réussite
-  </TabsTrigger>
-  <TabsTrigger
-    value="attendance"
-    className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
-  >
-    Assiduité
-  </TabsTrigger>
-</TabsList>
-<div className="block sm:hidden h-4"></div>
-<Card className="mb-6">
-  <CardHeader>
-    <CardTitle>Filtres</CardTitle>
-    <CardDescription>Visualisez les statistiques par période et par classe</CardDescription>
-  </CardHeader>
-  <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Année Scolaire</label>
-              <Select onValueChange={setSelectedAcademicYearId} value={selectedAcademicYearId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sélectionner une année" />
-                </SelectTrigger>
-                <SelectContent>
-                  {academicYears.map((year) => (
-                    <SelectItem key={year.id} value={String(year.id)}>{formatAcademicYearDisplay(year)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Période (Trimestre)</label>
-              <Select onValueChange={setSelectedTermId} value={selectedTermId} disabled={termsForYear.length === 0}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sélectionner une période" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Année complète</SelectItem>
-                  {termsForYear.map((term) => (
-                    <SelectItem key={term.id} value={String(term.id)}>
-                      {term.nom}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Classe</label>
-              <Select onValueChange={setSelectedClassId} value={selectedClassId} disabled={classesForYear.length === 0}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sélectionner une classe" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Toutes les classes</SelectItem>
-                  {classesForYear.map((cls) => (
-                    <SelectItem key={cls.id} value={String(cls.id)}>
-                      {cls.nom}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Élève</label>
-              <Select
-                onValueChange={setSelectedStudentId}
-                value={selectedStudentId}
-                disabled={selectedClassId === 'all' || studentsForFilter.length === 0}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Sélectionner un élève" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tous les élèves</SelectItem>
-                  {studentsForFilter.map((student) => (
-                    <SelectItem key={student.id} value={String(student.id)}>
-                      {student.prenom} {student.nom}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      
+<div 
+  className="p-6 h-[calc(100vh-80px)] overflow-y-auto" 
+  dir={language === 'ar' ? 'rtl' : 'ltr'}
+>
+ <h1 className={`text-2xl font-bold mb-6 ${getTextAlignment(language)}`}>
+    {t.statistics.title}
+  </h1>      
+      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
+        <TabsList className="flex flex-row flex-wrap w-full gap-2 sm:gap-4 justify-center">
+          <TabsTrigger
+            value="overview"
+            className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
+          >
+            {t.statistics.tabs.overview}
+          </TabsTrigger>
+          <TabsTrigger
+            value="grades"
+            className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
+          >
+            {t.statistics.tabs.grades}
+          </TabsTrigger>
+          <TabsTrigger
+            value="attendance"
+            className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
+          >
+            {t.statistics.tabs.attendance}
+          </TabsTrigger>
+        </TabsList>
         
+        <div className="block sm:hidden h-4"></div>
+        
+        <Card className="mb-6">
+  <CardHeader className={getAlignmentClass()}>
+            <CardTitle className={getAlignmentClass()}>{t.statistics.filters.title}</CardTitle>
+    <CardDescription className={getAlignmentClass()}>{t.statistics.filters.description}</CardDescription> </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className={`space-y-2 ${getAlignmentClass()}`}>
+ <label className={`text-sm font-medium block ${getAlignmentClass()}`}>
+          {t.statistics.filters.academicYear}
+        </label>
+        <Select 
+    onValueChange={setSelectedAcademicYearId} 
+    value={selectedAcademicYearId}
+    dir={language === 'ar' ? 'rtl' : 'ltr'}
+  >                            
+          <SelectTrigger className={getAlignmentClass()}>
+
+                    <SelectValue placeholder={t.statistics.filters.selectYear} />
+                  </SelectTrigger>
+          <SelectContent className={getAlignmentClass()}>
+                    {academicYears.map((year) => (
+              <SelectItem key={year.id} value={String(year.id)}                 className={getAlignmentClass()}
+>
+                        {formatAcademicYearDisplay(year)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+      <div className={`space-y-2 ${getAlignmentClass()}`}>
+                <label className={`text-sm font-medium block ${getAlignmentClass()}`}>{t.statistics.filters.term}</label>
+                <Select onValueChange={setSelectedTermId} value={selectedTermId}>
+  <SelectTrigger>
+    <SelectValue placeholder={t.statistics.filters.selectTerm} />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="all">{t.statistics.filters.fullYear}</SelectItem>
+    {termsForYear.map((term) => (
+      <SelectItem key={term.id} value={String(term.id)}>
+        {translateTerm(term.nom)}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+              </div>
+              
+      <div className={`space-y-2 ${getAlignmentClass()}`}>
+  <label className={`text-sm font-medium block ${getAlignmentClass()}`}>
+    {t.statistics.filters.class}
+  </label>
+  <Select onValueChange={setSelectedClassId} value={selectedClassId}>
+    <SelectTrigger className={getAlignmentClass()}>
+      <SelectValue placeholder={t.statistics.filters.selectClass} />
+    </SelectTrigger>
+    <SelectContent className={getAlignmentClass()}>
+      {/* Barre de recherche */}
+      <div className="px-2 py-1">
+        <input
+          type="text"
+          placeholder={t.statistics.filters.searchClass}
+          className="w-full p-2 border rounded"
+          value={classSearchTerm}
+          onChange={(e) => setClassSearchTerm(e.target.value)}
+        />
+      </div>
+      
+      <SelectItem value="all">{t.statistics.filters.allClasses}</SelectItem>
+      {classesForYear
+        .filter(cls => 
+          cls.nom.toLowerCase().includes(classSearchTerm.toLowerCase())
+        )
+        .map((cls) => (
+          <SelectItem 
+            key={cls.id} 
+            value={String(cls.id)} 
+            className={getAlignmentClass()}
+          >
+            {cls.nom}
+          </SelectItem>
+        ))}
+    </SelectContent>
+  </Select>
+</div>
+              
+      <div className={`space-y-2 ${getAlignmentClass()}`}>
+  <label className={`text-sm font-medium block ${getAlignmentClass()}`}>
+    {t.statistics.filters.student}
+  </label>
+  <Select
+    onValueChange={setSelectedStudentId}
+    value={selectedStudentId}
+    disabled={selectedClassId === 'all' || studentsForFilter.length === 0}
+  >
+    <SelectTrigger className={getAlignmentClass()}>
+      <SelectValue placeholder={t.statistics.filters.selectStudent} />
+    </SelectTrigger>
+    <SelectContent className={getAlignmentClass()}>
+      {/* Barre de recherche */}
+      <div className="px-2 py-1">
+        <input
+          type="text"
+          placeholder={t.statistics.filters.searchStudent}
+          className="w-full p-2 border rounded"
+          value={studentSearchTerm}
+          onChange={(e) => setStudentSearchTerm(e.target.value)}
+        />
+      </div>
+      
+      <SelectItem value="all">{t.statistics.filters.allStudents}</SelectItem>
+      {studentsForFilter
+        .filter(student => 
+          `${student.prenom} ${student.nom}`
+            .toLowerCase()
+            .includes(studentSearchTerm.toLowerCase())
+        )
+        .map((student) => (
+          <SelectItem 
+            key={student.id} 
+            value={String(student.id)} 
+            className={getAlignmentClass()}
+          >
+            {student.prenom} {student.nom}
+          </SelectItem>
+        ))}
+    </SelectContent>
+  </Select>
+</div>
+            </div>
+          </CardContent>
+        </Card>
+
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+  <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${language === 'ar' ? 'md:[&>*:nth-child(odd)]:rtl-flip' : ''}`}>
             <Card>
-              <CardHeader>
-                <CardTitle>Répartition des élèves par niveau</CardTitle>
+              <CardHeader className={getAlignmentClass()}>
+    <CardTitle className={getAlignmentClass()}>
+      {t.statistics.charts.studentDistribution}</CardTitle>
               </CardHeader>
               <CardContent className="h-80">
-                {loading.students ? <Loader2 className="m-auto h-8 w-8 animate-spin" /> : studentDistributionData.length > 0 ? (
+                {loading.students ? (
+                  <Loader2 className="m-auto h-8 w-8 animate-spin" />
+                ) : studentDistributionData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -1260,29 +1311,41 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
                         {studentDistributionData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
+                         <Legend 
+          layout={language === 'ar' ? 'vertical' : 'horizontal'}
+          align={language === 'ar' ? 'right' : 'left'}
+          wrapperStyle={{
+            textAlign: language === 'ar' ? 'right' : 'left'
+          }}
+        />
                       </Pie>
                       <Tooltip />
                       <Legend />
-                    </PieChart>
+</PieChart>
                   </ResponsiveContainer>
-                ) : <p className="text-center text-gray-500">Aucune donnée de répartition des élèves.</p>}
+                ) : (
+                  <p className="text-center text-gray-500">
+                    {t.statistics.noData.studentDistribution}
+                  </p>
+                )}
               </CardContent>
             </Card>
             
             <Card>
-              <CardHeader>
-                <CardTitle>Répartition des élèves par genre</CardTitle>
+              <CardHeader className={getAlignmentClass()}> {/* Appliquer ici */}
+    <CardTitle className={getAlignmentClass()}>{t.statistics.charts.genderDistribution}</CardTitle>
               </CardHeader>
               <CardContent className="h-80">
-                 {loading.students ? <Loader2 className="m-auto h-8 w-8 animate-spin" /> : genderDistributionData.length > 0 ? (
+                {loading.students ? (
+                  <Loader2 className="m-auto h-8 w-8 animate-spin" />
+                ) : genderDistributionData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={genderDistributionData}
                         cx="50%"
                         cy="50%"
-                                                labelLine={false} // Assurez-vous que labelLine est false si vous ne voulez pas de lignes de connexion
-
+                        labelLine={false}
                         label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
                         outerRadius={80}
                         fill="#8884d8"
@@ -1294,9 +1357,13 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
                       </Pie>
                       <Tooltip />
                       <Legend />
-                    </PieChart>
+</PieChart>
                   </ResponsiveContainer>
-                ) : <p className="text-center text-gray-500">Aucune donnée de répartition par genre.</p>}
+                ) : (
+                  <p className="text-center text-gray-500">
+                    {t.statistics.noData.genderDistribution}
+                  </p>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -1304,61 +1371,105 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
         
         <TabsContent value="grades" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Moyenne générale par classe</CardTitle>
+            <CardHeader className={getAlignmentClass()}> {/* Appliquer ici */}
+    <CardTitle className={getAlignmentClass()}>{t.statistics.charts.classAverages}</CardTitle>
             </CardHeader>
             <CardContent className="h-96">
-              {loading.grades || loading.classes ? <Loader2 className="m-auto h-8 w-8 animate-spin" /> : classAveragesData.length > 0 ? (
+              {loading.grades || loading.classes ? (
+                <Loader2 className="m-auto h-8 w-8 animate-spin" />
+              ) : classAveragesData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={classAveragesData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+<BarChart 
+                    data={classAveragesData} 
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                  >
+
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis domain={[0, 20]} />
+                   <XAxis dataKey="name" />
+                
+    <YAxis domain={[0, 20]} />
+
                     <Tooltip />
-                    <Legend />
-                    <Bar dataKey="moyenne" fill="#3b82f6" name="Moyenne sur 20" />
+                      <Legend />
+                   <Bar 
+                      dataKey="moyenne" 
+                      fill="#3b82f6" 
+                      name={t.statistics.charts.averageOutOf20} 
+                    />
                   </BarChart>
                 </ResponsiveContainer>
-              ) : <p className="text-center text-gray-500">Aucune donnée de moyenne par classe.</p>}
+              ) : (
+                <p className="text-center text-gray-500">
+                  {t.statistics.noData.classAverages}
+                </p>
+              )}
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+  <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${language === 'ar' ? 'md:[&>*:nth-child(odd)]:rtl-flip' : ''}`}>
             <Card>
-              <CardHeader>
-                <CardTitle>Moyenne par matière</CardTitle>
+              <CardHeader className={getAlignmentClass()}> {/* Appliquer ici */}
+    <CardTitle className={getAlignmentClass()}>{t.statistics.charts.subjectAverages}</CardTitle>
               </CardHeader>
-                            <CardContent className="h-96"> {/* Increased height for better readability */}
-                {loading.grades || loading.coefficients || loading.students || loading.terms ? <Loader2 className="m-auto h-8 w-8 animate-spin" /> : subjectAverageData.length > 0 ? (
-                     <ResponsiveContainer width="100%" height="100%">
-  <BarChart data={subjectAverageData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-    <XAxis dataKey="name" />
-    <YAxis domain={[0, 20]} />
-    <Tooltip />
-    <Bar dataKey="taux" name="Moyenne" fill="#ff8042" />
-  </BarChart>
-</ResponsiveContainer>
-                ) : <p className="text-center text-gray-500">Aucune donnée de moyenne par matière.</p>}
+              <CardContent className="h-96">
+                {loading.grades || loading.coefficients || loading.students || loading.terms ? (
+                  <Loader2 className="m-auto h-8 w-8 animate-spin" />
+                ) : subjectAverageData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart 
+                      data={subjectAverageData} 
+                      margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                    >
+                      <XAxis dataKey="name" />
+                      <YAxis domain={[0, 20]} />
+                      <Tooltip />
+                      <Bar 
+                        dataKey="taux" 
+                        name={t.statistics.charts.average} 
+                        fill="#ff8042" 
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-center text-gray-500">
+                    {t.statistics.noData.subjectAverages}
+                  </p>
+                )}
               </CardContent>
             </Card>
             
             <Card>
-              <CardHeader>
-                <CardTitle>Évolution des moyennes par trimestre</CardTitle>
+             <CardHeader className={getAlignmentClass()}> {/* Appliquer ici */}
+    <CardTitle className={getAlignmentClass()}>{t.statistics.charts.averageEvolution}</CardTitle>
               </CardHeader>
               <CardContent className="h-80">
-                {loading.grades || loading.terms ? <Loader2 className="m-auto h-8 w-8 animate-spin" /> : averageEvolutionData.length > 0 ? (
+                {loading.grades || loading.terms ? (
+                  <Loader2 className="m-auto h-8 w-8 animate-spin" />
+                ) : averageEvolutionData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={averageEvolutionData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                    <LineChart 
+                      data={averageEvolutionData} 
+                      margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                    >
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" />
                       <YAxis domain={[0, 20]} />
                       <Tooltip />
                       <Legend />
-                      <Line type="monotone" dataKey="moyenne" name="Moyenne" stroke="#8884d8" activeDot={{ r: 8 }} />
+                    <Line 
+                        type="monotone" 
+                        dataKey="moyenne" 
+                        name={t.statistics.charts.average} 
+                        stroke="#8884d8" 
+                        activeDot={{ r: 8 }} 
+                      />
                     </LineChart>
                   </ResponsiveContainer>
-                ) : <p className="text-center text-gray-500">Aucune donnée d'évolution des moyennes.</p>}
+                ) : (
+                  <p className="text-center text-gray-500">
+                    {t.statistics.noData.averageEvolution}
+                  </p>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -1366,60 +1477,82 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
         
         <TabsContent value="attendance" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Taux d'assiduité par classe</CardTitle>
+            <CardHeader className={getAlignmentClass()}> {/* Appliquer ici */}
+    <CardTitle className={getAlignmentClass()}>{t.statistics.charts.attendanceRate}</CardTitle>
             </CardHeader>
-            <CardContent className="h-80"> {/* Adjusted height */}
-              {loading.absences || loading.students || loading.classes ? <Loader2 className="m-auto h-8 w-8 animate-spin" /> : classAttendanceData.length > 0 ? (
+            <CardContent className="h-80">
+              {loading.absences || loading.students || loading.classes ? (
+                <Loader2 className="m-auto h-8 w-8 animate-spin" />
+              ) : classAttendanceData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={classAttendanceData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <BarChart 
+                    data={classAttendanceData} 
+                    margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
                     <YAxis domain={[0, 100]} unit="%"/>
                     <Tooltip formatter={(value) => `${value}%`} />
-                    <Legend />
-                    <Bar dataKey="tauxAssiduite" name="Taux d'assiduité (%)" stackId="a" fill="#ff8042" />
+                      <Legend />
+<Bar 
+                      dataKey="tauxAssiduite" 
+                      name={t.statistics.charts.attendanceRatePercent} 
+                      stackId="a" 
+                      fill="#ff8042" 
+                    />
                   </BarChart>
                 </ResponsiveContainer>
-              ) : <p className="text-center text-gray-500">Aucune donnée d'assiduité par classe.</p>}
+              ) : (
+                <p className="text-center text-gray-500">
+                  {t.statistics.noData.attendanceRate}
+                </p>
+              )}
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Évolution de l'assiduité au cours de l'année</CardTitle>
+            <CardHeader className={getAlignmentClass()}> {/* Appliquer ici */}
+    <CardTitle className={getAlignmentClass()}>{t.statistics.charts.attendanceEvolution}</CardTitle>
             </CardHeader>
             <CardContent className="h-96">
-              {loading.absences ? <Loader2 className="m-auto h-8 w-8 animate-spin" /> : monthlyAbsenceEvolutionData.length > 0 ? (
+              {loading.absences ? (
+                <Loader2 className="m-auto h-8 w-8 animate-spin" />
+              ) : monthlyAbsenceEvolutionData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
- <LineChart 
-                    data={monthlyAbsenceEvolutionData.sort((a, b) => {
-                           
-                            return 0; // Placeholder if data is already sorted by useMemo
-                          })} 
+                  <LineChart 
+                    data={monthlyAbsenceEvolutionData} 
                     margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                  >                    <CartesianGrid strokeDasharray="3 3" />
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
                     <YAxis domain={[0, 100]} unit="%"/>
                     <Tooltip formatter={(value) => `${value}%`} />
-                    <Legend />
-<Line 
-                    type="monotone"
+                      <Legend />
+                  <Line 
+                      type="monotone"
                       dataKey="tauxAssiduite" 
-                      name="Taux d'assiduité (%)" 
-                     
-                      stroke="#ff8042" // Couleur de la ligne
-  dot={{ r: 5, fill: "#ff8042", stroke: "#ff8042" }} // <-- cercle rempli orange
+                      name={t.statistics.charts.attendanceRatePercent} 
+                      stroke="#ff8042"
+                      dot={{ r: 5, fill: "#ff8042", stroke: "#ff8042" }}
                       activeDot={{ r: 8 }} 
-                    />                  </LineChart>
+                    />
+                  </LineChart>
                 </ResponsiveContainer>
-              ) : <p className="text-center text-gray-500">Aucune donnée d'évolution des absences.</p>}
+              ) : (
+                <p className="text-center text-gray-500">
+                  {t.statistics.noData.attendanceEvolution}
+                </p>
+              )}
             </CardContent>
           </Card>
-           {/* Reminder for attendance data interpretation */}
-          <Card className="mt-4 bg-blue-50 border-blue-200">
-            <CardContent className="pt-4 text-sm text-blue-700">
-              <p><strong>Note sur l'assiduité :</strong> Les pourcentages d'assiduité sont calculés sur la base des absences enregistrées et d'une estimation du nombre de jours scolaires (20 jours/mois pour l'évolution mensuelle). Pour une précision accrue, l'intégration d'un calendrier scolaire détaillé est recommandée.</p>
+          
+          <Card className="mt-4 bg-blue-50 border-blue-200 dark:bg-blue-900 dark:border-blue-700">
+            <CardContent className={`pt-4 text-sm text-blue-700 dark:text-blue-200 ${getAlignmentClass()}`}>
+    <p className={getAlignmentClass()}>
+
+                <strong>{t.statistics.attendanceNote.title}:</strong>{" "}
+                {t.statistics.attendanceNote.description}
+              </p>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1427,3 +1560,5 @@ tempAbsences = tempAbsences.filter(absence => studentIdsToConsider.includes(abse
     </div>
   );
 }
+
+export default Statistics;

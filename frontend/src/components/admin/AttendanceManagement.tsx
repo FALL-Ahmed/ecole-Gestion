@@ -19,13 +19,15 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
+
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { CalendarIcon, Save, Search } from 'lucide-react';
 import { toast as sonnerToast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { fr } from 'date-fns/locale';
+import { fr, ar } from 'date-fns/locale';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const API_BASE_URL = `${API_URL}/api`;
@@ -95,14 +97,23 @@ interface EmploiDuTempsEntry {
 const timeSlots = ["08:00-10:00", "10:15-12:00", "12:15-14:00"];
 
 const fetchData = async (url: string) => {
-
   try {
-    const response = await fetch(url);
+    const token = localStorage.getItem('token');
+    const headers: HeadersInit = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, { headers });
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Session expirée ou non autorisée. Veuillez vous reconnecter.');
+      }
       const errorText = await response.text();
       throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
     }
-    return await response.json();
+    const text = await response.text();
+    return text ? JSON.parse(text) : [];
   } catch (error) {
     console.error(`Error fetching data from ${url}:`, error);
     sonnerToast.error((error as Error).message);
@@ -111,6 +122,7 @@ const fetchData = async (url: string) => {
 };
 
 export function AttendanceManagement() {
+  const { t, language } = useLanguage();
   const [anneesAcademiques, setAnneesAcademiques] = useState<AnneeAcademique[]>([]);
   const [selectedSchoolYearId, setSelectedSchoolYearId] = useState<string>('');
   const [isLoadingYears, setIsLoadingYears] = useState(true);
@@ -153,86 +165,89 @@ export function AttendanceManagement() {
     };
     fetchAnnees();
   }, []);
-return (
-  <div className="bg-gray-50 w-full">
-    <CardHeader className="pb-4">
-      <CardTitle className="text-2xl font-bold text-gray-800">
-        Gestion des Présences et Absences
-      </CardTitle>
-      <CardDescription>
-        Gérez les présences quotidiennes des élèves et suivez leurs absences.
-      </CardDescription>
-    </CardHeader>
 
-    {/* Onglets tout en haut */}
-    <Tabs defaultValue="dailyAttendance" className="w-full px-2">
-  <TabsList className="flex flex-row flex-wrap w-full gap-2 sm:gap-4 justify-center mb-4 sm:mb-8">
-    <TabsTrigger value="dailyAttendance" className="flex-1 sm:flex-none">Enregistrer les Présences</TabsTrigger>
- <TabsTrigger
-    value="absenceTracking"
-className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
-  >
-    Suivi des Absences
-  </TabsTrigger>  
-  </TabsList>
+  return (
+<div className={`bg-gray-50 dark:bg-gray-900 w-full ${language === 'ar' ? 'text-right' : 'text-left'}`}>      <CardHeader className="pb-4">
+  <CardTitle className="text-2xl font-bold text-gray-800 dark:text-white">
+          {t.attendance.title}
+        </CardTitle>
+        <CardDescription>
+          {t.attendance.description}
+        </CardDescription>
+      </CardHeader>
 
-      {/* Sélecteur d'année scolaire dans chaque tab */}
-      <TabsContent value="dailyAttendance">
-  <div className="flex items-center gap-4 mb-8 mt-14">{/* <-- passe de mb-6 à mb-8 */}
-    <label htmlFor="school-year-select" className="font-semibold text-gray-700">
-      Année Scolaire :
-    </label>
-    <Select onValueChange={setSelectedSchoolYearId} value={selectedSchoolYearId} disabled={isLoadingYears}>
-      <SelectTrigger id="school-year-select" className="w-[200px] bg-white">
-        <SelectValue placeholder="Sélectionner une année" />
-      </SelectTrigger>
-      <SelectContent>
-        {anneesAcademiques.map((annee) => (
-          <SelectItem key={annee.id} value={annee.id.toString()}>
-            {annee.libelle}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
-  <ProfessorAttendance
-    selectedSchoolYearId={selectedSchoolYearId}
-    anneesAcademiques={anneesAcademiques}
-  />
-</TabsContent>
-       <TabsContent value="absenceTracking">
-  <div className="flex items-center gap-4 mb-6 mt-14">{/* <-- retire mt-4 */}
-    <label htmlFor="school-year-select" className="font-semibold text-gray-700">
-      Année Scolaire :
-    </label>
-    <Select onValueChange={setSelectedSchoolYearId} value={selectedSchoolYearId} disabled={isLoadingYears}>
-      <SelectTrigger id="school-year-select" className="w-[200px] bg-white">
-        <SelectValue placeholder="Sélectionner une année" />
-      </SelectTrigger>
-      <SelectContent>
-        {anneesAcademiques.map((annee) => (
-          <SelectItem key={annee.id} value={annee.id.toString()}>
-            {annee.libelle}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
-  <AttendanceTracking
-    selectedSchoolYearId={selectedSchoolYearId}
-    anneesAcademiques={anneesAcademiques}
-  />
-</TabsContent>
-    </Tabs>
-  </div>
-);
+      <Tabs defaultValue="dailyAttendance" className="w-full px-2">
+<TabsList className="flex flex-row flex-wrap w-full gap-2 sm:gap-4 justify-center mb-4 sm:mb-8 bg-white dark:bg-gray-800">          <TabsTrigger value="dailyAttendance" className="flex-1 sm:flex-none">
+            {t.attendance.tabs.record}
+          </TabsTrigger>
+          <TabsTrigger value="absenceTracking" className="flex-1 sm:flex-none dark:data-[state=active]:bg-gray-700 dark:data-[state=active]:text-white">
+            {t.attendance.tabs.tracking}
+          </TabsTrigger>  
+        </TabsList>
+
+        <TabsContent value="dailyAttendance">
+          <div className={`flex items-center gap-4 mb-8 mt-14 ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
+            <label htmlFor="school-year-select" className="font-semibold text-gray-700 dark:text-gray-300">
+              {t.common.schoolYear} :
+            </label>
+            <Select onValueChange={setSelectedSchoolYearId} value={selectedSchoolYearId} disabled={isLoadingYears}>
+<SelectTrigger id="school-year-select" className="w-[200px] bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">                <SelectValue placeholder={t.common.selectAYear} />
+              </SelectTrigger>
+              <SelectContent className="bg-white dark:bg-gray-800 dark:border-gray-700">
+                {anneesAcademiques.map((annee) => (
+                  <SelectItem key={annee.id} value={annee.id.toString()} className="dark:hover:bg-gray-700">
+                    {annee.libelle}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <ProfessorAttendance
+            selectedSchoolYearId={selectedSchoolYearId}
+            anneesAcademiques={anneesAcademiques}
+            t={t}
+            language={language}
+          />
+        </TabsContent>
+        
+        <TabsContent value="absenceTracking">
+          <div className={`flex items-center gap-4 mb-6 mt-14 ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
+            <label htmlFor="school-year-select"  className="font-semibold text-gray-700 dark:text-gray-300">
+              {t.common.schoolYear} :
+            </label>
+            <Select onValueChange={setSelectedSchoolYearId} value={selectedSchoolYearId} disabled={isLoadingYears}>
+<SelectTrigger id="school-year-select" className="w-[200px] bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">                <SelectValue placeholder={t.common.selectAYear} />
+              </SelectTrigger>
+    <SelectContent className="bg-white dark:bg-gray-800 dark:border-gray-700">
+                {anneesAcademiques.map((annee) => (
+                  <SelectItem key={annee.id} value={annee.id.toString()} className="dark:hover:bg-gray-700">
+                    {annee.libelle}
+                    
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <AttendanceTracking
+            selectedSchoolYearId={selectedSchoolYearId}
+            anneesAcademiques={anneesAcademiques}
+            t={t}
+            language={language}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
 }
+
 interface ProfessorAttendanceProps {
   selectedSchoolYearId: string;
   anneesAcademiques: AnneeAcademique[];
+  t: any;
+  language: string;
 }
 
-export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }: ProfessorAttendanceProps) {
+export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques, t, language }: ProfessorAttendanceProps) {
   const [classes, setClasses] = useState<Classe[]>([]);
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [matieres, setMatieres] = useState<Matiere[]>([]);
@@ -245,6 +260,24 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
   const [availableSessions, setAvailableSessions] = useState<{ heure_debut: string, heure_fin: string }[]>([]);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('');
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+
+  const dateFnsLocale = language === 'ar' ? ar : fr;
+
+  const getTranslatedSubjectName = (subjectName: string): string => {
+    const subjectMap: { [key: string]: string } = {
+        'Mathématiques': t.schedule.subjects.math,
+        'Physique Chimie': t.schedule.subjects.physics,
+        'Arabe': t.schedule.subjects.arabic,
+        'Français': t.schedule.subjects.french,
+        'Anglais': t.schedule.subjects.english,
+        'Éducation Islamique': t.schedule.subjects.islamic,
+        'Histoire Géographie': t.schedule.subjects.history,
+        'Éducation Civique': t.schedule.subjects.civics,
+        'Éducation Physique et Sportive': t.schedule.subjects.sport,
+        'Philosophie': t.schedule.subjects.philosophy,
+    };
+    return subjectMap[subjectName] || subjectName;
+  };
 
   useEffect(() => {
     if (!selectedSchoolYearId) {
@@ -287,28 +320,34 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
       setMatieres([]);
       setSelectedSubject('');
 
-      try {
-        const dayOfWeekName = format(date, 'EEEE', { locale: fr }).charAt(0).toUpperCase() + format(date, 'EEEE', { locale: fr }).slice(1);
+      try {        
+        // Toujours utiliser le nom du jour en français pour la logique de filtrage de l'API
+        const dayOfWeekForLogic = format(date, 'EEEE', { locale: fr }).charAt(0).toUpperCase() + format(date, 'EEEE', { locale: fr }).slice(1);
 
-        const matieresResponse = await fetchData(`${API_BASE_URL}/coefficientclasse?classeId=${selectedClass}`);
-        const allClassMatieres = matieresResponse.map((cc: any) => cc.matiere).filter(Boolean);
+        const matieresResponse: { matiere: Matiere }[] = await fetchData(`${API_BASE_URL}/coefficientclasse?classeId=${selectedClass}`);
+        const allClassMatieres: Matiere[] = matieresResponse.map(cc => cc.matiere).filter((m): m is Matiere => !!m);
 
-        const emploiDuTempsResponse = await fetchData(`${API_BASE_URL}/emploi-du-temps?classe_id=${selectedClass}&annee_scolaire_id=${selectedSchoolYearId}`);
-        const timetableEntriesForDay = emploiDuTempsResponse.filter((entry: EmploiDuTempsEntry) => entry.jour === dayOfWeekName);
+        const emploiDuTempsResponse: EmploiDuTempsEntry[] = await fetchData(`${API_BASE_URL}/emploi-du-temps?classe_id=${selectedClass}&annee_scolaire_id=${selectedSchoolYearId}`);
+        const timetableEntriesForDay = emploiDuTempsResponse.filter((entry: EmploiDuTempsEntry) => entry.jour === dayOfWeekForLogic);
 
         if (timetableEntriesForDay.length === 0) {
           setMatieres([]);
-          sonnerToast.info(`Aucun cours programmé pour ${dayOfWeekName} dans cette classe.`);
+          // sonnerToast.info(t.attendance.noSessionFound); // Peut être bruyant, commenté pour l'instant
           return;
         }
 
         const subjectIdsForDay = [...new Set(timetableEntriesForDay.map((entry: EmploiDuTempsEntry) => entry.matiere_id))];
-        const subjectsScheduledToday = allClassMatieres.filter((matiere: Matiere) => subjectIdsForDay.includes(matiere.id));
-        setMatieres(subjectsScheduledToday);
+        const subjectsScheduledTodayWithDuplicates = allClassMatieres.filter((matiere: Matiere) => subjectIdsForDay.includes(matiere.id));
 
-        if (subjectsScheduledToday.length === 1) {
-          setSelectedSubject(subjectsScheduledToday[0].id.toString());
-        }
+        // Dédupliquer les matières pour éviter les doublons dans le menu déroulant
+        const uniqueSubjects: Matiere[] = Array.from(new Map(subjectsScheduledTodayWithDuplicates.map(m => [m.id, m])).values());
+
+        setMatieres(uniqueSubjects);
+
+        // La sélection automatique de la matière est désactivée pour laisser le contrôle à l'utilisateur.
+        // if (uniqueSubjects.length === 1) {
+        //   setSelectedSubject(uniqueSubjects[0].id.toString());
+        // }
       } catch (error) {
         sonnerToast.error((error as Error).message);
         setMatieres([]);
@@ -318,7 +357,7 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
     };
 
     fetchMatieresForDay();
-  }, [selectedClass, selectedSchoolYearId, date]);
+  }, [selectedClass, selectedSchoolYearId, date, dateFnsLocale]);
 
   useEffect(() => {
     if (!date || !selectedClass || !selectedSubject || !selectedSchoolYearId) {
@@ -335,11 +374,12 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
       setAttendanceData([]);
 
       try {
-        const dayOfWeekName = format(date, 'EEEE', { locale: fr }).charAt(0).toUpperCase() + format(date, 'EEEE', { locale: fr }).slice(1);
+        // Toujours utiliser le nom du jour en français pour la logique de filtrage de l'API
+        const dayOfWeekForLogic = format(date, 'EEEE', { locale: fr }).charAt(0).toUpperCase() + format(date, 'EEEE', { locale: fr }).slice(1);
         const response = await fetchData(`${API_BASE_URL}/emploi-du-temps?classe_id=${selectedClass}&matiere_id=${selectedSubject}&annee_scolaire_id=${selectedSchoolYearId}`);
 
         const sessionsForDay = response.filter((session: EmploiDuTempsEntry) =>
-          session.jour === dayOfWeekName && session.matiere_id === parseInt(selectedSubject)
+          session.jour === dayOfWeekForLogic && session.matiere_id === parseInt(selectedSubject)
         );
 
         setAvailableSessions(sessionsForDay.map((s: EmploiDuTempsEntry) => ({ heure_debut: s.heure_debut, heure_fin: s.heure_fin })));
@@ -348,7 +388,7 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
           const session = sessionsForDay[0];
           setSelectedTimeSlot(`${session.heure_debut.substring(0, 5)}-${session.heure_fin.substring(0, 5)}`);
         } else if (sessionsForDay.length === 0) {
-          sonnerToast.info(`Aucune session de cours trouvée pour ${dayOfWeekName}, pour cette classe et matière.`);
+          sonnerToast.info(t.attendance.noSessionFoundForSubject);
         }
       } catch (error) {
         sonnerToast.error((error as Error).message);
@@ -358,7 +398,7 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
       }
     };
     fetchSessions();
-  }, [date, selectedClass, selectedSubject, selectedSchoolYearId]);
+  }, [date, selectedClass, selectedSubject, selectedSchoolYearId, dateFnsLocale]);
 
   useEffect(() => {
     if (!selectedClass || !selectedSubject || !date || !selectedSchoolYearId || !selectedTimeSlot) {
@@ -411,19 +451,9 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
     );
   };
 
-  const handleJustifiedChange = (etudiant_id: number, justified: boolean) => {
-    setAttendanceData(prevData =>
-      prevData.map(student =>
-        student.etudiant_id === etudiant_id
-          ? { ...student, justified, present: justified ? false : student.present }
-          : student
-      )
-    );
-  };
-
   const saveAttendance = async () => {
     if (!selectedClass || !selectedSubject || !selectedSchoolYearId || !date || !selectedTimeSlot) {
-      sonnerToast.error("Veuillez compléter tous les champs de session.");
+      sonnerToast.error(t.attendance.pleaseSelect);
       return;
     }
     const [heure_debut, heure_fin] = selectedTimeSlot.split('-');
@@ -444,16 +474,20 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
     };
 
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/absences/bulk`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       });
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || "Erreur lors de la sauvegarde des présences.");
+        throw new Error(errorData.message || t.attendance.errorSave);
       }
-      sonnerToast.success("Présences enregistrées avec succès !");
+      sonnerToast.success(t.attendance.successSave);
       setSelectedClass('');
       setDate(new Date());
     } catch (error) {
@@ -466,23 +500,32 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
   const anneeScolaireSelectionnee = anneesAcademiques.find(a => a.id.toString() === selectedSchoolYearId)?.libelle || selectedSchoolYearId;
 
   return (
-    <Card className="shadow-lg border border-gray-200">
-      <CardHeader className="pb-4">
-        <CardTitle className="text-xl font-semibold text-gray-800">Enregistrer les Présences du Jour</CardTitle>
-        <CardDescription>Sélectionnez les détails de la séance et marquez la présence des élèves pour l'année {anneeScolaireSelectionnee}.</CardDescription>
+<Card className={`shadow-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 ${language === 'ar' ? 'text-right' : 'text-left'}`}>      <CardHeader className="pb-4">
+        <CardTitle className="text-xl font-semibold text-gray-800">
+          {t.attendance.recordTitle}
+        </CardTitle>
+        <CardDescription>
+          {t.attendance.recordDescription.replace('{year}', anneeScolaireSelectionnee)}
+        </CardDescription>
       </CardHeader>
       <CardContent className="pt-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 p-4 border rounded-lg bg-blue-50/50 dark:bg-gray-800/20">
-          <div className="space-y-2">
-            <label htmlFor="select-class-daily" className="text-sm font-medium text-gray-700">Classe</label>
+<div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 p-4 border rounded-lg bg-blue-50/50 dark:bg-gray-800/20 ${language === 'ar' ? 'text-right' : 'text-left'}`}>          <div className="space-y-2">
+<label htmlFor="select-class-daily" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t.common.class}
+            </label>
             <Select onValueChange={setSelectedClass} value={selectedClass} disabled={isLoadingClasses || !selectedSchoolYearId}>
-              <SelectTrigger id="select-class-daily" className="bg-white">
-                <SelectValue placeholder="Choisir une classe" />
+ <SelectTrigger 
+        id="select-class-daily" 
+        className="bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+      >                <SelectValue placeholder={t.common.selectAClass} />
               </SelectTrigger>
-              <SelectContent>
+      <SelectContent className="bg-white dark:bg-gray-800 dark:border-gray-700">
                 {classes.map((cls) => (
-                  <SelectItem key={cls.id} value={cls.id.toString()}>
-                    {cls.nom}
+<SelectItem 
+            key={cls.id} 
+            value={cls.id.toString()}
+            className="dark:hover:bg-gray-700"
+          >                    {cls.nom}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -490,58 +533,75 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="select-date-daily" className="text-sm font-medium text-gray-700">Date de la séance</label>
+            <label htmlFor="select-date-daily" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t.attendance.sessionDate}
+            </label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
                   id="select-date-daily"
                   variant={"outline"}
                   className={cn(
-                    "w-full justify-start text-left font-normal bg-white",
+          "w-full justify-start text-left font-normal bg-white dark:bg-gray-700 dark:text-white",
                     !date && "text-muted-foreground"
                   )}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {date ? format(date, "dd/MM/yyyy") : "Sélectionner une date"}
+                  {date ? format(date, "dd/MM/yyyy", { locale: dateFnsLocale }) : t.common.selectDate}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={date}
-                  onSelect={(d) => d && setDate(d)}
-                  initialFocus
-                />
-              </PopoverContent>
+              <PopoverContent className="w-auto p-0 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 rounded-xl shadow-lg">
+  <Calendar
+    mode="single"
+    selected={date}
+    onSelect={(d) => d && setDate(d)}
+    className="p-3"
+    classNames={{
+      table: "w-full border-collapse", // s'assure que les jours s'affichent correctement
+      head_row: "flex justify-between mb-2", // pour l'en-tête
+      head_cell: "w-9 text-xs font-semibold text-center text-gray-500 dark:text-gray-400",
+      row: "flex justify-between mb-1", // ligne de jours
+      cell: "w-9 h-9 text-center", // taille uniforme
+      day: "text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors flex items-center justify-center",
+      day_selected:
+        "bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 font-semibold",
+      day_today:
+        "border border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400 font-medium",
+    }}
+  />
+</PopoverContent>
+
+
             </Popover>
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="select-subject-daily" className="text-sm font-medium text-gray-700">Matière</label>
+<label htmlFor="select-subject-daily" className="text-sm font-medium text-gray-700 dark:text-gray-300">              {t.common.subject}
+            </label>
             <Select onValueChange={setSelectedSubject} value={selectedSubject} disabled={isLoadingMatieres || !selectedClass}>
-              <SelectTrigger id="select-subject-daily" className="bg-white">
-                <SelectValue placeholder="Choisir une matière" />
+ <SelectTrigger id="select-subject-daily" className="bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">                <SelectValue placeholder={t.common.selectASubject} />
               </SelectTrigger>
-              <SelectContent>
+    <SelectContent className="bg-white dark:bg-gray-800 dark:border-gray-700">
                 {matieres.map((subject) => (
-                  <SelectItem key={subject.id} value={subject.id.toString()}>
-                    {subject.nom}
+        <SelectItem key={subject.id} value={subject.id.toString()} className="dark:hover:bg-gray-700">
+                    {getTranslatedSubjectName(subject.nom)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+          
           <div className="space-y-2">
-            <label htmlFor="select-timeslot-daily" className="text-sm font-medium text-gray-700">Session</label>
+<label htmlFor="select-timeslot-daily" className="text-sm font-medium text-gray-700 dark:text-gray-300">              {t.attendance.session}
+            </label>
             <Select onValueChange={setSelectedTimeSlot} value={selectedTimeSlot} disabled={isLoadingSessions || !selectedSubject || availableSessions.length <= 1}>
-              <SelectTrigger id="select-timeslot-daily" className="bg-white">
-                <SelectValue placeholder={isLoadingSessions ? "Chargement..." : "Choisir une session"} />
+  <SelectTrigger id="select-timeslot-daily" className="bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">                <SelectValue placeholder={isLoadingSessions ? t.common.loading : t.attendance.chooseSession} />
               </SelectTrigger>
-              <SelectContent>
+    <SelectContent className="bg-white dark:bg-gray-800 dark:border-gray-700">
                 {availableSessions.map((session, index) => {
                   const slot = `${session.heure_debut.substring(0, 5)}-${session.heure_fin.substring(0, 5)}`;
                   return (
-                    <SelectItem key={slot} value={slot}>
+          <SelectItem key={slot} value={slot} className="dark:hover:bg-gray-700">
                       {slot}
                     </SelectItem>
                   );
@@ -553,67 +613,101 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
 
         {isFormComplete ? (
           isLoadingStudents ? (
-            <div className="text-center py-8">Chargement des élèves...</div>
+            <div className="text-center py-8">{t.common.loading}</div>
           ) : (
             <div className="mt-6">
-              <Card className="border-2 border-dashed border-green-300 bg-green-50">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg text-green-700">Feuille de présence pour :</CardTitle>
-                  <CardDescription className="text-green-800 font-semibold">
-                    {classes.find(c => c.id.toString() === selectedClass)?.nom} -
-                    {matieres.find(m => m.id.toString() === selectedSubject)?.nom} -
-                    {format(date, 'dd/MM/yyyy')} ({selectedTimeSlot}) 
-                    <span className="ml-4 px-2 py-1 bg-green-200 text-green-900 rounded-full text-xs font-bold">
-                      {attendanceData.length} élèves | {absenceCount} absents
+<Card className={cn(
+  "border-2 border-dashed",
+  absenceCount > 0 
+    ? "border-orange-300 bg-orange-50 dark:border-orange-700 dark:bg-orange-900/20" 
+    : "border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20"
+)}>                <CardHeader className="pb-3">
+<CardTitle className={cn(
+      "text-lg",
+      absenceCount > 0 
+        ? "text-orange-700 dark:text-orange-300" 
+        : "text-green-700 dark:text-green-300"
+    )}>                    {t.attendance.attendanceSheetFor}
+                  </CardTitle>
+<CardDescription className={cn(
+      "font-semibold",
+      absenceCount > 0 
+        ? "text-orange-800 dark:text-orange-200" 
+        : "text-green-800 dark:text-green-200"
+    )}>                    {classes.find(c => c.id.toString() === selectedClass)?.nom} -
+                    {getTranslatedSubjectName(matieres.find(m => m.id.toString() === selectedSubject)?.nom || '')} -
+                    {format(date, 'dd/MM/yyyy', { locale: dateFnsLocale })} ({selectedTimeSlot}) 
+<span className={cn(
+        "ml-4 px-2 py-1 rounded-full text-xs font-bold",
+        absenceCount > 0 
+          ? "bg-orange-100 text-orange-800 dark:bg-orange-800 dark:text-orange-200" 
+          : "bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-200"
+      )}>                      {t.attendance.studentsCount.replace('{count}', attendanceData.length.toString())} | 
+                      {t.attendance.absentCount.replace('{count}', absenceCount.toString())}
                     </span>
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-4 md:p-6">
                   {attendanceData.length === 0 ? ( 
-                    <p className="text-center text-gray-600 py-4">Aucun élève trouvé pour cette classe ou cette année scolaire.</p>
+                   <p className="text-gray-600 dark:text-gray-400 text-lg font-medium">
+    {t.attendance.noStudentFound}
+  </p>
                   ) : (
                     <>
                       {/* Desktop View */}
                       <div className="hidden md:block overflow-auto max-h-[60vh]">
-                        <Table className="min-w-full bg-white rounded-lg shadow-sm">
-                          <TableHeader className="bg-gray-100 sticky top-0 z-10">
-                            <TableRow>
-                              <TableHead className="w-1/2 text-gray-700">Élève</TableHead>
-                              <TableHead className="w-1/4 text-center text-gray-700">Présent(e)</TableHead>
-                              <TableHead className="w-1/4 text-center text-gray-700">Absent(e)</TableHead>
+<Table className="min-w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+<TableHeader className={cn(
+        "bg-gray-100 dark:bg-gray-700",
+        absenceCount > 0 
+          ? "bg-orange-50 dark:bg-orange-900/30" 
+          : "bg-green-50 dark:bg-green-900/30"
+      )}>                            <TableRow>
+      <TableHead className="w-1/2 text-gray-700 dark:text-white">{t.common.student}</TableHead>
+                              <TableHead className="w-1/4 text-center text-gray-700 dark:text-white">{t.attendance.present}</TableHead>
+                              <TableHead className="w-1/4 text-center text-gray-700 dark:text-white">{t.attendance.absent}</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-    {attendanceData.map((student) => (
-      <TableRow key={student.etudiant_id} className="hover:bg-gray-50">
-        <TableCell className="font-medium text-gray-800">{student.nom}</TableCell>
-        <TableCell className="text-center">
-          <Checkbox
-            checked={student.present}
-            onCheckedChange={(checked) => handlePresentChange(student.etudiant_id, checked === true)}
-            aria-label={`Marquer ${student.nom} comme présent`}
-            className="w-5 h-5 border-2 border-blue-400 data-[state=checked]:bg-blue-500 data-[state=checked]:text-white"
-          />
-        </TableCell>
-        <TableCell className="text-center">
-          <Checkbox
+                            {attendanceData.map((student) => (
+                              <TableRow key={student.etudiant_id}  className={cn(
+              "hover:bg-gray-50 dark:hover:bg-gray-700",
+              !student.present && "bg-rose-50/50 dark:bg-rose-900/20"
+            )}>
+ <TableCell className="font-medium text-gray-800 dark:text-gray-100">
+              {student.nom}
+            </TableCell>
+                                            <TableCell className="text-center bg-white dark:bg-gray-800">
+                                  <Checkbox
+                                    checked={student.present}
+                                    onCheckedChange={(checked) => handlePresentChange(student.etudiant_id, checked === true)}
+                                    aria-label={t.attendance.markPresent.replace('{name}', student.nom)}
+className="w-5 h-5 border-2 border-blue-400 data-[state=checked]:bg-blue-500 data-[state=checked]:text-white dark:border-blue-500 dark:data-[state=checked]:bg-blue-600"                                  />
+                                </TableCell>
+                                <TableCell className="text-center bg-white dark:bg-gray-800">
+                                   <Checkbox
             checked={!student.present}
             disabled
-            aria-label={`Marquer ${student.nom} comme absent`}
-            className="w-5 h-5 border-2 border-red-400 data-[state=checked]:bg-red-500 data-[state=checked]:text-white"
+            className={`
+              w-5 h-5 border-2 
+              ${!student.present 
+                ? 'border-red-400 data-[state=checked]:bg-red-500 dark:border-red-500 dark:data-[state=checked]:bg-red-600' 
+                : 'border-gray-300 dark:border-gray-500'}
+            `}
           />
-        </TableCell>
-      </TableRow>
-    ))}
-  </TableBody>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
                         </Table>
                       </div>
+                      
                       {/* Mobile View */}
                       <div className="block md:hidden space-y-4">
                         {attendanceData.map((student) => (
-                          <Card key={student.etudiant_id} className="p-4 bg-white shadow-sm">
-                            <p className="font-semibold text-base text-gray-800 mb-3">{student.nom}</p>
-<div className="flex flex-col gap-3 sm:flex-row">
+                          <Card key={student.etudiant_id} className="p-4 bg-white dark:bg-gray-800 shadow-sm">
+  <p className="font-semibold text-base text-gray-800 dark:text-white mb-3">{student.nom}</p>
+                            <div className="flex flex-col gap-3 sm:flex-row">
                               <Button
                                 variant={student.present ? 'default' : 'outline'}
                                 onClick={() => handlePresentChange(student.etudiant_id, true)}
@@ -624,7 +718,7 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
                                   onCheckedChange={(checked) => handlePresentChange(student.etudiant_id, checked === true)}
                                   className="border-white data-[state=checked]:bg-white data-[state=checked]:text-green-600"
                                 />
-                                <label className="font-medium">Présent(e)</label>
+                                <label className="font-medium">{t.attendance.present}</label>
                               </Button>
                               <Button
                                 variant={!student.present ? 'destructive' : 'outline'}
@@ -635,37 +729,40 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
                                   checked={!student.present}
                                   onCheckedChange={(checked) => handlePresentChange(student.etudiant_id, !checked)}
                                 />
-                                <label className="font-medium">Absent(e)</label>
+                                <label className="font-medium">{t.attendance.absent}</label>
                               </Button>
                             </div>
-                           
                           </Card>
                         ))}
                       </div>
+                      
+                      <div className="mt-6 flex flex-col sm:flex-row justify-center sm:justify-end">
+                        <Button 
+                          onClick={saveAttendance} 
+className="w-full sm:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white font-semibold rounded-lg shadow-md transition-colors"                          disabled={attendanceData.length === 0}
+                        >
+                          <Save className="mr-2 h-5 w-5" />
+                          {t.attendance.saveSheet}
+                        </Button>
+                      </div>
                     </>
                   )}
-                  <div className="mt-6 flex flex-col sm:flex-row justify-center sm:justify-end">
-                    <Button onClick={saveAttendance} className="w-full sm:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md transition-colors" disabled={attendanceData.length === 0}>
-                      <Save className="mr-2 h-5 w-5" />
-                      Enregistrer la Feuille
-                    </Button>
-                  </div>
                 </CardContent>
               </Card>
             </div>
           )
         ) : (
-          <div className="bg-white rounded-lg p-8 text-center shadow-inner border border-gray-200">
-            <p className="text-gray-600 text-lg font-medium">
-              Veuillez <span className="font-bold text-blue-600">sélectionner une classe, une date et une matière</span>.
-              {selectedSubject && availableSessions.length > 1 && !selectedTimeSlot && (
-                <span className="block mt-2">Plusieurs sessions existent, veuillez <span className="font-bold text-blue-600">choisir une session</span>.</span>
-              )}
-              {selectedSubject && availableSessions.length === 0 && !isLoadingSessions && (
-                <span className="block mt-2 text-orange-600">Aucune session de cours trouvée pour les filtres actuels.</span>
-              )}
-            </p>
-          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-8 text-center shadow-inner border border-gray-200 dark:border-gray-700">
+    <p className="text-gray-600 dark:text-gray-300 text-lg font-medium">
+      {t.attendance.pleaseSelect}
+      {selectedSubject && availableSessions.length > 1 && !selectedTimeSlot && (
+        <span className="block mt-2 dark:text-gray-400">{t.attendance.multipleSessions}</span>
+      )}
+      {selectedSubject && availableSessions.length === 0 && !isLoadingSessions && (
+        <span className="block mt-2 text-orange-600 dark:text-orange-400">{t.attendance.noSessionFound}</span>
+      )}
+    </p>
+  </div>
         )}
       </CardContent>
     </Card>
@@ -675,9 +772,11 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques }:
 interface AttendanceTrackingProps {
   selectedSchoolYearId: string;
   anneesAcademiques: AnneeAcademique[];
+  t: any;
+  language: string;
 }
 
-export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: AttendanceTrackingProps) {
+export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques, t, language }: AttendanceTrackingProps) {
   const [classes, setClasses] = useState<Classe[]>([]);
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [startDate, setStartDate] = useState<Date>(new Date(new Date().setDate(new Date().getDate() - 30)));
@@ -686,6 +785,24 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
   const [absenceRecords, setAbsenceRecords] = useState<AbsenceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingClasses, setIsLoadingClasses] = useState(false);
+
+  const dateFnsLocale = language === 'ar' ? ar : fr;
+
+  const getTranslatedSubjectName = (subjectName: string): string => {
+    const subjectMap: { [key: string]: string } = {
+        'Mathématiques': t.schedule.subjects.math,
+        'Physique Chimie': t.schedule.subjects.physics,
+        'Arabe': t.schedule.subjects.arabic,
+        'Français': t.schedule.subjects.french,
+        'Anglais': t.schedule.subjects.english,
+        'Éducation Islamique': t.schedule.subjects.islamic,
+        'Histoire Géographie': t.schedule.subjects.history,
+        'Éducation Civique': t.schedule.subjects.civics,
+        'Éducation Physique et Sportive': t.schedule.subjects.sport,
+        'Philosophie': t.schedule.subjects.philosophy,
+    };
+    return subjectMap[subjectName] || subjectName;
+  };
 
   useEffect(() => {
     if (!selectedSchoolYearId) {
@@ -731,11 +848,15 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
         const mappedData = response.map((item: any) => ({
           id: item.id,
           etudiant_id: item.etudiant_id || item.etudiant?.id,
-          etudiant_nom: item.etudiant ? `${item.etudiant.prenom || ''} ${item.etudiant.nom || ''}`.trim() : 'Élève inconnu',
-          etudiant_classe_nom: item.classe ? item.classe.nom : 'Classe inconnue',
+          etudiant_nom: item.etudiant 
+            ? (language === 'ar' 
+                ? `${item.etudiant.prenom || ''} ${item.etudiant.nom || ''}`.trim() 
+                : `${item.etudiant.nom || ''} ${item.etudiant.prenom || ''}`.trim()) 
+            : t.common.unknown,
+          etudiant_classe_nom: item.classe ? item.classe.nom : t.common.unknown,
           date: item.date,
           matiere_id: item.matiere_id || item.matiere?.id,
-          matiere_nom: item.matiere ? item.matiere.nom : 'Matière inconnue',
+          matiere_nom: item.matiere ? getTranslatedSubjectName(item.matiere.nom) : t.common.unknown,
           heure_debut: item.heure_debut,
           heure_fin: item.heure_fin,
           justified: !!item.justification,
@@ -750,7 +871,7 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
       }
     };
     fetchAbsences();
-  }, [selectedClass, startDate, endDate, searchQuery, selectedSchoolYearId]);
+  }, [selectedClass, startDate, endDate, searchQuery, selectedSchoolYearId, t, language]);
 
   const handleJustificationChange = (absenceId: number, justification: string) => {
     setAbsenceRecords(prevData =>
@@ -767,14 +888,18 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
     if (!recordToUpdate) return;
 
     try {
+      const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/absences/${absenceId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ justifie: true, justification: recordToUpdate.justification }),
       });
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || "Erreur lors de la justification de l'absence.");
+        throw new Error(errorData.message || t.attendance.errorSave);
       }
       setAbsenceRecords(prevData =>
         prevData.map(record =>
@@ -783,7 +908,7 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
             : record
         )
       );
-      sonnerToast.success("Absence justifiée avec succès !");
+      sonnerToast.success(t.attendance.successSave);
     } catch (error) {
       sonnerToast.error((error as Error).message);
     }
@@ -797,20 +922,25 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
   const anneeScolaireSelectionnee = anneesAcademiques.find(a => a.id.toString() === selectedSchoolYearId)?.libelle || selectedSchoolYearId;
 
   return (
-    <Card className="shadow-lg border border-gray-200">
-      <CardHeader className="pb-4">
-        <CardTitle className="text-xl font-semibold text-gray-800">Consulter et Justifier les Absences</CardTitle>
-        <CardDescription>Recherchez et gérez les absences des élèves par classe et période pour l'année {anneeScolaireSelectionnee}.</CardDescription>
+<Card className={`shadow-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 ${language === 'ar' ? 'text-right' : 'text-left'}`}>      <CardHeader className="pb-4">
+    <CardTitle className="text-xl font-semibold text-gray-800 dark:text-white">
+          {t.attendance.trackingTitle}
+        </CardTitle>
+    <CardDescription className="dark:text-gray-300">
+          {t.attendance.trackingDescription.replace('{year}', anneeScolaireSelectionnee)}
+        </CardDescription>
       </CardHeader>
       <CardContent className="pt-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 p-4 border rounded-lg bg-purple-50/50 dark:bg-gray-800/20">
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 p-4 border rounded-lg bg-purple-50/50 dark:bg-gray-800/20 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
           <div className="space-y-2">
-            <label htmlFor="filter-class-tracking" className="text-sm font-medium text-gray-700">Classe</label>
+            <label htmlFor="filter-class-tracking" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t.common.class}
+            </label>
             <Select onValueChange={setSelectedClass} value={selectedClass} disabled={isLoadingClasses || !selectedSchoolYearId}>
-              <SelectTrigger id="filter-class-tracking" className="bg-white">
-                <SelectValue placeholder="Filtrer par classe" />
+              <SelectTrigger id="filter-class-tracking" className="bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                <SelectValue placeholder={t.common.selectAClass} />
               </SelectTrigger>
-              <SelectContent>
+    <SelectContent className="bg-white dark:bg-gray-800 dark:border-gray-700">
                 {classes.map((cls) => (
                   <SelectItem key={cls.id} value={cls.id.toString()}>
                     {cls.nom}
@@ -821,173 +951,240 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="filter-start-date-tracking" className="text-sm font-medium text-gray-700">Date de début</label>
+<label htmlFor="filter-start-date-tracking" className="text-sm font-medium text-gray-700 dark:text-gray-300">              {t.common.startDate}
+            </label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
                   id="filter-start-date-tracking"
                   variant={"outline"}
-                  className={cn(
-                    "w-full justify-start text-left font-normal bg-white",
+                 className={cn(
+          "w-full justify-start text-left font-normal bg-white dark:bg-gray-700 dark:text-white",
                     !startDate && "text-muted-foreground"
                   )}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {startDate ? format(startDate, "dd/MM/yyyy") : "Sélectionner une date"}
+                  {startDate ? format(startDate, "dd/MM/yyyy", { locale: dateFnsLocale }) : t.common.selectDate}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
+    <PopoverContent className="w-auto p-0 bg-white dark:bg-gray-800 border dark:border-gray-700">
                 <Calendar
                   mode="single"
                   selected={startDate}
                   onSelect={(d) => d && setStartDate(d)}
                   initialFocus
+                  locale={dateFnsLocale}
+                          className="pointer-events-auto dark:bg-gray-800"
+
                 />
               </PopoverContent>
             </Popover>
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="filter-end-date-tracking" className="text-sm font-medium text-gray-700">Date de fin</label>
+<label htmlFor="filter-end-date-tracking" className="text-sm font-medium text-gray-700 dark:text-gray-300">              {t.common.endDate}
+            </label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
                   id="filter-end-date-tracking"
                   variant={"outline"}
                   className={cn(
-                    "w-full justify-start text-left font-normal bg-white",
+          "w-full justify-start text-left font-normal bg-white dark:bg-gray-700 dark:text-white",
                     !endDate && "text-muted-foreground"
                   )}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {endDate ? format(endDate, "dd/MM/yyyy") : "Sélectionner une date"}
+                  {endDate ? format(endDate, "dd/MM/yyyy", { locale: dateFnsLocale }) : t.common.selectDate}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
+    <PopoverContent className="w-auto p-0 bg-white dark:bg-gray-800 border dark:border-gray-700">
                 <Calendar
                   mode="single"
                   selected={endDate}
                   onSelect={(d) => d && setEndDate(d)}
                   initialFocus
+                  locale={dateFnsLocale}
+                          className="pointer-events-auto dark:bg-gray-800"
+
                 />
               </PopoverContent>
             </Popover>
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="search-input-tracking" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t.common.search}
+            </label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+              <Input
+                id="search-input-tracking"
+                placeholder={t.attendance.searchQueryPlaceholder}
+                className={`pl-9 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white ${language === 'ar' ? 'text-right' : 'text-left'}`}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
         {isFilterComplete ? (
           <>
-            <div className="flex justify-end my-4">
-              <div className="relative w-64">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-                <Input
-                  placeholder="Rechercher un élève..."
-                  className="pl-9 bg-white"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
-
+           
             <div className="mt-4">
               {isLoading ? (
-                <p className="text-center text-gray-500">Chargement des données...</p>
+          <p className="text-center text-gray-500 dark:text-gray-400">{t.common.loading}</p>
               ) : filteredAbsenceRecords.length > 0 ? ( 
                 <>
                   {/* Desktop View */}
                   <div className="hidden md:block overflow-auto max-h-[60vh]">
-                    <Table className="min-w-full bg-white rounded-lg shadow-sm">
-                      <TableHeader className="bg-gray-100 sticky top-0 z-10">
+<Table className="min-w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+  <TableHeader className="bg-gray-100 dark:bg-gray-700 sticky top-0 z-10">
                         <TableRow>
-                          <TableHead className="text-gray-700">Élève</TableHead>
-                          <TableHead className="text-gray-700">Classe</TableHead>
-                          <TableHead className="text-gray-700">Date</TableHead>
-                          <TableHead className="text-gray-700">Matière</TableHead>
-                          <TableHead className="text-gray-700">Statut</TableHead>
-                          <TableHead className="text-gray-700 min-w-[200px]">Justification</TableHead>
-                          <TableHead className="text-gray-700">Actions</TableHead>
-                        </TableRow>
+                    <TableHead className={`text-gray-700 dark:text-white ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {t.common.student}
+                    </TableHead>
+                    <TableHead className={`text-gray-700 dark:text-white ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {t.common.class}
+                    </TableHead>
+                    <TableHead className={`text-gray-700 dark:text-white ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {t.common.date}
+                    </TableHead>
+                    <TableHead className={`text-gray-700 dark:text-white ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {t.common.subject}
+                    </TableHead>
+                    <TableHead className={`text-gray-700 dark:text-white ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {t.common.status.general}
+                    </TableHead>
+                    <TableHead className={`text-gray-700 dark:text-white min-w-[200px] ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {t.attendance.justification}
+                    </TableHead>
+                    <TableHead className={`text-gray-700 dark:text-white ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      {t.common.actions}
+                    </TableHead>
+                  </TableRow>
+
                       </TableHeader>
                       <TableBody>
-                        {filteredAbsenceRecords.map((record) => (
-                          <TableRow key={record.id} className="hover:bg-gray-50">
-                            <TableCell className="font-medium text-gray-800">{record.etudiant_nom}</TableCell>
-                            <TableCell className="text-gray-700">{record.etudiant_classe_nom}</TableCell>
-                            <TableCell className="text-gray-700">{format(new Date(record.date), 'dd/MM/yyyy')}</TableCell>
-                            <TableCell className="text-gray-700">{record.matiere_nom}</TableCell>
-                            <TableCell>
-                              {record.justified ? (
-                                <Badge className="bg-green-100 text-green-700 border-green-300 px-3 py-1 text-xs font-semibold">Justifiée</Badge>
-                              ) : (
-                                <Badge className="bg-red-100 text-red-700 border-red-300 px-3 py-1 text-xs font-semibold">Non justifiée</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                placeholder="Motif de l'absence..."
-                                value={record.justification}
-                                onChange={(e) => handleJustificationChange(record.id, e.target.value)}
-                                disabled={record.justified}
-                                className="w-full text-gray-800 bg-white"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              {!record.justified && (
-                                <Button variant="secondary" size="sm" onClick={() => markAsJustified(record.id)} disabled={!record.justification?.trim()} className="bg-purple-100 text-purple-700 hover:bg-purple-200">
-                                  Justifier
-                                </Button>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
+                  {filteredAbsenceRecords.map((record) => (
+                    <TableRow key={record.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <TableCell className={`font-medium text-gray-800 dark:text-gray-100 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                        {record.etudiant_nom}
+                      </TableCell>
+                      <TableCell className={`text-gray-700 dark:text-gray-300 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                        {record.etudiant_classe_nom}
+                      </TableCell>
+                      <TableCell className={`text-gray-700 dark:text-gray-300 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                        {record.date ? format(new Date(record.date.replace(/-/g, '/')), 'dd/MM/yyyy', { locale: dateFnsLocale }) : '-'}
+                      </TableCell>
+                      <TableCell className={`text-gray-700 dark:text-gray-300 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                        {record.matiere_nom}
+                      </TableCell>
+                      <TableCell className={language === 'ar' ? 'text-right' : 'text-left'}>
+                        {record.justified ? (
+                          <Badge className="bg-green-100 text-green-700 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700 px-3 py-1 text-xs font-semibold">
+                            {t.attendance.justified}
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-red-100 text-red-700 border-red-300 dark:bg-red-900 dark:text-red-200 dark:border-red-700 px-3 py-1 text-xs font-semibold">
+                            {t.attendance.notJustified}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          placeholder={t.attendance.absenceReasonPlaceholder}
+                          value={record.justification}
+                          onChange={(e) => handleJustificationChange(record.id, e.target.value)}
+                          disabled={record.justified}
+                          className={`w-full text-gray-800 dark:text-white bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 ${language === 'ar' ? 'text-right' : 'text-left'}`}
+                        />
+                      </TableCell>
+                      <TableCell className={language === 'ar' ? 'text-right' : 'text-left'}>
+                        {!record.justified && (
+                          <Button 
+                            variant="secondary" 
+                            size="sm" 
+                            onClick={() => markAsJustified(record.id)} 
+                            disabled={!record.justification?.trim()} 
+                            className="bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900 dark:text-purple-200 dark:hover:bg-purple-800"
+                          >
+                            {t.attendance.justify}
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
                     </Table>
                   </div>
+                  
                   {/* Mobile View */}
                   <div className="block md:hidden space-y-4">
                     {filteredAbsenceRecords.map((record) => (
-                      <Card key={record.id} className="p-4 bg-white shadow-sm border">
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <p className="font-bold text-base text-gray-800">{record.etudiant_nom}</p>
-                            <p className="text-sm text-gray-500">{record.etudiant_classe_nom}</p>
-                          </div>
-                          {record.justified ? (
-                            <Badge className="bg-green-100 text-green-800 border-green-200">Justifiée</Badge>
-                          ) : (
-                            <Badge className="bg-red-100 text-red-800 border-red-200">Non justifiée</Badge>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-600 mb-4 border-t pt-3">
-                          <p><strong>Date:</strong></p><p>{format(new Date(record.date), 'dd/MM/yyyy')}</p>
-                          <p><strong>Matière:</strong></p><p>{record.matiere_nom}</p>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-gray-700">Motif de la justification :</label>
-                          <Input placeholder={record.justified ? "Absence déjà justifiée" : "Saisir le motif..."} value={record.justification} onChange={(e) => handleJustificationChange(record.id, e.target.value)} disabled={record.justified} className="w-full text-sm" />
-                          {!record.justified && (
-                            <Button size="sm" onClick={() => markAsJustified(record.id)} disabled={!record.justification?.trim()} className="w-full bg-purple-600 text-white hover:bg-purple-700">
-                              Justifier l'absence
-                            </Button>
-                          )}
-                        </div>
-                      </Card>
+                 <Card key={record.id} className={`p-4 bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700 ${language === 'ar' ? 'text-right' : 'text-left'}`}>  <div className="flex justify-between items-start mb-3">
+    <div>
+       <p className="font-bold text-base text-gray-800 dark:text-white">{record.etudiant_nom}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{record.etudiant_classe_nom}</p>
+   </div>
+                    {record.justified ? (
+                      <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                        {t.attendance.justified}
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                        {t.attendance.notJustified}
+                      </Badge>
+                    )}
+                  </div>
+  
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-600 dark:text-gray-300 mb-4 border-t border-gray-200 dark:border-gray-700 pt-3">
+    <p><strong>{t.common.date}:</strong></p>
+    <p>{record.date ? format(new Date(record.date), 'dd/MM/yyyy', { locale: dateFnsLocale }) : '-'}</p>
+    <p><strong>{t.common.subject}:</strong></p>
+    <p>{record.matiere_nom}</p>
+  </div>
+  
+  <div className="space-y-2">
+    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+      {t.attendance.justification}:
+    </label>
+    <Input 
+      placeholder={record.justified ? t.attendance.alreadyJustified : t.attendance.enterReason}
+      value={record.justification} 
+      onChange={(e) => handleJustificationChange(record.id, e.target.value)} 
+      disabled={record.justified} 
+      className="w-full text-sm bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600"
+    />
+    {!record.justified && (
+      <Button 
+        size="sm" 
+        onClick={() => markAsJustified(record.id)} 
+        disabled={!record.justification?.trim()} 
+        className="w-full bg-purple-600 dark:bg-purple-700 text-white hover:bg-purple-700 dark:hover:bg-purple-800"
+      >
+        {t.attendance.justifyAbsence}
+      </Button>
+    )}
+  </div>
+</Card>
                     ))}
                   </div>
                 </>
               ) : (
-                <div className="bg-white rounded-lg p-8 text-center shadow-inner border border-gray-200">
-                  <p className="text-gray-600 text-lg font-medium">
-                    Aucune absence trouvée pour les critères de recherche et l'année scolaire {anneeScolaireSelectionnee}.
-                  </p>
-                </div>
+               <div className="bg-white dark:bg-gray-800 rounded-lg p-8 text-center shadow-inner border border-gray-200 dark:border-gray-700">
+  <p className="text-gray-600 dark:text-gray-300 text-lg font-medium">
+    {t.attendance.noAbsenceFound.replace('{year}', anneeScolaireSelectionnee)}
+  </p>
+</div>
               )}
             </div>
           </>
         ) : (
-          <div className="bg-white rounded-lg p-8 text-center shadow-inner border border-gray-200">
-            <p className="text-gray-600 text-lg font-medium">
-              Veuillez <span className="font-bold text-purple-600">sélectionner une classe, une date de début et une date de fin</span> pour visualiser les absences.
+         
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-8 text-center shadow-inner border border-gray-200 dark:border-gray-700">
+            <p className="text-gray-600 dark:text-gray-300 text-lg font-medium">
+              {t.attendance.pleaseSelectFilters}
             </p>
           </div>
         )}
@@ -995,3 +1192,5 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques }: 
     </Card>
   );
 }
+
+export default AttendanceManagement;

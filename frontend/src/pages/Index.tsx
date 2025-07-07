@@ -16,9 +16,10 @@ const Index = () => {
   return (
     <div className="flex h-screen bg-gray-100">
       <Sidebar 
-        activeSection={activeSection} 
-        onSectionChange={setActiveSection} 
-      />
+        activeSection={activeSection}
+        onSectionChange={setActiveSection} isSidebarOpen={false} onCloseSidebar={function (): void {
+          throw new Error('Function not implemented.');
+        } } isMobile={false}      />
       <MainContent activeSection={activeSection} onSectionChange={setActiveSection} />
 
     </div>

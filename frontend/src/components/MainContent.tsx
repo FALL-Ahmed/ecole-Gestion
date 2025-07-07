@@ -15,6 +15,7 @@ import { ReportManagement } from './admin/ReportManagement';
 import { Statistics } from './admin/Statistics';
 import { Settings } from './admin/Settings';
 import { ChapterProgressMonitoring } from './admin/ChapterProgressMonitoring';
+import { AuditTrail } from './admin/AuditTrail';
 
 // Prof
 import { CourseMaterials } from './professor/CourseMaterials';
@@ -60,6 +61,7 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
       case 'attendance': return <AttendanceManagement />;
       case 'reports': return <ReportManagement />;
       case 'stats': return <Statistics />;
+      case 'historique': return <AuditTrail />;
       case 'settings': return <Settings />;
       case 'chapter-monitoring': return <ChapterProgressMonitoring />;
       default: return <Dashboard />;

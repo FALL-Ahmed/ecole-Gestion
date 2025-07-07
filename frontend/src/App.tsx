@@ -5,13 +5,14 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-
+import 'flag-icons/css/flag-icons.min.css';
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { MainContent } from "@/components/MainContent";
 import { LoginForm } from "@/components/LoginForm";
 import { useAuth } from "@/contexts/AuthContext";
 import { LanguageProvider, useLanguage } from "@/contexts/LanguageContext";
+import HomePage from "@/components/HomePage";
 
 // --- ROUTE GUARDS ---
 
@@ -24,7 +25,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
   if (isLoading) return <div className="p-4 text-center">Chargement...</div>;
-  return !isAuthenticated ? <>{children}</> : <Navigate to="/" replace />;
+  return !isAuthenticated ? <>{children}</> : <Navigate to="/dashboard" replace />;
 }
 
 // --- LAYOUT ---
@@ -63,8 +64,8 @@ const AppLayout = ({
         className={`flex-1 overflow-auto pt-[80px] transition-all duration-300 ${
           isSidebarOpen && !isMobile
             ? isRTL
-              ? "pr-64"  // padding-right quand sidebar à droite (arabe)
-              : "pl-64"  // padding-left quand sidebar à gauche (fr)
+              ? "pr-64"
+              : "pl-64"
             : "p-0"
         }`}
       >
@@ -105,6 +106,10 @@ const App = () => {
     <LanguageProvider initialLanguage="fr">
       <BrowserRouter>
         <Routes>
+          {/* Page d'accueil publique */}
+          <Route path="/" element={<HomePage />} />
+
+          {/* Page de login protégée par PublicRoute */}
           <Route
             path="/login"
             element={
@@ -114,6 +119,7 @@ const App = () => {
             }
           />
 
+          {/* Toutes les autres routes privées */}
           <Route
             path="/*"
             element={
@@ -135,7 +141,8 @@ const App = () => {
             }
           />
 
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          {/* Catch-all : redirection vers l'accueil */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </LanguageProvider>

@@ -1,11 +1,17 @@
-// src/users/users.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole } from './user.entity';
-import { Classe } from '../classe/classe.entity'; 
-import { anneescolaire } from '../annee-academique/annee-academique.entity'; 
+import { Classe } from '../classe/classe.entity';
+import { anneescolaire } from '../annee-academique/annee-academique.entity';
+import { UpdateUserDto } from './dto/update-user.dto'; // à adapter selon ta structure
 
 @Injectable()
 export class UsersService {
@@ -21,7 +27,8 @@ export class UsersService {
   ) {}
 
   private generateRandomPassword(length = 8): string {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=';
+    const chars =
+      'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=';
     let password = '';
     for (let i = 0; i < length; i++) {
       const randomIndex = Math.floor(Math.random() * chars.length);
@@ -30,15 +37,24 @@ export class UsersService {
     return password;
   }
 
-  async createUser(data: Partial<User>): Promise<{ user: User; motDePasse: string }> {
-    const passwordToUse = data.motDePasse ?? this.generateRandomPassword(8);
-    // const hashedPassword = await bcrypt.hash(passwordToUse, 10); // Uncomment when ready to hash passwords
+  async createUser(
+    data: Partial<User>,
+  ): Promise<{ user: Partial<User>; motDePasse: string }> {
+    const existingUser = await this.userRepository.findOne({
+      where: { email: data.email?.trim().toLowerCase() },
+    });
+    if (existingUser) {
+      throw new ConflictException('Un utilisateur avec cet email existe déjà.');
+    }
+
+    const plainPassword = data.motDePasse ?? this.generateRandomPassword();
+    const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
     const newUser = this.userRepository.create({
       nom: data.nom,
       prenom: data.prenom,
       email: data.email?.trim().toLowerCase(),
-      motDePasse: passwordToUse, // mot de passe en clair (pas sécurisé, à changer !)
+      motDePasse: hashedPassword,
       role: data.role ?? UserRole.ETUDIANT,
       genre: data.genre ?? null,
       adresse: data.adresse ?? null,
@@ -49,18 +65,20 @@ export class UsersService {
     });
 
     const savedUser = await this.userRepository.save(newUser);
+    const { motDePasse, ...userWithoutPassword } = savedUser;
 
     return {
-      user: savedUser,
-      motDePasse: passwordToUse, // Attention: ne retournez pas le mot de passe en clair en production
+      user: userWithoutPassword,
+      motDePasse: plainPassword,
     };
   }
 
-  async findByEmail(email: string) {
-    return this.userRepository.findOne({ where: { email } });
+  async findByEmail(email: string): Promise<User | null> {
+    return this.userRepository.findOne({
+      where: { email: email.toLowerCase().trim() },
+    });
   }
 
-  // This method is already present and correct!
   async findById(id: number): Promise<User> {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
@@ -69,8 +87,9 @@ export class UsersService {
     return user;
   }
 
-  async findAll(): Promise<User[]> {
-    return this.userRepository.find();
+  async findAll(): Promise<Partial<User>[]> {
+    const users = await this.userRepository.find();
+    return users.map(({ motDePasse, ...user }) => user);
   }
 
   async deleteUser(id: number): Promise<void> {
@@ -79,15 +98,61 @@ export class UsersService {
       throw new NotFoundException('Utilisateur non trouvé pour suppression');
     }
   }
+  
+  async updatePasswordWithoutOld(userId: number, newHashedPassword: string): Promise<void> {
+  const user = await this.findById(userId);
+  user.motDePasse = newHashedPassword;
+  await this.userRepository.save(user);
+}
 
-  async updateUser(id: number, data: Partial<User>): Promise<User> {
-    const user = await this.findById(id); // Use findById to ensure the user exists
-    if (data.motDePasse) {
-      data.motDePasse = await bcrypt.hash(data.motDePasse, 10);
+
+  async update(id: number, updateUserDto: UpdateUserDto): Promise<Partial<User>> {
+    const user = await this.findById(id);
+
+    // Gestion changement mot de passe
+    if (updateUserDto.nouveauMotDePasse) {
+      if (!updateUserDto.ancienMotDePasse) {
+        throw new BadRequestException(
+          "L'ancien mot de passe est requis pour définir un nouveau mot de passe.",
+        );
+      }
+      await this.changePassword(
+        id,
+        updateUserDto.ancienMotDePasse,
+        updateUserDto.nouveauMotDePasse,
+      );
     }
 
-    // Object.assign updates the existing user object with new data
-    Object.assign(user, data); 
-    return this.userRepository.save(user);
+    // On ne garde pas les champs de mot de passe pour la mise à jour générale
+    const { ancienMotDePasse, nouveauMotDePasse, ...otherProfileUpdates } =
+      updateUserDto;
+
+    if (Object.keys(otherProfileUpdates).length > 0) {
+      Object.assign(user, otherProfileUpdates);
+      await this.userRepository.save(user);
+    }
+
+    const { motDePasse, ...result } = user;
+    return result;
+  }
+
+  private async changePassword(
+    userId: number,
+    ancienMotDePasse: string,
+    nouveauMotDePasse: string,
+  ): Promise<void> {
+    const user = await this.findById(userId);
+
+    const isPasswordMatching = await bcrypt.compare(
+      ancienMotDePasse,
+      user.motDePasse,
+    );
+    if (!isPasswordMatching) {
+      throw new UnauthorizedException("L'ancien mot de passe est incorrect.");
+    }
+
+    const hashedPassword = await bcrypt.hash(nouveauMotDePasse, 10);
+
+    await this.userRepository.update(userId, { motDePasse: hashedPassword });
   }
 }

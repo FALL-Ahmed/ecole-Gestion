@@ -17,25 +17,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { BookOpen, FileDown, Printer, Save,  Info, AlertCircle } from 'lucide-react';
+import { BookOpen, FileDown, Printer, Save, Info, AlertCircle } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-
+import { useLanguage } from '@/contexts/LanguageContext';
 
 // Define types for API data
 interface AnneeAcademique {
   id: number;
   libelle: string;
+  date_debut?: string;
+  date_fin?: string;
 }
-
-// Helper function to format academic year display
-const formatAcademicYearDisplay = (annee: { libelle: string; date_debut?: string; date_fin?: string }): string => {
-  if (!annee || !annee.date_debut || !annee.date_fin) {
-    return annee.libelle || "Année inconnue";
-  }
-  const startYear = new Date(annee.date_debut).getFullYear();
-  const endYear = new Date(annee.date_fin).getFullYear();
-  return annee.libelle && annee.libelle.includes(String(startYear)) && annee.libelle.includes(String(endYear)) ? annee.libelle : `${annee.libelle || ''} (${startYear}-${endYear})`.trim();
-};
 
 interface Classe {
   id: number;
@@ -74,14 +66,8 @@ interface Note {
   note: number;
 }
 
-interface TempNoteData {
-  eleveId: number;
-  evaluationId: number;
-  noteValue: number | '';
-}
-
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const API_BASE_URL = `${API_URL}/api`; // Re-add this line as it was removed from the top-level
+const API_BASE_URL = `${API_URL}/api`;
 
 const fetchAnneesAcademiques = async (): Promise<AnneeAcademique[]> => {
   try {
@@ -112,7 +98,14 @@ const fetchMatieresByClasse = async (classeId: number): Promise<Matiere[]> => {
     const response = await fetch(`${API_BASE_URL}/coefficientclasse?classeId=${classeId}`);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     const coefficientClasses = await response.json();
-    return coefficientClasses.map(cc => cc.matiere);
+    // Utiliser une Map pour dédoublonner les matières basées sur leur ID
+    const matieresMap = new Map<number, Matiere>();
+    coefficientClasses.forEach((cc: any) => {
+      if (cc.matiere && cc.matiere.id) {
+        matieresMap.set(cc.matiere.id, cc.matiere);
+      }
+    });
+    return Array.from(matieresMap.values());
   } catch (error) {
     console.error(`Error fetching subjects for class ${classeId}:`, error);
     toast({ title: "Erreur de chargement", description: "Impossible de charger les matières pour la classe sélectionnée.", variant: "destructive" });
@@ -156,6 +149,7 @@ const fetchEvaluations = async (classeId: number, matiereId: number, trimestreNu
     return [];
   }
 };
+
 const fetchNote = async (evaluationId: number, eleveId: number): Promise<Note | null> => {
   try {
     const response = await fetch(`${API_BASE_URL}/notes?evaluation_id=${evaluationId}&etudiant_id=${eleveId}`);
@@ -185,6 +179,7 @@ const saveNote = async (noteData: Note): Promise<Note> => {
 };
 
 export function GradeManagement() {
+  const { t, language } = useLanguage();
   const [anneesAcademiques, setAnneesAcademiques] = useState<AnneeAcademique[]>([]);
   const [selectedAnneeAcademiqueId, setSelectedAnneeAcademiqueId] = useState<string>('');
   const [classes, setClasses] = useState<Classe[]>([]);
@@ -197,58 +192,62 @@ export function GradeManagement() {
   const [gradeData, setGradeData] = useState<{ [eleveId: number]: { [evaluationId: number]: number | '' } }>({});
   const [isLoading, setIsLoading] = useState(false);
 
-  const terms = ['Trimestre 1', 'Trimestre 2', 'Trimestre 3'];
-  const trimestreMap = { 'Trimestre 1': 4, 'Trimestre 2': 5, 'Trimestre 3': 6 };
+  const terms = [t.gradeManagement.term1, t.gradeManagement.term2, t.gradeManagement.term3];
+  const trimestreMap = { 
+    [t.gradeManagement.term1]: 4, 
+    [t.gradeManagement.term2]: 5, 
+    [t.gradeManagement.term3]: 6 
+  };
+  
   const termEvaluationTypeMap = {
-    'Trimestre 1': { devoir1: 'Devoir 1', devoir2: 'Devoir 2', composition: 'Composition 1' },
-    'Trimestre 2': { devoir1: 'Devoir 3', devoir2: 'Devoir 4', composition: 'Composition 2' },
-    'Trimestre 3': { devoir1: 'Devoir 5', devoir2: 'Devoir 6', composition: 'Composition 3' },
+  [t.gradeManagement.term1]: { 
+    devoir1: "Devoir 1", // Gardez les valeurs françaises ici
+    devoir2: "Devoir 2", 
+    composition: "Composition 1" 
+  },
+  [t.gradeManagement.term2]: { 
+    devoir1: "Devoir 3", 
+    devoir2: "Devoir 4", 
+    composition: "Composition 2" 
+  },
+  [t.gradeManagement.term3]: { 
+    devoir1: "Devoir 5", 
+    devoir2: "Devoir 6", 
+    composition: "Composition 3" 
+  },
+};
+  const formatAcademicYearDisplay = (annee: { libelle: string; date_debut?: string; date_fin?: string }): string => {
+    if (!annee || !annee.date_debut || !annee.date_fin) {
+      return annee.libelle || t.common.unknownYear;
+    }
+    const startYear = new Date(annee.date_debut).getFullYear();
+    const endYear = new Date(annee.date_fin).getFullYear();
+    return annee.libelle && annee.libelle.includes(String(startYear)) && annee.libelle.includes(String(endYear)) 
+      ? annee.libelle 
+      : `${annee.libelle || ''} (${startYear}-${endYear})`.trim();
   };
 
   const getEvaluationsForDisplay = useCallback(() => {
-    // Retiré les console.log pour le code final, mais ils sont utiles pour le débogage
-    // console.log("--- Début getEvaluationsForDisplay ---");
-    // console.log("selectedTerm:", selectedTerm);
-    // console.log("allEvaluations:", allEvaluations);
+  if (!selectedTerm || allEvaluations.length === 0) {
+    return [];
+  }
 
-    if (!selectedTerm || allEvaluations.length === 0) {
-      // console.log("Conditions initiales non remplies. Retourne tableau vide.");
-      return [];
-    }
+  const typeMapping = termEvaluationTypeMap[selectedTerm];
+  if (!typeMapping) {
+    return [];
+  }
 
-    const typeMapping = termEvaluationTypeMap[selectedTerm];
-    // console.log("typeMapping pour selectedTerm:", typeMapping);
+  const displayEvaluations = [];
+  const devoir1Eval = allEvaluations.find(e => e.type === typeMapping.devoir1);
+  const devoir2Eval = allEvaluations.find(e => e.type === typeMapping.devoir2);
+  const compositionEval = allEvaluations.find(e => e.type === typeMapping.composition);
 
-    if (!typeMapping) {
-      // console.log("Aucun typeMapping trouvé pour selectedTerm.");
-      return [];
-    }
+  if (devoir1Eval) displayEvaluations.push({...devoir1Eval, displayType: t.gradeManagement.test1});
+  if (devoir2Eval) displayEvaluations.push({...devoir2Eval, displayType: t.gradeManagement.test2});
+  if (compositionEval) displayEvaluations.push({...compositionEval, displayType: t.gradeManagement.exam1});
 
-    const displayEvaluations = [];
-    const devoir1Eval = allEvaluations.find(e => {
-      const match = e.type === typeMapping.devoir1;
-      // if (match) console.log("Trouvé Devoir 1:", e);
-      return match;
-    });
-    const devoir2Eval = allEvaluations.find(e => {
-      const match = e.type === typeMapping.devoir2;
-      // if (match) console.log("Trouvé Devoir 2:", e);
-      return match;
-    });
-    const compositionEval = allEvaluations.find(e => {
-      const match = e.type === typeMapping.composition;
-      // if (match) console.log("Trouvé Composition:", e);
-      return match;
-    });
-
-    if (devoir1Eval) displayEvaluations.push(devoir1Eval);
-    if (devoir2Eval) displayEvaluations.push(devoir2Eval);
-    if (compositionEval) displayEvaluations.push(compositionEval);
-
-    // console.log("Evaluations à afficher:", displayEvaluations);
-    // console.log("--- Fin getEvaluationsForDisplay ---");
-    return displayEvaluations;
-  }, [allEvaluations, selectedTerm]);
+  return displayEvaluations;
+}, [allEvaluations, selectedTerm, t]);
 
   useEffect(() => {
     const getAnnees = async () => {
@@ -261,7 +260,6 @@ export function GradeManagement() {
   useEffect(() => {
     const anneeId = parseInt(selectedAnneeAcademiqueId);
     if (anneeId) {
-      console.log('Chargement des classes pour l\'année scolaire:', anneeId);
       fetchClasses(anneeId).then(data => {
         const filteredClasses = data.filter(cls => cls.annee_scolaire_id === anneeId);
         setClasses(filteredClasses);
@@ -274,7 +272,6 @@ export function GradeManagement() {
         setGradeData({});
       });
     } else {
-      console.log('Aucune année scolaire sélectionnée');
       setClasses([]);
       setSelectedClassId('');
       setMatieres([]);
@@ -289,16 +286,12 @@ export function GradeManagement() {
   useEffect(() => {
     const classIdNum = parseInt(selectedClassId);
     const anneeAcademiqueIdNum = parseInt(selectedAnneeAcademiqueId);
-    console.log('Changement de classe ou d\'année scolaire:', classIdNum, anneeAcademiqueIdNum);
 
     if (classIdNum && anneeAcademiqueIdNum) {
-      console.log('Chargement des matières et des élèves pour la classe:', classIdNum, 'et l\'année scolaire:', anneeAcademiqueIdNum);
       Promise.all([
         fetchMatieresByClasse(classIdNum),
         fetchElevesByClasse(classIdNum, anneeAcademiqueIdNum)
       ]).then(([matieresData, elevesData]) => {
-        console.log('Matieres chargées:', matieresData);
-        console.log('Élèves chargés:', elevesData);
         setMatieres(matieresData);
         setEleves(elevesData);
         setSelectedMatiereId('');
@@ -307,7 +300,6 @@ export function GradeManagement() {
         setGradeData({});
       });
     } else {
-      console.log('Aucune classe ou année scolaire sélectionnée');
       setMatieres([]);
       setSelectedMatiereId('');
       setSelectedTerm('');
@@ -323,15 +315,11 @@ export function GradeManagement() {
     const anneeAcademiqueIdNum = parseInt(selectedAnneeAcademiqueId);
     const trimestreNum = trimestreMap[selectedTerm];
 
-    console.log('Chargement des évaluations et des notes pour la classe:', classIdNum, 'la matière:', matiereIdNum, 'le trimestre:', trimestreNum, 'et l\'année scolaire:', anneeAcademiqueIdNum);
-
     if (classIdNum && matiereIdNum && selectedTerm && anneeAcademiqueIdNum && trimestreNum) {
       const loadEvaluationsAndGrades = async () => {
         setIsLoading(true);
         try {
-          console.log('Chargement des évaluations...');
           const evals = await fetchEvaluations(classIdNum, matiereIdNum, trimestreNum, anneeAcademiqueIdNum);
-          console.log('Évaluations chargées:', evals);
           setAllEvaluations(evals);
 
           const initialGradeData = {};
@@ -340,16 +328,13 @@ export function GradeManagement() {
           );
 
           if (evaluationsToLoadNotesFor.length > 0) {
-            console.log('Chargement des notes pour les évaluations:', evaluationsToLoadNotesFor);
             const notePromises = eleves.flatMap(eleve =>
               evaluationsToLoadNotesFor.map(async evaluation => {
                 const note = await fetchNote(evaluation.id, eleve.id);
-                console.log(`Note chargée pour l'élève ${eleve.id} et l'évaluation ${evaluation.id}:`, note);
                 return { eleveId: eleve.id, evaluationId: evaluation.id, noteValue: note ? note.note : '' };
               })
             );
             const fetchedNotes = await Promise.all(notePromises);
-            console.log('Notes chargées:', fetchedNotes);
             fetchedNotes.forEach(item => {
               if (!initialGradeData[item.eleveId]) {
                 initialGradeData[item.eleveId] = {};
@@ -357,13 +342,12 @@ export function GradeManagement() {
               initialGradeData[item.eleveId][item.evaluationId] = item.noteValue;
             });
           }
-          console.log('Données des notes initialisées:', initialGradeData);
           setGradeData(initialGradeData);
         } catch (error) {
-          console.error("Échec du chargement des évaluations ou des notes:", error);
+          console.error("Failed to load evaluations or grades:", error);
           toast({
-            title: "Erreur",
-            description: "Impossible de charger les notes. Veuillez réessayer.",
+            title: t.common.error,
+            description: t.gradeManagement.errorLoadingGrades,
             variant: "destructive",
           });
         } finally {
@@ -372,23 +356,25 @@ export function GradeManagement() {
       };
       loadEvaluationsAndGrades();
     } else {
-      console.log('Aucune classe, matière, trimestre ou année scolaire sélectionnée');
       setAllEvaluations([]);
       setGradeData({});
     }
-  }, [selectedClassId, selectedMatiereId, selectedTerm, selectedAnneeAcademiqueId, eleves]);
-
-
-
+  }, [selectedClassId, selectedMatiereId, selectedTerm, selectedAnneeAcademiqueId, eleves, t]);
 
   const handleGradeChange = (eleveId: number, evaluationId: number, value: string) => {
     const numValue = parseFloat(value);
     if (value === '') {
-      setGradeData(prevData => ({ ...prevData, [eleveId]: { ...prevData[eleveId], [evaluationId]: '' } }));
+setGradeData(prevData => ({
+  ...prevData,
+  [eleveId]: {
+    ...prevData[eleveId],
+    [evaluationId]: ''
+  }
+}));
       return;
     }
     if (isNaN(numValue) || numValue < 0 || numValue > 20) {
-      toast({ title: "Saisie invalide", description: "Veuillez entrer une note entre 0 et 20.", variant: "destructive" });
+      toast({ title: t.common.error, description: t.gradeManagement.invalidGrade, variant: "destructive" });
       return;
     }
     setGradeData(prevData => ({ ...prevData, [eleveId]: { ...prevData[eleveId], [evaluationId]: numValue } }));
@@ -416,49 +402,49 @@ export function GradeManagement() {
           await saveNote(noteToSave);
         }
       }));
-      toast({ title: "Notes sauvegardées", description: "Toutes les notes ont été enregistrées avec succès." });
+      toast({ title: t.common.success, description: t.gradeManagement.successSave });
     } catch (error) {
-      toast({ title: "Erreur de sauvegarde", description: "Une erreur est survenue lors de la sauvegarde des notes.", variant: "destructive" });
+      toast({ title: t.common.error, description: t.gradeManagement.errorSave, variant: "destructive" });
     }
   };
 
-  const generateReports = () => toast({ title: "Génération des bulletins", description: "Les bulletins sont en cours de génération." });
-  const printGrades = () => toast({ title: "Impression", description: "Préparation de l'impression des notes..." });
 
   const isFormComplete = selectedAnneeAcademiqueId && selectedClassId && selectedTerm && selectedMatiereId;
-  const currentAnneeAcademique = anneesAcademiques.find(a => a.id.toString() === selectedAnneeAcademiqueId)?.libelle;
+  const currentAnneeAcademique = anneesAcademiques.find(a => a.id.toString() === selectedAnneeAcademiqueId);
   const currentClasse = classes.find(c => c.id.toString() === selectedClassId)?.nom;
   const currentMatiere = matieres.find(m => m.id.toString() === selectedMatiereId)?.nom;
   const evaluationsToDisplay = getEvaluationsForDisplay();
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Gestion des Notes</h1>
+    <div className="p-6" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+      <h1 className="text-2xl font-bold mb-6">{t.gradeManagement.title}</h1>
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Sélection</CardTitle>
-          <CardDescription>Choisissez l'année scolaire, la classe, le trimestre et la matière</CardDescription>
+          <CardTitle>{t.gradeManagement.selectionTitle}</CardTitle>
+          <CardDescription>{t.gradeManagement.selectionDescription}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-2">
-              <label htmlFor="annee-select" className="text-sm font-medium">Année Scolaire</label>
+              <label htmlFor="annee-select" className="text-sm font-medium">{t.common.schoolYear}</label>
               <Select onValueChange={setSelectedAnneeAcademiqueId} value={selectedAnneeAcademiqueId}>
-                <SelectTrigger id="annee-select"> 
-                  <SelectValue placeholder="Sélectionner une année" />
+                <SelectTrigger id="annee-select">
+                  <SelectValue placeholder={t.common.selectAYear} />
                 </SelectTrigger>
                 <SelectContent>
                   {anneesAcademiques.map((annee) => (
-                    <SelectItem key={annee.id} value={annee.id.toString()}>{annee.libelle}</SelectItem>
+                    <SelectItem key={annee.id} value={annee.id.toString()}>
+                      {formatAcademicYearDisplay(annee)}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <label htmlFor="classe-select" className="text-sm font-medium">Classe</label>
+              <label htmlFor="classe-select" className="text-sm font-medium">{t.common.class}</label>
               <Select onValueChange={setSelectedClassId} value={selectedClassId} disabled={!selectedAnneeAcademiqueId || classes.length === 0}>
                 <SelectTrigger id="classe-select">
-                  <SelectValue placeholder="Sélectionner une classe" />
+                  <SelectValue placeholder={t.common.selectAClass} />
                 </SelectTrigger>
                 <SelectContent>
                   {classes.map((cls) => (
@@ -468,10 +454,10 @@ export function GradeManagement() {
               </Select>
             </div>
             <div className="space-y-2">
-              <label htmlFor="term-select" className="text-sm font-medium">Trimestre</label>
+              <label htmlFor="term-select" className="text-sm font-medium">{t.common.trimester}</label>
               <Select onValueChange={setSelectedTerm} value={selectedTerm} disabled={!selectedClassId}>
                 <SelectTrigger id="term-select">
-                  <SelectValue placeholder="Sélectionner un trimestre" />
+                  <SelectValue placeholder={t.common.selectATrimester} />
                 </SelectTrigger>
                 <SelectContent>
                   {terms.map((term) => (
@@ -481,10 +467,10 @@ export function GradeManagement() {
               </Select>
             </div>
             <div className="space-y-2">
-              <label htmlFor="matiere-select" className="text-sm font-medium">Matière</label>
+              <label htmlFor="matiere-select" className="text-sm font-medium">{t.common.subject}</label>
               <Select onValueChange={setSelectedMatiereId} value={selectedMatiereId} disabled={!selectedTerm || matieres.length === 0}>
                 <SelectTrigger id="matiere-select">
-                  <SelectValue placeholder="Sélectionner une matière" />
+                  <SelectValue placeholder={t.common.selectASubject} />
                 </SelectTrigger>
                 <SelectContent>
                   {matieres.map((matiere) => (
@@ -499,162 +485,162 @@ export function GradeManagement() {
 
       {isFormComplete ? (
         <Card>
-         <CardHeader className="group px-6 py-5 bg-white/50 backdrop-blur-sm border-b border-gray-200 hover:bg-gray-50/80 transition-colors duration-200">
+          <CardHeader className="group px-6 py-5 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50/80 dark:hover:bg-gray-700/80 transition-colors duration-200">
   <div className="flex flex-col gap-3">
-    {/* Ligne supérieure avec titre et badge */}
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-3">
-        <BookOpen className="w-6 h-6 text-indigo-600 group-hover:text-indigo-700 transition-colors" />
-        <h3 className="text-xl font-semibold text-gray-900">
-          Les notes de <span className="text-indigo-600 font-bold">{currentMatiere}</span>
-          <span className="mx-1.5 text-gray-400">•</span>
-          <span className="font-medium text-gray-700">{currentClasse}</span>
+        <BookOpen className="w-6 h-6 text-indigo-600 dark:text-indigo-400 group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors" />
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+          {t.gradeManagement.gradesFor} <span className="text-indigo-600 dark:text-indigo-400 font-bold">{currentMatiere}</span>
+          <span className="mx-1.5 text-gray-400 dark:text-gray-500">•</span>
+          <span className="font-medium text-gray-700 dark:text-gray-300">{currentClasse}</span>
         </h3>
       </div>
-      
       <div className="flex items-center gap-2">
-        <span className="text-sm text-gray-500">{selectedTerm}</span>
-        <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
-          {currentAnneeAcademique}
+        <span className="text-sm text-gray-500 dark:text-gray-400">{selectedTerm}</span>
+        <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-700">
+          {currentAnneeAcademique ? formatAcademicYearDisplay(currentAnneeAcademique) : ''}
         </span>
       </div>
-    </div>
-
-    {/* Ligne inférieure avec description */}
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      
-      
-      
     </div>
   </div>
 </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="text-center text-gray-500 py-8">Chargement des évaluations et des notes...</div>
+              <div className="text-center text-gray-500 py-8">{t.common.loading}</div>
             ) : eleves.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">Aucun élève trouvé pour cette classe ou cette année scolaire.</div>
+              <div className="text-center text-gray-500 py-8">{t.gradeManagement.noStudents}</div>
+            ) : evaluationsToDisplay.length === 0 ? (
+              <div className="text-center text-gray-500 py-8">
+                {t.gradeManagement.noEvaluations}
+              </div>
             ) : (
-              // This is the crucial part that ensures the correct message is shown
-              // only after loading is complete and students are present.
-              evaluationsToDisplay.length === 0 ? (
-                <div className="text-center text-gray-500 py-8">
-                  Aucune évaluation configurée pour cette matière et ce trimestre correspondant aux types attendus (Devoir, Composition).
+              <>
+                <div className="hidden lg:block overflow-x-auto">
+                  <Table className="min-w-full">
+  <TableHeader className="bg-gray-50 dark:bg-gray-800">
+    <TableRow>
+      <TableHead className="min-w-[150px] px-4 py-3 font-semibold text-left sticky left-0 bg-gray-50 dark:bg-gray-800 z-10">
+        {t.common.student}
+      </TableHead>
+      {evaluationsToDisplay.map((evalItem) => (
+        <TableHead 
+          key={evalItem.id} 
+          className="min-w-[100px] px-4 py-3 font-semibold text-center dark:text-gray-200"
+          title={evalItem.displayType}
+        >
+          <div className="flex flex-col items-center">
+            <span>{evalItem.displayType}</span>
+            {evalItem.date_eval && (
+              <span className="text-xs font-normal text-gray-500 dark:text-gray-400">
+                {new Date(evalItem.date_eval).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+        </TableHead>
+      ))}
+    </TableRow>
+  </TableHeader>
+  <TableBody className="divide-y divide-gray-200 dark:divide-gray-700">
+    {eleves.map((eleve) => (
+      <TableRow key={eleve.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+        <TableCell className="font-medium px-4 py-3 sticky left-0 bg-white dark:bg-gray-900 z-10 whitespace-nowrap dark:text-gray-200">
+          {language === 'ar' ? `${eleve.prenom} ${eleve.nom}` : `${eleve.nom} ${eleve.prenom}`}
+        </TableCell>
+        {evaluationsToDisplay.map(evalItem => {
+          const gradeValue = gradeData[eleve.id]?.[evalItem.id] ?? '';
+          const isInvalid = gradeValue && (gradeValue < 0 || gradeValue > 20);
+          return (
+            <TableCell 
+              key={`${eleve.id}-${evalItem.id}`} 
+              className="px-4 py-2 text-center"
+            >
+              <div className="flex justify-center">
+                <Input
+                  type="number"
+                  min="0"
+                  max="20"
+                  step="0.5"
+                  value={gradeValue}
+                  onChange={(e) => handleGradeChange(eleve.id, evalItem.id, e.target.value)}
+                  className={`w-24 text-center px-3 py-2 rounded border ${
+                    isInvalid 
+                      ? 'border-red-500 bg-red-50 dark:bg-red-900/20' 
+                      : 'border-gray-300 hover:border-gray-400 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:hover:border-gray-500 dark:focus:border-blue-400'
+                  } focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors`}
+                  aria-label={`${t.gradeManagement.gradeFor} ${eleve.prenom} ${eleve.nom} ${t.common.forLabel} ${evalItem.displayType}`}
+                  aria-invalid={isInvalid}
+                />
+                {isInvalid && (<span className="sr-only">{t.gradeManagement.invalidGrade}</span>)}
+              </div>
+            </TableCell>
+          );
+        })}
+      </TableRow>
+    ))}
+  </TableBody>
+</Table>
                 </div>
-              ) : (
-                <>
-                  {/* Vue pour ordinateur (Tableau) - reste identique */}
-                  <div className="hidden lg:block overflow-x-auto">
-                    <Table className="min-w-full">
-                      <TableHeader className="bg-gray-50">
-                        <TableRow>
-                          <TableHead className="min-w-[150px] px-4 py-3 font-semibold text-left sticky left-0 bg-gray-50 z-10">
-                            Élève
-                          </TableHead>
-                          {evaluationsToDisplay.map((evalItem) => (
-                            <TableHead 
-                              key={evalItem.id} 
-                              className="min-w-[100px] px-4 py-3 font-semibold text-center"
-                              title={evalItem.description || evalItem.type}
-                            >
-                              <div className="flex flex-col items-center">
-                                <span>{evalItem.type}</span>
-                                {evalItem.date && (
-                                  <span className="text-xs font-normal text-gray-500">
-                                    {new Date(evalItem.date).toLocaleDateString()}
-                                  </span>
-                                )}
-                              </div>
-                            </TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody className="divide-y divide-gray-200">
-                        {eleves.map((eleve) => (
-                          <TableRow key={eleve.id} className="hover:bg-gray-50">
-                            <TableCell className="font-medium px-4 py-3 sticky left-0 bg-white z-10 whitespace-nowrap">
-                              {eleve.nom} {eleve.prenom}
-                            </TableCell>
-                            {evaluationsToDisplay.map(evalItem => {
-                              const gradeValue = gradeData[eleve.id]?.[evalItem.id] ?? '';
-                              const isInvalid = gradeValue && (gradeValue < 0 || gradeValue > 20);
-                              return (
-                                <TableCell 
-                                  key={`${eleve.id}-${evalItem.id}`} 
-                                  className="px-4 py-2 text-center"
-                                >
-                                  <div className="flex justify-center">
-                                    <Input
-                                      type="number"
-                                      min="0"
-                                      max="20"
-                                      step="0.5"
-                                      value={gradeValue}
-                                      onChange={(e) => handleGradeChange(eleve.id, evalItem.id, e.target.value)}
-                                      className={`w-24 text-center px-3 py-2 rounded border ${
-                                        isInvalid 
-                                          ? 'border-red-500 bg-red-50' 
-                                          : 'border-gray-300 hover:border-gray-400 focus:border-blue-500'
-                                      } focus:ring-2 focus:ring-blue-200 transition-colors`}
-                                      aria-label={`Note de ${eleve.prenom} ${eleve.nom} pour ${evalItem.type}`}
-                                      aria-invalid={isInvalid}
-                                    />
-                                    {isInvalid && (<span className="sr-only">Note invalide, doit être entre 0 et 20</span>)}
-                                  </div>
-                                </TableCell>
-                              );
-                            })}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
 
-                  {/* Vue pour mobile (Cartes) - ajoutée pour la responsivité */}
-                  <div className="block lg:hidden space-y-4 p-2">
-                    {eleves.map((eleve) => (
-                      <Card key={eleve.id} className="bg-white shadow-sm">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base font-semibold text-blue-700">{eleve.nom} {eleve.prenom}</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          {evaluationsToDisplay.map(evalItem => {
-                            const gradeValue = gradeData[eleve.id]?.[evalItem.id] ?? '';
-                            const isInvalid = gradeValue && (gradeValue < 0 || gradeValue > 20);
-                            return (
-                              <div key={evalItem.id} className="flex items-center justify-between gap-4">
-                                <Label htmlFor={`grade-${eleve.id}-${evalItem.id}`} className="text-sm text-gray-600">
-                                  {evalItem.type}
-                                </Label>
-                                <Input
-                                  id={`grade-${eleve.id}-${evalItem.id}`}
-                                  type="number"
-                                  min="0"
-                                  max="20"
-                                  step="0.5"
-                                  value={gradeValue}
-                                  onChange={(e) => handleGradeChange(eleve.id, evalItem.id, e.target.value)}
-                                  className={`w-24 text-center px-3 py-2 rounded border ${isInvalid ? 'border-red-500 bg-red-50' : 'border-gray-300 focus:border-blue-500'} focus:ring-2 focus:ring-blue-200 transition-colors`}
-                                  aria-label={`Note de ${eleve.prenom} ${eleve.nom} pour ${evalItem.type}`}
-                                  aria-invalid={isInvalid}
-                                />
-                              </div>
-                            );
-                          })}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </>
-              )
+                <div className="block lg:hidden space-y-4 p-2">
+  {eleves.map((eleve) => (
+    <Card key={eleve.id} className="bg-white dark:bg-gray-800 shadow-sm">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base font-semibold text-blue-700 dark:text-blue-400">
+          {language === 'ar' ? `${eleve.prenom} ${eleve.nom}` : `${eleve.nom} ${eleve.prenom}`}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {evaluationsToDisplay.map(evalItem => {
+          const gradeValue = gradeData[eleve.id]?.[evalItem.id] ?? '';
+          const isInvalid = gradeValue && (gradeValue < 0 || gradeValue > 20);
+          return (
+            <div key={evalItem.id} className="flex items-center justify-between gap-4">
+              <Label htmlFor={`grade-${eleve.id}-${evalItem.id}`} className="text-sm text-gray-600 dark:text-gray-300">
+                {evalItem.type}
+              </Label>
+              <Input
+                id={`grade-${eleve.id}-${evalItem.id}`}
+                type="number"
+                min="0"
+                max="20"
+                step="0.5"
+                value={gradeValue}
+                onChange={(e) => handleGradeChange(eleve.id, evalItem.id, e.target.value)}
+                className={`w-24 text-center px-3 py-2 rounded border ${
+                  isInvalid 
+                    ? 'border-red-500 bg-red-50 dark:bg-red-900/20' 
+                    : 'border-gray-300 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:focus:border-blue-400'
+                } focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors`}
+                aria-label={`${t.gradeManagement.gradeFor} ${eleve.prenom} ${eleve.nom} ${t.common.forLabel} ${evalItem.type}`}
+                aria-invalid={isInvalid}
+              />
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  ))}
+</div>
+
+              </>
             )}
             
+            {isFormComplete && evaluationsToDisplay.length > 0 && (
+              <div className="flex justify-end gap-4 mt-6">
+                
+              </div>
+            )}
           </CardContent>
         </Card>
       ) : (
-        <div className="bg-white rounded-lg p-8 text-center shadow-sm">
-          <p className="text-gray-500">Veuillez sélectionner une année scolaire, une classe, un trimestre et une matière pour voir les notes.</p>
-        </div>
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-8 text-center shadow-sm border border-gray-200 dark:border-gray-700">
+    <p className="text-gray-500 dark:text-gray-400">{t.gradeManagement.selectPrompt}</p>
+  </div>
+
       )}
     </div>
   );
 }
+
+export default GradeManagement;

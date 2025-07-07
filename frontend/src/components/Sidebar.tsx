@@ -16,6 +16,7 @@ import {
   School,
   LogOut,
   Globe,
+  History,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,7 @@ export function Sidebar({
           { id: "reports", label: t.sidebar.reports, icon: FileSpreadsheet },
           { id: "chapter-monitoring", label: t.sidebar.chapterMonitoring, icon: CheckSquare },
           { id: "stats", label: t.sidebar.statistics, icon: BarChart3 },
+          { id: "historique", label: "Historique", icon: History },
           { id: "settings", label: t.sidebar.settings, icon: Settings },
         ];
       case "professeur":
@@ -106,16 +108,17 @@ export function Sidebar({
   return (
     <>
       <motion.aside
-        className={`fixed top-0 z-40 h-screen pt-[80px] bg-white dark:bg-gray-900 flex flex-col
-          ${isRTL ? "right-0 left-auto border-l border-gray-200 dark:border-gray-700" : "left-0 right-auto border-r border-gray-200 dark:border-gray-700"}
-          w-64
-        `}
+  className={`fixed top-0 z-40 min-h-[100dvh] pt-[80px] bg-white dark:bg-gray-900 flex flex-col
+    ${isRTL ? "right-0 left-auto border-l border-gray-200 dark:border-gray-700" : "left-0 right-auto border-r border-gray-200 dark:border-gray-700"}
+    w-64
+  `}
+
         initial={false}
         animate={isSidebarOpen ? "open" : "closed"}
         variants={variants}
         dir={isRTL ? "rtl" : "ltr"}
       >
-        <div className="flex flex-col flex-grow overflow-hidden">
+<div className="flex flex-col flex-grow overflow-hidden pb-[env(safe-area-inset-bottom)]">
           <nav
             className="flex-grow overflow-y-auto p-2"
             aria-label={t.sidebar.mainNavigation}

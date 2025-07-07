@@ -24,6 +24,7 @@ import { toast } from '@/hooks/use-toast';
 import { useEstablishmentInfo } from '@/contexts/EstablishmentInfoContext';
 import { useDebounce } from 'use-debounce';
 import ReactDOMServer from 'react-dom/server';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 // Interfaces
 interface AnneeAcademique {
@@ -128,51 +129,69 @@ interface BulletinEleve {
   absencesNonJustifieesHeures?: number;
   totalElevesClasse?: number;
 }
+interface PrintableReportProps {
+  report: BulletinEleve | null;
+  establishmentInfo: { schoolName: string, address: string, phone?: string, website?: string };
+  selectedClass: string;
+  selectedTerm: string;
+  selectedYear: string;
+  dynamicEvaluationHeaders: string[];
+  getMention: (m: number) => string;
+  t: (key: string) => string; // Ajoutez cette ligne
 
+}
 // Configuration API
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const API_BASE_URL = `${API_URL}/api`;
 
 // Fonctions API optimisées
-const fetchData = async (url: string, errorMessage: string) => {
+const fetchData = async (url: string) => {
   try {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     return await response.json();
   } catch (error) {
     console.error(`Error fetching data from ${url}:`, error);
-    toast({
-      title: "Erreur de chargement",
-      description: errorMessage,
-      variant: "destructive"
-    });
-    return [];
+    throw error; // Laissez le composant gérer l'erreur et la traduction
   }
 };
 
-const fetchAnneesAcademiques = () => fetchData(
-  `${API_BASE_URL}/annees-academiques`,
-  "Impossible de charger les années académiques."
-);
+const fetchApiData = async (endpoint: string, params?: Record<string, string>) => {
+  const url = new URL(`${API_BASE_URL}/${endpoint}`);
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      url.searchParams.append(key, value);
+    });
+  }
+
+  try {
+    const response = await fetch(url.toString());
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    return await response.json();
+  } catch (error) {
+    console.error(`API Error (${endpoint}):`, error);
+    throw error;
+  }
+};
+
+// Fonctions API spécifiques
+const fetchAnneesAcademiques = () => fetchApiData('annees-academiques');
 
 const fetchClasses = async (anneeAcademiqueId: number) => {
-  const allClasses = await fetchData(
-    `${API_BASE_URL}/classes`,
-    "Impossible de charger les classes."
-  );
+  const allClasses = await fetchApiData('classes');
   return allClasses.filter((cls: Classe) => cls.annee_scolaire_id === anneeAcademiqueId);
 };
 
 const fetchElevesByClasse = async (classeId: number, anneeScolaireId: number) => {
-  const inscriptions = await fetchData(
-    `${API_BASE_URL}/inscriptions?classeId=${classeId}&anneeScolaireId=${anneeScolaireId}`,
-    "Impossible de charger les élèves."
-  );
+  const inscriptions = await fetchApiData('inscriptions', {
+    classeId: classeId.toString(),
+    anneeScolaireId: anneeScolaireId.toString()
+  });
   return inscriptions
     .filter((inscription: any) => inscription.utilisateur?.role === 'eleve')
     .map((inscription: any) => ({
       id: inscription.utilisateur.id,
-      nom: inscription.utilisateur.nom || 'Nom Inconnu',
+      nom: inscription.utilisateur.nom || 'Inconnu',
       prenom: inscription.utilisateur.prenom || '',
       classeId: inscription.classe.id,
       inscriptionId: inscription.id,
@@ -182,10 +201,22 @@ const fetchElevesByClasse = async (classeId: number, anneeScolaireId: number) =>
 const fetchMatieresAndCoefficientsByClasse = async (classeId: number) => {
   const coefficientClasses = await fetchData(
     `${API_BASE_URL}/coefficientclasse?classeId=${classeId}`,
-    "Impossible de charger les matières et coefficients."
   );
+  
+  // Utilisez un Set pour éliminer les doublons
+  const uniqueMatieres = Array.from(new Set(
+    coefficientClasses
+      .map((cc: any) => cc.matiere?.id || cc.matiere_id)
+      .filter(Boolean)
+  ));
+
   return {
-    matieres: coefficientClasses.map((cc: any) => cc.matiere).filter(Boolean),
+    matieres: uniqueMatieres.map(id => {
+      const found = coefficientClasses.find((cc: any) => 
+        (cc.matiere?.id || cc.matiere_id) === id
+      );
+      return found?.matiere || { id, nom: 'Matière inconnue' };
+    }),
     coefficients: coefficientClasses.map((cc: any) => ({
       id: cc.id,
       matiere_id: cc.matiere?.id || cc.matiere_id,
@@ -195,16 +226,17 @@ const fetchMatieresAndCoefficientsByClasse = async (classeId: number) => {
   };
 };
 
-const fetchTrimestresByAnneeAcademique = (anneeAcademiqueId: number) => fetchData(
-  `${API_BASE_URL}/trimestres?anneeScolaireId=${anneeAcademiqueId}`,
-  "Impossible de charger les trimestres."
-);
+const fetchTrimestresByAnneeAcademique = (anneeAcademiqueId: number) => 
+  fetchApiData('trimestres', {
+    anneeScolaireId: anneeAcademiqueId.toString()
+  });
 
 const fetchEvaluationsForClassAndTerm = async (classeId: number, trimestreId: number, anneeScolaireId: number) => {
-  const data = await fetchData(
-    `${API_BASE_URL}/evaluations?classeId=${classeId}&trimestre=${trimestreId}&anneeScolaireId=${anneeScolaireId}`,
-    "Impossible de charger les évaluations."
-  );
+  const data = await fetchApiData('evaluations', {
+    classeId: classeId.toString(),
+    trimestre: trimestreId.toString(),
+    anneeScolaireId: anneeScolaireId.toString()
+  });
   return data.map((evalItem: any) => ({
     id: evalItem.id,
     matiere_id: evalItem.matiere?.id || evalItem.matiere_id,
@@ -221,23 +253,23 @@ const fetchEvaluationsForClassAndTerm = async (classeId: number, trimestreId: nu
 
 const fetchNotesForEvaluations = async (evaluationIds: number[], etudiantId?: number) => {
   if (evaluationIds.length === 0) return [];
-  let url = `${API_BASE_URL}/notes?evaluationIds=${evaluationIds.join(',')}`;
-  if (etudiantId) url += `&etudiant_id=${etudiantId}`;
-  return fetchData(url, "Impossible de charger les notes.");
+  const params: Record<string, string> = {
+    evaluationIds: evaluationIds.join(',')
+  };
+  if (etudiantId) {
+    params.etudiant_id = etudiantId.toString();
+  }
+  return fetchApiData('notes', params);
 };
 
 const fetchAbsencesForStudent = async (etudiantId: number, anneeScolaireId: number, dateDebut: string, dateFin: string) => {
   if (!etudiantId || !anneeScolaireId || !dateDebut || !dateFin) return [];
-  const params = new URLSearchParams({
+  return fetchApiData('absences', {
     etudiant_id: etudiantId.toString(),
     annee_scolaire_id: anneeScolaireId.toString(),
     date_debut: dateDebut,
-    date_fin: dateFin,
+    date_fin: dateFin
   });
-  return fetchData(
-    `${API_BASE_URL}/absences?${params.toString()}`,
-    "Impossible de charger les absences."
-  );
 };
 const PrintableReport = React.forwardRef<
   HTMLDivElement,
@@ -252,189 +284,288 @@ const PrintableReport = React.forwardRef<
   }
 >(({ report, establishmentInfo, selectedClass, selectedTerm, selectedYear, dynamicEvaluationHeaders, getMention }, ref) => {
   if (!report) return null;
+
+  // Styles pour le mode paysage
+  const pageStyle: React.CSSProperties = {
+    width: '297mm', // Largeur de page A4 en paysage
+    height: '210mm', // Hauteur de page A4 en paysage
+    margin: '0 auto',
+    padding: '4mm',
+    boxSizing: 'border-box',
+    fontFamily: "'Times New Roman', serif",
+    fontSize: '10pt',
+    lineHeight: 1.3,
+    backgroundColor: 'white',
+    display: 'flex',
+    flexDirection: 'column'
+  };
+
+  const headerStyle: React.CSSProperties = {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '10pt',
+    borderBottom: '1pt solid #000',
+    paddingBottom: '8pt'
+  };
+
+  const tableStyle: React.CSSProperties = {
+    width: '100%',
+    borderCollapse: 'collapse',
+    margin: '10pt 0',
+    fontSize: '9pt'
+  };
+
+  const cellStyle: React.CSSProperties = {
+    border: '1pt solid #000',
+    padding: '3pt',
+    textAlign: 'center'
+  };
+
+  const headerCellStyle: React.CSSProperties = {
+    ...cellStyle,
+    backgroundColor: '#f2f2f2',
+    fontWeight: 'bold'
+  };
+
   return (
-    <div ref={ref}>
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+    <div ref={ref} style={pageStyle}>
+      {/* En-tête */}
+      <div style={headerStyle}>
+        <div style={{ textAlign: 'left', width: '25%' }}>
+          <div style={{ fontWeight: 'bold' }}>République Islamique de Mauritanie</div>
+          <div>Ministère de l'Éducation Nationale</div>
+          <div>Direction des Examens et Concours</div>
+        </div>
+        
+        <div style={{ textAlign: 'center', width: '50%' }}>
+          <div style={{ 
+            fontWeight: 'bold', 
+            fontSize: '14pt', 
+            textDecoration: 'underline',
+            marginBottom: '4pt'
+          }}>
+            BULLETIN DE NOTES
+          </div>
+          <div>Année Scolaire: <strong>{selectedYear}</strong></div>
+          <div>Trimestre: <strong>{selectedTerm}</strong></div>
+        </div>
+        
+        <div style={{ textAlign: 'right', width: '25%', direction: 'rtl' }}>
+          <div style={{ fontWeight: 'bold' }}>الجمهورية الإسلامية الموريتانية</div>
+          <div>وزارة التهذيب الوطني</div>
+          <div>مديرية الامتحانات والمباريات</div>
+        </div>
+      </div>
+
+      {/* Informations élève - version compacte pour paysage */}
+      <div style={{ 
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '10pt',
+        marginBottom: '10pt',
+        fontSize: '10pt'
+      }}>
+        <div>
+          <div><strong>Établissement:</strong> {establishmentInfo.schoolName}</div>
+          <div><strong>Élève:</strong> {report.name}</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div><strong>Classe:</strong> {selectedClass}</div>
           <div>
-            <div>République Islamique de Mauritanie</div>
-            <div>Ministère de l'Éducation Nationale</div>
-            <div>Direction des Examens et Concours</div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontWeight: 'bold', fontSize: 20, marginBottom: 4 }}>BULLETIN DE NOTES</div>
-            <div>Année Scolaire : <span style={{ color: '#2563eb' }}>{selectedYear}</span></div>
-            <div>Trimestre : <span style={{ color: '#2563eb' }}>{selectedTerm}</span></div>
-          </div>
-          <div style={{ textAlign: 'right', direction: 'rtl' }}>
-            <div>الجمهورية الإسلامية الموريتانية</div>
-            <div>وزارة التهذيب الوطني</div>
-            <div>مديرية الامتحانات والمباريات</div>
+            <strong>Absences:</strong>{" "}
+            <span style={{ color: 'red' }}>{report.absencesNonJustifieesHeures ?? 0} h</span>
           </div>
         </div>
       </div>
-      <div style={{ marginBottom: 16, fontSize: 13 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <div>
-            <div><strong>Établissement:</strong> {establishmentInfo.schoolName}</div>
-            <div><strong>Élève:</strong> {report.name}</div>
-            <div><strong>Matricule:</strong> 123456</div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div><strong>Classe:</strong> {selectedClass}</div>
-            <div><strong>Nombre d'élèves:</strong> {report.totalElevesClasse}</div>
-            <div>
-              <strong>Absences (non justifiées):</strong>{" "}
-              <span style={{ color: '#dc2626' }}>{report.absencesNonJustifieesHeures ?? 0} h</span>
-            </div>
-          </div>
-        </div>
-        <div style={{ borderTop: '1px solid #ccc', paddingTop: 4, textAlign: 'right', fontSize: 11, marginTop: 8 }}>
-          Date d'édition: {new Date().toLocaleDateString("fr-FR")}
-        </div>
+
+      {/* Tableau des notes - version compacte */}
+      <div style={{ overflow: 'hidden' }}>
+        <table style={tableStyle}>
+          <thead>
+            <tr>
+              <th style={{ ...headerCellStyle, width: '15%' }}>Matière</th>
+              <th style={{ ...headerCellStyle, width: '5%' }}>Coef</th>
+              
+              {/* En-têtes dynamiques plus compacts */}
+              {dynamicEvaluationHeaders
+                .filter(header => header.toLowerCase().includes('devoir'))
+                .map(header => (
+                  <th key={header} style={{ ...headerCellStyle, width: '6%' }}>
+                    {header.replace('Devoir', 'Devoir')}
+                  </th>
+                ))}
+              
+              {dynamicEvaluationHeaders.some(header => header.toLowerCase().includes('devoir')) && (
+                <th style={{ ...headerCellStyle, width: '6%' }}>Moy.Devoir*3</th>
+              )}
+              
+              {dynamicEvaluationHeaders
+                .filter(header => header.toLowerCase().includes('compo'))
+                .map(header => (
+                  <th key={header} style={{ ...headerCellStyle, width: '6%' }}>
+                    {header.replace('Composition', 'Comp')}
+                  </th>
+                ))}
+              
+              <th style={{ ...headerCellStyle, width: '7%' }}>M.Matière</th>
+              <th style={{ ...headerCellStyle, width: '15%' }}>Observation</th>
+            </tr>
+          </thead>
+          <tbody>
+            {report.notesParMatiere.map(matiere => (
+              <tr key={matiere.matiere}>
+                <td style={{ ...cellStyle, textAlign: 'left' }}>{matiere.matiere}</td>
+                <td style={cellStyle}>{matiere.coefficient}</td>
+                
+                {dynamicEvaluationHeaders
+                  .filter(header => header.toLowerCase().includes('devoir'))
+                  .map(header => {
+                    const note = matiere.notesEvaluations.find(n => n.libelle === header);
+                    return (
+                      <td key={`${matiere.matiere}-${header}`} style={cellStyle}>
+                        {note ? note.note : "-"}
+                      </td>
+                    );
+                  })}
+                
+                {dynamicEvaluationHeaders.some(header => header.toLowerCase().includes('devoir')) && (
+                  <td style={cellStyle}>
+                    {matiere.moyenneDevoirsPonderee?.toFixed(2) || '-'}
+                  </td>
+                )}
+                
+                {dynamicEvaluationHeaders
+                  .filter(header => header.toLowerCase().includes('compo'))
+                  .map(header => {
+                    const note = matiere.notesEvaluations.find(n => n.libelle === header);
+                    return (
+                      <td key={`${matiere.matiere}-${header}`} style={cellStyle}>
+                        {note ? note.note : "-"}
+                      </td>
+                    );
+                  })}
+                
+                <td style={{ ...cellStyle, fontWeight: 'bold' }}>
+                  {matiere.moyenneMatiere.toFixed(2)}
+                </td>
+                <td style={cellStyle}></td>
+              </tr>
+            ))}
+            
+            {/* Ligne des totaux */}
+            <tr style={{ fontWeight: 'bold' }}>
+              <td style={cellStyle}>Totaux</td>
+              <td style={cellStyle}>
+                {report.notesParMatiere.reduce((sum, matiere) => sum + matiere.coefficient, 0)}
+              </td>
+              <td style={cellStyle} colSpan={dynamicEvaluationHeaders.length + 1}></td>
+              <td style={cellStyle}>
+                {report.notesParMatiere
+                  .reduce((sum, matiere) => sum + (matiere.moyenneMatiere * matiere.coefficient), 0)
+                  .toFixed(2)}
+              </td>
+              <td style={cellStyle}></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-      {/* Tableau des notes */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16, fontSize: 12 }}>
-  <thead>
-    <tr>
-      <th style={{ border: '1px solid #ddd', padding: 6, width: 150 }}>Matière</th>
-      <th style={{ border: '1px solid #ddd', padding: 6 }}>Coeff</th>
-      {dynamicEvaluationHeaders
-        .filter(header => header.toLowerCase().includes('devoir'))
-        .map(header => (
-          <th key={header} style={{ border: '1px solid #ddd', padding: 6 }}>{header}</th>
-        ))}
-      {dynamicEvaluationHeaders.some(header => header.toLowerCase().includes('devoir')) && (
-        <th style={{ border: '1px solid #ddd', padding: 6 }}>Moy. devoir *3</th>
-      )}
-      {dynamicEvaluationHeaders
-        .filter(header => header.toLowerCase().includes('compo') && !header.toLowerCase().includes('devoir'))
-        .map(header => (
-          <th key={header} style={{ border: '1px solid #ddd', padding: 6 }}>{header}</th>
-        ))}
-      <th style={{ border: '1px solid #ddd', padding: 6 }}>Moy. Matière</th>
-      <th style={{ border: '1px solid #ddd', padding: 6, width: 220 }}>Observation</th>
-    </tr>
-  </thead>
-  <tbody>
-    {report.notesParMatiere.map(matiere => (
-      <tr key={matiere.matiere}>
-        <td style={{ border: '1px solid #ddd', padding: 6, width: 60 }}>{matiere.matiere}</td>
-        <td style={{ border: '1px solid #ddd', padding: 6, textAlign: 'center' }}>{matiere.coefficient}</td>
-        {dynamicEvaluationHeaders
-          .filter(header => header.toLowerCase().includes('devoir'))
-          .map(header => {
-            const note = matiere.notesEvaluations.find(n => n.libelle === header);
-            return (
-              <td key={`${matiere.matiere}-${header}-devoir`} style={{ border: '1px solid #ddd', padding: 6, textAlign: 'center' }}>
-                {note ? note.note : "00"}
-              </td>
-            );
-          })}
-        {dynamicEvaluationHeaders.some(header => header.toLowerCase().includes('devoir')) && (
-          <td style={{ border: '1px solid #ddd', padding: 6, textAlign: 'center' }}>
-            {matiere.moyenneDevoirsPonderee !== undefined ? matiere.moyenneDevoirsPonderee.toFixed(2) : '-'}
-          </td>
-        )}
-        {dynamicEvaluationHeaders
-          .filter(header => header.toLowerCase().includes('compo') && !header.toLowerCase().includes('devoir'))
-          .map(header => {
-            const note = matiere.notesEvaluations.find(n => n.libelle === header);
-            return (
-              <td key={`${matiere.matiere}-${header}-compo`} style={{ border: '1px solid #ddd', padding: 6, textAlign: 'center' }}>
-                {note ? note.note : "00"}
-              </td>
-            );
-          })}
-        <td style={{ border: '1px solid #ddd', padding: 6, textAlign: 'center', fontWeight: 'bold' }}>{matiere.moyenneMatiere.toFixed(2)}</td>
-        <td style={{ border: '1px solid #ddd', padding: 6, width: 220 }}></td>
-      </tr>
-    ))}
-    {/* Ligne des totaux */}
-    <tr style={{ fontWeight: 'bold', background: '#f9fafb' }}>
-      <td style={{ border: '1px solid #ddd', padding: 6, width: 60 }}>Totaux</td>
-      <td style={{ border: '1px solid #ddd', padding: 6, textAlign: 'center' }}>
-        {report.notesParMatiere.reduce((sum, matiere) => sum + matiere.coefficient, 0).toFixed(0)}
-      </td>
-      <td style={{ border: '1px solid #ddd', padding: 6 }} colSpan={dynamicEvaluationHeaders.length + 1}></td>
-      <td style={{ border: '1px solid #ddd', padding: 6, textAlign: 'center' }}>
-        {report.notesParMatiere.reduce((sum, matiere) => sum + (matiere.moyenneMatiere * matiere.coefficient), 0).toFixed(2)}
-      </td>
-      <td style={{ border: '1px solid #ddd', padding: 6, width: 220 }}></td>
-    </tr>
-  </tbody>
-</table>
-      {/* Observations */}
-      <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+
+      {/* Section inférieure avec appréciations et résultats */}
+      <div style={{ 
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '10pt',
+        marginTop: '20pt',
+        alignItems: 'start'
+      }}>
+        {/* Appréciations */}
+        <div style={{ 
+          display: 'grid',
+          gridTemplateRows: 'auto 1fr auto',
+          border: '1pt solid #000',
+          padding: '8pt',
+                    height: '80%'
+
+        }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '4pt' }}>
+            Appréciation du Conseil de Classe:
+          </div>
+          <div style={{ fontStyle: 'italic' }}>{report.teacherComment}</div>
+          <div style={{ textAlign: 'right', marginTop: '4pt', fontSize: '9pt' }}>
+            Signature du Professeur Principal
+          </div>
+        </div>
+
+        {/* Résultats finaux compacts */}
         <div style={{
-  flex: 1,
-  border: '1px solid #e5e7eb',
-  borderRadius: 8,
-  padding: 12,
-  minHeight: 80,
-  whiteSpace: 'pre-line',
-  wordBreak: 'break-word'
-}}>
-  <div style={{ fontWeight: 'bold', marginBottom: 4 }}>Appréciation du Conseil de Classe</div>
-  <div style={{ fontStyle: 'italic', minHeight: 40 }}>{report.teacherComment}</div>
-  <div style={{ textAlign: 'right', fontSize: 11, marginTop: 12 }}>Signature du Professeur Principal</div>
-</div>
-<div style={{
-  flex: 1,
-  border: '1px solid #e5e7eb',
-  borderRadius: 8,
-  padding: 12,
-  minHeight: 80,
-  whiteSpace: 'pre-line',
-  wordBreak: 'break-word'
-}}>
-  <div style={{ fontWeight: 'bold', marginBottom: 4 }}>Observations du Directeur</div>
-  <div style={{ fontStyle: 'italic', minHeight: 40 }}>{report.principalComment}</div>
-  <div style={{ textAlign: 'right', fontSize: 11, marginTop: 12 }}>Signature du Directeur</div>
-</div>
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          rowGap: '10pt',
+          columnGap: '8pt'
+        }}>
+          {[
+            { label: "Moyenne", value: `${report.avg}/20`, color: "blue" },
+            { label: "Rang", value: report.rank, color: "black" },
+            { label: "Mention", value: getMention(parseFloat(report.avg)), color: "darkblue" },
+            { 
+              label: "Décision", 
+              value: parseFloat(report.avg) >= 10 ? "Admis(e)" : "Non Admis(e)", 
+              color: parseFloat(report.avg) >= 10 ? "green" : "red" 
+            }
+          ].map((item, index) => (
+            <div key={index} style={{ 
+              border: '1pt solid #ddd',
+              borderRadius: '4pt',
+              padding: '6pt',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '2pt', fontSize: '9pt' }}>{item.label}</div>
+              <div style={{ 
+                fontWeight: 'bold', 
+                fontSize: '11pt', 
+                color: item.color 
+              }}>
+                {item.value}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-      {/* Résultats finaux */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, background: '#f3f4f6', padding: 16, borderRadius: 8, marginBottom: 16 }}>
-        {[{
-          label: "Moyenne Générale",
-          value: `${report.avg}/20`,
-          color: "#2563eb"
-        }, {
-          label: "Rang",
-          value: report.rank,
-          color: "#111827"
-        }, {
-          label: "Mention",
-          value: getMention(parseFloat(report.avg)),
-          color: "#4f46e5"
-        }, {
-          label: "Décision",
-          value: parseFloat(report.avg) >= 10 ? "Admis(e)" : "Non Admis(e)",
-          color: parseFloat(report.avg) >= 10 ? "#16a34a" : "#dc2626"
-        }].map(({ label, value, color }) => (
-          <div key={label} style={{ textAlign: 'center' }}>
-            <div style={{ fontWeight: 'bold', marginBottom: 4 }}>{label}</div>
-            <div style={{ fontWeight: 'bold', fontSize: 18, color }}>{value}</div>
-          </div>
-        ))}
-      </div>
-      {/* Pied de page */}
-      <div style={{ textAlign: 'center', fontSize: 11, color: '#6b7280', paddingTop: 8 }}>
-        <div style={{ marginTop: 8 }}>Cachet et Signature de l'Administration</div>
-        <div style={{ marginTop: 8 }}>
+
+      {/* Pied de page compact */}
+      <div style={{ 
+        textAlign: 'center', 
+        fontSize: '8pt',
+        borderTop: '1pt solid #000',
+        paddingTop: '6pt',
+        marginTop: '30pt'
+      }}>
+        <div>Cachet et Signature de l'Administration</div>
+        <div style={{ marginTop: '2pt' }}>
           {establishmentInfo.schoolName} - {establishmentInfo.address}
           {establishmentInfo.phone && ` - Tél: ${establishmentInfo.phone}`}
-          {establishmentInfo.website && ` - Site: ${establishmentInfo.website}`}
         </div>
       </div>
     </div>
   );
 });
+
 PrintableReport.displayName = 'PrintableReport';
+
 // Composant principal
 export function ReportManagement() {
+  const { t, language } = useLanguage();
+  const isRTL = language === 'ar';
   const { schoolName, address, phone, website } = useEstablishmentInfo();
-  
+  const getTranslatedTerm = (termName: string) => {
+  switch(termName) {
+    case 'Trimestre 1': return t.gradeManagement.term1;
+    case 'Trimestre 2': return t.gradeManagement.term2;
+    case 'Trimestre 3': return t.gradeManagement.term3;
+    default: return termName;
+  }
+};
   // États
   const [anneesAcademiques, setAnneesAcademiques] = useState<AnneeAcademique[]>([]);
   const [selectedAnneeAcademiqueId, setSelectedAnneeAcademiqueId] = useState<string>('');
@@ -537,35 +668,36 @@ export function ReportManagement() {
         setAllEvaluations(evaluationsData);
 
         // Générer les en-têtes dynamiques
-       const devoirLabels = Array.from(
-  new Set(
-    evaluationsData
-      .filter(e => e.type === 'Devoir')
-      .map(e => e.libelle)
-  )
-) as string[];
+        const devoirLabels = Array.from(
+          new Set(
+            evaluationsData
+              .filter(e => e.type === 'Devoir')
+              .map(e => e.libelle)
+          )
+        ) as string[];
 
-devoirLabels.sort((a, b) => {
-  const numA = parseInt(String(a).replace(/Devoir\s*/i, '')) || 0;
-  const numB = parseInt(String(b).replace(/Devoir\s*/i, '')) || 0;
-  return numA - numB;
-});
+        devoirLabels.sort((a, b) => {
+          const numA = parseInt(String(a).replace(/Devoir\s*/i, '')) || 0;
+          const numB = parseInt(String(b).replace(/Devoir\s*/i, '')) || 0;
+          return numA - numB;
+        });
 
-const compositionLabels = Array.from(
-  new Set(
-    evaluationsData
-      .filter(e => e.type === 'Composition')
-      .map(e => e.libelle)
-  )
-) as string[];
+        const compositionLabels = Array.from(
+          new Set(
+            evaluationsData
+              .filter(e => e.type === 'Composition')
+              .map(e => e.libelle)
+          )
+        ) as string[];
 
-compositionLabels.sort((a, b) => {
-  const numA = parseInt(String(a).replace(/Composition\s*/i, '')) || 0;
-  const numB = parseInt(String(b).replace(/Composition\s*/i, '')) || 0;
-  return numA - numB;
-});
+        compositionLabels.sort((a, b) => {
+          const numA = parseInt(String(a).replace(/Composition\s*/i, '')) || 0;
+          const numB = parseInt(String(b).replace(/Composition\s*/i, '')) || 0;
+          return numA - numB;
+        });
 
-setDynamicEvaluationHeaders([...devoirLabels, ...compositionLabels]);
+        setDynamicEvaluationHeaders([...devoirLabels, ...compositionLabels]);
+
         // Charger les notes
         const evaluationIds = evaluationsData.map(e => e.id);
         const notesData = await fetchNotesForEvaluations(evaluationIds);
@@ -663,15 +795,16 @@ setDynamicEvaluationHeaders([...devoirLabels, ...compositionLabels]);
             moyenneMatiere = compositionNote;
           }
 
-           return {
-    matiere: matiere.nom,
-    coefficient,
-    notesEvaluations,
-    moyenneMatiere: parseFloat(moyenneMatiere.toFixed(2)),
-    moyenneDevoirsPonderee: parseFloat((avgDevoirs * 3).toFixed(2)),
-    appreciation: ""
-  };
-}));
+          return {
+            matiere: matiere.nom,
+            coefficient,
+            notesEvaluations,
+            moyenneMatiere: parseFloat(moyenneMatiere.toFixed(2)),
+            moyenneDevoirsPonderee: parseFloat((avgDevoirs * 3).toFixed(2)),
+            appreciation: ""
+          };
+        }));
+
         // Calculer la moyenne générale
         const totalPoints = matieresDetails.reduce((sum, matiere) => 
           sum + (matiere.moyenneMatiere * matiere.coefficient), 0);
@@ -727,8 +860,8 @@ setDynamicEvaluationHeaders([...devoirLabels, ...compositionLabels]);
   const printAllReports = () => {
     if (bulletins.length === 0) {
       toast({
-        title: "Action impossible",
-        description: "Aucun bulletin à imprimer pour la sélection actuelle.",
+        title: t.common.error,
+        description: t.reports.noReportsToPrint,
         variant: "destructive",
       });
       return;
@@ -743,7 +876,7 @@ setDynamicEvaluationHeaders([...devoirLabels, ...compositionLabels]);
             report={bulletin}
             establishmentInfo={{ schoolName, address, phone, website }}
             selectedClass={classes.find(c => c.id === parseInt(selectedClassId))?.nom || ''}
-            selectedTerm={trimestres.find(t => t.id === parseInt(selectedTermId))?.nom || ''}
+  selectedTerm={getTranslatedTerm(trimestres.find(t => t.id === parseInt(selectedTermId))?.nom || '')}
             selectedYear={anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId))?.libelle || ''}
             dynamicEvaluationHeaders={dynamicEvaluationHeaders}
             getMention={getMention}
@@ -755,12 +888,16 @@ setDynamicEvaluationHeaders([...devoirLabels, ...compositionLabels]);
       printWindow.document.write(`
         <html>
         <head>
-          <title>Bulletins - ${classes.find(c => c.id === parseInt(selectedClassId))?.nom || ''}</title>
+          <title>${t.reports.title} - ${classes.find(c => c.id === parseInt(selectedClassId))?.nom || ''}</title>
           <style>
             @page {
-              margin: 10px; /* Applique une marge uniforme sur chaque page imprimée */
+              margin: 10px;
             }
-            body { font-family: Arial, sans-serif; margin: 0; }
+            body { 
+              font-family: Arial, sans-serif; 
+              margin: 0; 
+              ${isRTL ? 'direction: rtl;' : ''}
+            }
             table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
             th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
             th { background-color: #f2f2f2; }
@@ -769,7 +906,7 @@ setDynamicEvaluationHeaders([...devoirLabels, ...compositionLabels]);
             }
           </style>
         </head>
-        <body>
+        <body ${isRTL ? 'dir="rtl"' : ''}>
           ${allReportsHtml}
           <script>
             setTimeout(() => { window.print(); window.close(); }, 500);
@@ -784,8 +921,8 @@ setDynamicEvaluationHeaders([...devoirLabels, ...compositionLabels]);
   const exportPreviewedReport = () => {
     if (!selectedReport) return;
     toast({
-      title: "Export en PDF",
-      description: `Export du bulletin de ${selectedReport.name}.`,
+      title: t.reports.exportPDF,
+      description: t.reports.exportingReport.replace('{name}', selectedReport.name),
     });
   };
 
@@ -795,39 +932,45 @@ setDynamicEvaluationHeaders([...devoirLabels, ...compositionLabels]);
   };
 
   const getMention = (moyenne: number): string => {
-    if (moyenne >= 16) return "Félicitations";
-    if (moyenne >= 14) return "Très Bien";
-    if (moyenne >= 12) return "Bien";
-    if (moyenne >= 10) return "Assez Bien";
-    if (moyenne >= 8) return "Encouragements";
-    return "Avertissement";
+    if (moyenne >= 16) return t.reportManagement.mentions.excellent;
+    if (moyenne >= 14) return t.reportManagement.mentions.veryGood;
+    if (moyenne >= 12) return t.reportManagement.mentions.good;
+    if (moyenne >= 10) return t.reportManagement.mentions.fair;
+    if (moyenne >= 8) return t.reportManagement.mentions.encouragement;
+    return t.reportManagement.mentions.warning;
   };
 
   const isFormComplete = selectedAnneeAcademiqueId && selectedClassId && selectedTermId;
-const printReportFromRow = (bulletin: BulletinEleve) => {
-  setSelectedReport(bulletin);
 
+ const printReportFromRow = (bulletin: BulletinEleve) => {
   const printWindow = window.open('', '_blank');
   if (printWindow) {
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html>
       <head>
         <title>Bulletin scolaire - ${bulletin.name}</title>
+        <meta charset="UTF-8">
         <style>
           @page {
-            margin: 10px;
+            size: A4 landscape;
+            margin: 15mm;
           }
-          body { font-family: Arial, sans-serif; margin: 0; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-          th { background-color: #f2f2f2; }
-          @media print {
-            .page-break { page-break-after: always; }
+          body {
+            font-family: 'Times New Roman', serif;
+            margin: 0;
+            padding: 0;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .print-container {
+            width: 297mm;
+            height: 210mm;
           }
         </style>
       </head>
       <body>
-        <div>
+        <div class="print-container">
           ${ReactDOMServer.renderToString(
             <PrintableReport
               report={bulletin}
@@ -841,7 +984,10 @@ const printReportFromRow = (bulletin: BulletinEleve) => {
           )}
         </div>
         <script>
-          setTimeout(() => { window.print(); window.close(); }, 500);
+          setTimeout(() => {
+            window.print();
+            window.close();
+          }, 300);
         </script>
       </body>
       </html>
@@ -849,37 +995,41 @@ const printReportFromRow = (bulletin: BulletinEleve) => {
     printWindow.document.close();
   }
 };
-  return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <h1 className="text-3xl font-extrabold text-gray-900 mb-6 border-b pb-4">Gestion des Bulletins Scolaires</h1>
+ return (
+  <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen" dir={isRTL ? 'rtl' : 'ltr'}>
+    <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 border-b pb-4">
+      {t.reports.title}
+    </h1>
 
       {/* Formulaire de sélection */}
-      <Card className="mb-8 shadow-lg rounded-lg">
-        <CardHeader className="bg-blue-600 text-white rounded-t-lg p-4">
-          <CardTitle className="text-2xl font-bold">Sélection des Critères</CardTitle>
-          <CardDescription className="text-blue-100">
-            Choisissez l'année scolaire, la classe et le trimestre pour générer les bulletins.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <Card className="mb-8 shadow-lg rounded-lg dark:border dark:border-gray-700">
+  <CardHeader className="bg-blue-600 dark:bg-blue-800 text-white rounded-t-lg p-4">
+    <CardTitle className="text-2xl font-bold text-white">
+      {t.reports.selectionTitle}
+    </CardTitle>
+    <CardDescription className="text-blue-100 dark:text-blue-200">
+      {t.reports.selectionDescription}
+    </CardDescription>
+  </CardHeader>
+  <CardContent className="p-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Sélecteur d'année scolaire */}
             <div className="space-y-2">
-              <label htmlFor="annee-select" className="text-sm font-medium text-gray-700">
-                Année Scolaire
-              </label>
+             <label htmlFor="annee-select" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          {t.common.schoolYear}
+        </label>
               <Select 
                 onValueChange={setSelectedAnneeAcademiqueId} 
                 value={selectedAnneeAcademiqueId}
               >
-                <SelectTrigger id="annee-select" className="border-gray-300 focus:border-blue-500 rounded-md">
-                  <SelectValue placeholder="Sélectionner une année" />
-                </SelectTrigger>
-                <SelectContent>
+                  <SelectTrigger id="annee-select" className="border-gray-300 dark:border-gray-600 focus:border-blue-500 rounded-md dark:bg-gray-800 dark:text-white">
+            <SelectValue placeholder={t.common.selectAYear} />
+          </SelectTrigger>
+          <SelectContent className="dark:bg-gray-800 dark:border-gray-700">
                   {anneesAcademiques.map((annee) => (
-                    <SelectItem key={annee.id} value={annee.id.toString()}>
-                      {annee.libelle}
-                    </SelectItem>
+                     <SelectItem key={annee.id} value={annee.id.toString()} className="dark:hover:bg-gray-700">
+                {annee.libelle}
+              </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -887,18 +1037,20 @@ const printReportFromRow = (bulletin: BulletinEleve) => {
 
             {/* Sélecteur de classe */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Classe</label>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {t.common.class}
+              </label>
               <Select
                 onValueChange={setSelectedClassId}
                 value={selectedClassId}
                 disabled={!selectedAnneeAcademiqueId || isLoading}
               >
-                <SelectTrigger className="border-gray-300 focus:border-blue-500 rounded-md">
-                  <SelectValue placeholder="Sélectionner une classe" />
+                <SelectTrigger className="border-gray-300 dark:border-gray-600 focus:border-blue-500 rounded-md dark:bg-gray-800 dark:text-white">
+                  <SelectValue placeholder={t.common.selectAClass} />
                 </SelectTrigger>
-                <SelectContent>
+          <SelectContent className="dark:bg-gray-800 dark:border-gray-700">
                   {classes.map((cls) => (
-                    <SelectItem key={cls.id} value={cls.id.toString()}>
+                    <SelectItem key={cls.id} value={cls.id.toString()} className="dark:hover:bg-gray-700">
                       {cls.nom}
                     </SelectItem>
                   ))}
@@ -908,19 +1060,21 @@ const printReportFromRow = (bulletin: BulletinEleve) => {
 
             {/* Sélecteur de trimestre */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Trimestre</label>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {t.common.trimester}
+              </label>
               <Select
                 onValueChange={setSelectedTermId}
                 value={selectedTermId}
                 disabled={!selectedAnneeAcademiqueId || isLoading}
               >
-                <SelectTrigger className="border-gray-300 focus:border-blue-500 rounded-md">
-                  <SelectValue placeholder="Sélectionner un trimestre" />
+                <SelectTrigger className="border-gray-300 dark:border-gray-600 focus:border-blue-500 rounded-md dark:bg-gray-800 dark:text-white">
+                  <SelectValue placeholder={t.common.selectATrimester} />
                 </SelectTrigger>
-                <SelectContent>
+          <SelectContent className="dark:bg-gray-800 dark:border-gray-700">
                   {trimestres.map((trimestre) => (
-                    <SelectItem key={trimestre.id} value={trimestre.id.toString()}>
-                      {trimestre.nom}
+                    <SelectItem key={trimestre.id} value={trimestre.id.toString()} className="dark:hover:bg-gray-700">
+  {getTranslatedTerm(trimestre.nom)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -933,21 +1087,20 @@ const printReportFromRow = (bulletin: BulletinEleve) => {
       {/* Résultats */}
       {isFormComplete ? (
         <div className="space-y-8">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <Button
+<div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">            <Button
               onClick={printAllReports}
               disabled={isLoading || bulletins.length === 0}
-              className="bg-green-600 hover:bg-green-700 text-white shadow-md px-6 py-3 text-base rounded-md"
+        className="bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 text-white shadow-md px-6 py-3 text-base rounded-md"
             >
               <Printer className="mr-3 h-5 w-5" />
-              Imprimer tous les bulletins
+              {t.reports.printAllReports}
             </Button>
 
             <div className="relative w-full md:w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
               <Input
-                placeholder="Rechercher un élève..."
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                placeholder={t.reports.searchStudent}
+          className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 disabled={isLoading}
@@ -955,66 +1108,66 @@ const printReportFromRow = (bulletin: BulletinEleve) => {
             </div>
           </div>
 
-          <Card className="shadow-lg rounded-lg">
+    <Card className="shadow-lg rounded-lg dark:border dark:border-gray-700">
             <CardContent className="p-0">
               {isLoading ? (
-                <div className="text-center text-gray-500 py-12 text-lg">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
-                  Chargement des données...
+          <div className="text-center text-gray-500 dark:text-gray-400 py-12 text-lg">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-300 mx-auto mb-4"></div>
+                  {t.common.loading}
                 </div>
               ) : filteredBulletins.length === 0 ? (
-                <div className="text-center text-gray-500 py-12 text-lg">
+          <div className="text-center text-gray-500 dark:text-gray-400 py-12 text-lg">
                   {searchQuery ? (
-                    <p>Aucun élève correspondant à votre recherche.</p>
+                    <p>{t.reports.noStudentFound}</p>
                   ) : (
                     <>
-                      <p>Aucun élève trouvé ou aucune évaluation saisie.</p>
-                      <p className="mt-2 text-sm">Vérifiez les données d'inscriptions ou les évaluations.</p>
+                      <p>{t.reports.noStudentOrGrade}</p>
+                      <p className="mt-2 text-sm">{t.reports.noStudentOrGradeHint}</p>
                     </>
                   )}
                 </div>
               ) : (
                 <>
                   {/* Vue desktop */}
-                  <div className="hidden lg:block rounded-lg" style={{ maxHeight: "40vh", overflowY: "auto", overflowX: "auto" }}>
-                    <Table className="min-w-full divide-y divide-gray-200">
-                      <TableHeader className="bg-gray-100">
+            <div className="hidden lg:block rounded-lg dark:bg-gray-800" style={{ maxHeight: "40vh", overflowY: "auto", overflowX: "auto" }}>
+              <Table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <TableHeader className="bg-gray-100 dark:bg-gray-700">
                         <TableRow>
-                          <TableHead className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                            Élève
+                    <TableHead className="px-6 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                            {t.common.student}
                           </TableHead>
-                          <TableHead className="px-6 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">
-                            Moyenne
+                    <TableHead className="px-6 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                            {t.reportManagement.overallAverage}
                           </TableHead>
-                          <TableHead className="px-6 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">
-                            Classement
+                    <TableHead className="px-6 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                            {t.reportManagement.rank}
                           </TableHead>
-                          <TableHead className="px-6 py-3 text-center text-xs font-bold text-gray-600 uppercase tracking-wider">
-                            État
+                    <TableHead className="px-6 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                            {t.common.status.general}
                           </TableHead>
-                          <TableHead className="px-6 py-3 text-right text-xs font-bold text-gray-600 uppercase tracking-wider">
-                            Actions
+                          <TableHead className="px-6 py-3 text-right text-xs font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                            {t.common.actions}
                           </TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody className="bg-white divide-y divide-gray-200">
+                <TableBody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                         {filteredBulletins.map((bulletin) => (
-                          <TableRow key={bulletin.id} className="hover:bg-gray-50 transition-colors duration-150">
-                            <TableCell className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
+                    <TableRow key={bulletin.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
+                      <TableCell className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">
                               {bulletin.name}
                             </TableCell>
-                            <TableCell className="px-6 py-4 whitespace-nowrap text-center text-gray-700 font-semibold text-base">
+                      <TableCell className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">
                               {bulletin.avg}/20
                             </TableCell>
-                            <TableCell className="px-6 py-4 whitespace-nowrap text-center text-gray-700">
+                      <TableCell className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">
                               {bulletin.rank}
                             </TableCell>
-                            <TableCell className="px-6 py-4 whitespace-nowrap text-center">
+                      <TableCell className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">
                               <Badge className="bg-green-500 text-white text-xs font-medium px-2.5 py-0.5 rounded-full">
-                                Généré
+                                {t.reports.generated}
                               </Badge>
                             </TableCell>
-                            <TableCell className="px-6 py-4 whitespace-nowrap text-right">
+                      <TableCell className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">
                               <div className="flex justify-end gap-2">
                                 <Button
                                   variant="outline"
@@ -1022,15 +1175,15 @@ const printReportFromRow = (bulletin: BulletinEleve) => {
                                   onClick={() => handlePreviewReport(bulletin)}
                                   className="text-blue-600 hover:bg-blue-50 rounded-md"
                                 >
-                                  <Eye className="h-4 w-4 mr-1" /> Prévisualiser
+                                  <Eye className="h-4 w-4 mr-1" /> {t.reports.preview}
                                 </Button>
-                               
-<Button onClick={() => printReportFromRow(bulletin)}                                  variant="outline"
+                                <Button 
+                                  onClick={() => printReportFromRow(bulletin)}
+                                  variant="outline"
                                   size="sm"
-                                  
                                   className="text-red-600 hover:bg-red-50 rounded-md"
                                 >
-                                  <Printer className="h-4 w-4 mr-1" /> Imprimer
+                                  <Printer className="h-4 w-4 mr-1" /> {t.common.print}
                                 </Button>
                               </div>
                             </TableCell>
@@ -1041,106 +1194,119 @@ const printReportFromRow = (bulletin: BulletinEleve) => {
                   </div>
 
                   {/* Vue mobile */}
-<div
-  className="block lg:hidden space-y-2 p-2 bg-white rounded-md"
-  style={{
-    height: 'calc(81vh - 180px)', // ajuste selon la hauteur de ton header/filtre
-    overflowY: 'auto',
-  }}
->  {filteredBulletins.map((bulletin) => (
-    <Card key={bulletin.id} className="bg-white dark:bg-gray-800 shadow-md rounded-lg">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base font-semibold text-blue-700 dark:text-blue-300">
-          {bulletin.name}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2 text-sm border-t border-b py-3">
-        <div className="flex justify-between items-center">
-          <span className="font-medium text-gray-600 dark:text-gray-300">Moyenne:</span>
-          <span className="font-semibold text-gray-800 dark:text-gray-100">
-            {bulletin.avg}/20
-          </span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span className="font-medium text-gray-600 dark:text-gray-300">Classement:</span>
-          <span className="text-gray-800 dark:text-gray-100">{bulletin.rank}</span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span className="font-medium text-gray-600 dark:text-gray-300">État:</span>
-          <Badge className="bg-green-500 text-white text-xs font-medium px-2 py-0.5 rounded-full">
-            Généré
-          </Badge>
-        </div>
-      </CardContent>
-      <CardFooter className="flex justify-end gap-2 pt-3">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => handlePreviewReport(bulletin)}
-          className="text-blue-600 hover:bg-blue-50 rounded-md flex-1 justify-center"
-        >
-          <Eye className="h-4 w-4 mr-1" /> Prévisualiser
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => printReportFromRow(bulletin)}
-          className="text-red-600 hover:bg-red-50 rounded-md"
-        >
-          <Printer className="h-4 w-4" />
-        </Button>
-      </CardFooter>
-    </Card>
-  ))}
-</div>
+                  <div
+                    className="block lg:hidden space-y-2 p-2 bg-white rounded-md"
+                    style={{
+                      height: 'calc(81vh - 180px)',
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {filteredBulletins.map((bulletin) => (
+                      <Card key={bulletin.id} className="bg-white dark:bg-gray-800 shadow-md rounded-lg">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-base font-semibold text-blue-700 dark:text-blue-300">
+                            {bulletin.name}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2 text-sm border-t border-b py-3">
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium text-gray-600 dark:text-gray-300">
+                              {t.reportManagement.overallAverage}:
+                            </span>
+                            <span className="font-semibold text-gray-800 dark:text-gray-100">
+                              {bulletin.avg}/20
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium text-gray-600 dark:text-gray-300">
+                              {t.reportManagement.rank}:
+                            </span>
+                            <span className="text-gray-800 dark:text-gray-100">{bulletin.rank}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium text-gray-600 dark:text-gray-300">
+                              {t.common.status.general}:
+                            </span>
+                            <Badge className="bg-green-500 text-white text-xs font-medium px-2 py-0.5 rounded-full">
+                              {t.reports.generated}
+                            </Badge>
+                          </div>
+                        </CardContent>
+                        <CardFooter className="flex justify-end gap-2 pt-3">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handlePreviewReport(bulletin)}
+                            className="text-blue-600 hover:bg-blue-50 rounded-md flex-1 justify-center"
+                          >
+                            <Eye className="h-4 w-4 mr-1" /> {t.reports.preview}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => printReportFromRow(bulletin)}
+                            className="text-red-600 hover:bg-red-50 rounded-md"
+                          >
+                            <Printer className="h-4 w-4" />
+                          </Button>
+                        </CardFooter>
+                      </Card>
+                    ))}
+                  </div>
                 </>
               )}
             </CardContent>
           </Card>
         </div>
       ) : (
-        <div className="bg-white rounded-lg p-10 text-center shadow-lg border border-gray-200">
-          <p className="text-gray-600 text-lg font-medium">
-            Veuillez sélectionner une année scolaire, une classe et un trimestre pour consulter les bulletins.
+  <div className="bg-white dark:bg-gray-800 rounded-lg p-10 text-center shadow-lg border border-gray-200 dark:border-gray-700">
+    <p className="text-gray-600 dark:text-gray-300 text-lg font-medium">
+            {t.reports.selectPrompt}
           </p>
-          <p className="text-gray-400 text-sm mt-2">
-            Utilisez les menus déroulants ci-dessus pour commencer.
+    <p className="text-gray-400 dark:text-gray-500 text-sm mt-2">
+            {t.reports.useDropdowns}
           </p>
         </div>
       )}
 
       {/* Dialogue de prévisualisation */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-6xl w-full p-0 rounded-lg overflow-hidden h-[calc(100vh-2rem)] print:h-[297mm] print:max-h-[297mm] print:rounded-none print:shadow-none print:border-none">
+<DialogContent className="max-w-6xl w-full p-0 rounded-lg overflow-hidden h-[calc(100vh-2rem)] print:h-[297mm] print:max-h-[297mm] print:rounded-none print:shadow-none print:border-none dark:bg-gray-900">
           {/* Contenu imprimable */}
           {selectedReport && (
-            <div id="bulletin-preview-content-area" className="bg-white h-full overflow-y-auto px-8 pt-8 pb-8 print:p-[8mm] print:overflow-visible print:h-auto print:border print:border-gray-300 print:shadow-md print:rounded-md">
-              {/* En-tête - Ajout de items-center pour un meilleur alignement vertical */}
+            <div 
+              id="bulletin-preview-content-area" 
+      className="bg-white dark:bg-gray-800 h-full overflow-y-auto px-8 pt-8 pb-8 print:p-[8mm] print:overflow-visible print:h-auto print:border print:border-gray-300 print:shadow-md print:rounded-md"
+              dir="ltr"
+            >
+              {/* En-tête */}
               <div className="grid grid-cols-3 items-center gap-4 text-xs mb-6 print:mb-4">
                 <div className="text-left">
-                  <p>République Islamique de Mauritanie</p>
-                  <p>Ministère de l'Éducation Nationale</p>
-                  <p>Direction des Examens et Concours</p>
+                  <p>{t.reportManagement.republic}</p>
+                  <p>{t.reportManagement.educationMinistry}</p>
+                  <p>{t.reportManagement.examsDirection}</p>
                 </div>
                 <div className="text-center">
-                  <h2 className="text-2xl font-bold text-blue-800 mb-1">BULLETIN DE NOTES</h2>
+                  <h2 className="text-2xl font-bold text-blue-800 mb-1">
+                    {t.reportManagement.reportTitle}
+                  </h2>
                   <p className="font-semibold text-sm">
-                    Année Scolaire:{" "}
+                    {t.reportManagement.schoolYear}:{" "}
                     <span className="text-blue-700">
                       {anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId))?.libelle}
                     </span>
                   </p>
                   <p className="font-semibold text-sm">
-                    Trimestre:{" "}
+                    {t.reportManagement.term}:{" "}
                     <span className="text-blue-700">
                       {trimestres.find(t => t.id === parseInt(selectedTermId))?.nom}
                     </span>
                   </p>
                 </div>
                 <div className="text-right text-xs" dir="rtl">
-                  <p>الجمهورية الإسلامية الموريتانية</p>
-                  <p>وزارة التهذيب الوطني</p>
-                  <p>مديرية الامتحانات والمباريات</p>
+                  <p>{t.reportManagement.republicAr}</p>
+                  <p>{t.reportManagement.educationMinistryAr}</p>
+                  <p>{t.reportManagement.examsDirectionAr}</p>
                 </div>
               </div>
 
@@ -1148,21 +1314,21 @@ const printReportFromRow = (bulletin: BulletinEleve) => {
               <div className="mb-6 text-sm">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
                   <div>
-                    <p><strong>Établissement:</strong> {schoolName}</p>
-                    <p><strong>Élève:</strong> {selectedReport.name}</p>
-                    <p><strong>Matricule:</strong> 123456</p>
+                    <p><strong>{t.reportManagement.establishment}:</strong> {schoolName}</p>
+                    <p><strong>{t.common.student}:</strong> {selectedReport.name}</p>
+                    <p><strong>{t.reportManagement.studentId}:</strong> 123456</p>
                   </div>
                   <div className="text-right md:pl-8">
-                    <p><strong>Classe:</strong> {classes.find(c => c.id === parseInt(selectedClassId))?.nom}</p>
-                    <p><strong>Nombre d'élèves:</strong> {selectedReport.totalElevesClasse}</p>
+                    <p><strong>{t.common.class}:</strong> {classes.find(c => c.id === parseInt(selectedClassId))?.nom}</p>
+                    <p><strong>{t.reportManagement.studentsCount}:</strong> {selectedReport.totalElevesClasse}</p>
                     <p>
-                      <strong>Absences (non justifiées):</strong>{" "}
-                      <span className="text-red-600">{selectedReport.absencesNonJustifieesHeures ?? 0} h</span>
+                      <strong>{t.reportManagement.unjustifiedAbsences}:</strong>{" "}
+                      <span className="text-red-600">{selectedReport.absencesNonJustifieesHeures ?? 0} {t.common.hours}</span>
                     </p>
                   </div>
                 </div>
                 <div className="border-t border-gray-300 pt-2 text-right text-xs">
-                  Date d'édition: {new Date().toLocaleDateString("fr-FR")}
+                  {t.reportManagement.printDate}: {new Date().toLocaleDateString(isRTL ? 'ar-MA' : 'fr-FR')}
                 </div>
               </div>
 
@@ -1172,12 +1338,12 @@ const printReportFromRow = (bulletin: BulletinEleve) => {
                   <TableHeader className="bg-blue-100 print:bg-gray-100">
                     <TableRow>
                       <TableHead className="min-w-[150px]">
-                        Matière<br />
-                        <span className="text-sm">المادة</span>
+                        {t.reportManagement.subject}<br />
+                        <span className="text-sm">{t.reportManagement.subjectAr}</span>
                       </TableHead>
                       <TableHead className="text-center">
-                        Coeff<br />
-                        <span className="text-sm">المعامل</span>
+                        {t.reportManagement.coefficient}<br />
+                        <span className="text-sm">{t.reportManagement.coefficientAr}</span>
                       </TableHead>
                       
                       {dynamicEvaluationHeaders
@@ -1186,15 +1352,15 @@ const printReportFromRow = (bulletin: BulletinEleve) => {
                           <TableHead key={header} className="text-center">
                             {header}<br />
                             <span className="text-sm">
-                              {header.toLowerCase().includes('devoir') ? 'الاختبار' : ''}
+                              {header.toLowerCase().includes('devoir') ? t.reportManagement.testAr : ''}
                             </span>
                           </TableHead>
                         ))}
                       
                       {dynamicEvaluationHeaders.some(header => header.toLowerCase().includes('devoir')) && (
                         <TableHead key="moy-dev-pond-header" className="text-center">
-                          Moy. devoir *3<br />
-                          <span className="text-sm">معدل الاختبارات *3</span>
+                          {t.reportManagement.weightedTestAvg}<br />
+                          <span className="text-sm">{t.reportManagement.weightedTestAvgAr}</span>
                         </TableHead>
                       )}
                       
@@ -1203,22 +1369,22 @@ const printReportFromRow = (bulletin: BulletinEleve) => {
                         .map(header => (
                           <TableHead key={header} className="text-center min-w-[120px]">
                             {header.toLowerCase().startsWith('compo')
-                              ? `Compo. ${header.replace(/composition\s*/i, '')}`
+                              ? `${t.reportManagement.exam} ${header.replace(/composition\s*/i, '')}`
                               : header}
                             <br />
                             {header.toLowerCase().startsWith('compo')
-                                ? `امتحان ${header.replace(/composition\s*/i, '')}`
+                                ? `${t.reportManagement.examAr} ${header.replace(/composition\s*/i, '')}`
                                 : ''}
                           </TableHead>
                         ))}
                       
                       <TableHead className="text-center">
-                        Moy. Matiere<br />
-                        <span className="text-sm">معدل المادة</span>
+                        {t.reportManagement.subjectAvg}<br />
+                        <span className="text-sm">{t.reportManagement.subjectAvgAr}</span>
                       </TableHead>
                       <TableHead className="min-w-[150px]">
-                        Observation<br />
-                        <span className="text-sm">ملاحظة</span>
+                        {t.reportManagement.observation}<br />
+                        <span className="text-sm">{t.reportManagement.observationAr}</span>
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1257,13 +1423,13 @@ const printReportFromRow = (bulletin: BulletinEleve) => {
                           })}
 
                         <TableCell className="text-center font-bold">{matiere.moyenneMatiere.toFixed(2)}</TableCell>
-                        <TableCell className="observation-column" style={{ textAlign: 'left', paddingLeft: '16px' }}></TableCell>
+                        <TableCell className="observation-column" style={{ textAlign: isRTL ? 'right' : 'left', paddingLeft: '16px' }}></TableCell>
                       </TableRow>
                     ))}
 
                     {/* Ligne des totaux */}
                     <TableRow className="bg-gray-50 font-bold print:bg-gray-100">
-                      <TableCell>Totaux</TableCell>
+                      <TableCell>{t.reportManagement.totals}</TableCell>
                       <TableCell className="text-center">
                         {selectedReport.notesParMatiere.reduce((sum, matiere) => sum + matiere.coefficient, 0).toFixed(0)}
                       </TableCell>
@@ -1282,34 +1448,38 @@ const printReportFromRow = (bulletin: BulletinEleve) => {
               {/* Observations & Résultats */}
               <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm print:text-sm">
                 <div className="border rounded-lg p-4 bg-gray-50 print:bg-white print:border print:border-gray-300 print:rounded-md">
-                  <h3 className="font-bold mb-2">Appréciation du Conseil de Classe</h3>
+                  <h3 className="font-bold mb-2">{t.reportManagement.classCouncilAppreciation}</h3>
                   <p className="italic">{selectedReport.teacherComment}</p>
-                  <p className="text-right mt-4 text-xs">Signature du Professeur Principal</p>
+                  <p className={`text-right mt-4 text-xs ${isRTL ? 'text-left' : 'text-right'}`}>
+                    {t.reportManagement.teacherSignature}
+                  </p>
                 </div>
                 <div className="border rounded-lg p-4 bg-gray-50 print:bg-white print:border print:border-gray-300 print:rounded-md">
-                  <h3 className="font-bold mb-2">Observations du Directeur</h3>
+                  <h3 className="font-bold mb-2">{t.reportManagement.directorObservations}</h3>
                   <p className="italic">{selectedReport.principalComment}</p>
-                  <p className="text-right mt-4 text-xs">Signature du Directeur</p>
+                  <p className={`text-right mt-4 text-xs ${isRTL ? 'text-left' : 'text-right'}`}>
+                    {t.reportManagement.directorSignature}
+                  </p>
                 </div>
               </div>
 
               {/* Résultats finaux */}
               <div className="mb-6 text-center grid grid-cols-2 md:grid-cols-4 gap-6 print:text-sm bg-gray-50 p-5 rounded-lg shadow-md">
                 {[{
-                  label: "Moyenne Générale",
+                  label: t.reportManagement.overallAverage,
                   value: `${selectedReport.avg}/20`,
                   textColor: "text-blue-700"
                 }, {
-                  label: "Rang",
+                  label: t.reportManagement.rank,
                   value: selectedReport.rank,
                   textColor: "text-gray-900"
                 }, {
-                  label: "Mention",
+                  label: t.reportManagement.mention,
                   value: getMention(parseFloat(selectedReport.avg)),
                   textColor: "text-indigo-600"
                 }, {
-                  label: "Décision",
-                  value: parseFloat(selectedReport.avg) >= 10 ? "Admis(e)" : "Non Admis(e)",
+                  label: t.reportManagement.decision,
+                  value: parseFloat(selectedReport.avg) >= 10 ? t.reportManagement.passed : t.reportManagement.failed,
                   textColor: parseFloat(selectedReport.avg) >= 10 ? "text-green-600" : "text-red-600"
                 }].map(({label, value, textColor}) => (
                   <div key={label} className="flex flex-col items-center">
@@ -1321,32 +1491,32 @@ const printReportFromRow = (bulletin: BulletinEleve) => {
 
               {/* Pied de page */}
               <div className="text-center text-xs text-gray-500 pt-2 pb-6 print:pb-0 print:text-xs">
-                <p className="mt-2">Cachet et Signature de l'Administration</p>
+                <p className="mt-2">{t.reportManagement.adminStamp}</p>
                 <p className="mt-2">
                   {schoolName} - {address}
-                  {phone && ` - Tél: ${phone}`}
-                  {website && ` - Site: ${website}`}
+                  {phone && ` - ${t.common.phone}: ${phone}`}
+                  {website && ` - ${t.common.website}: ${website}`}
                 </p>
               </div>
             </div>
           )}
 
           {/* Actions non imprimables */}
-          <div className="bg-gray-100 px-6 py-4 flex justify-end gap-4 rounded-b-lg no-print">
-            <Button variant="outline" onClick={() => setPreviewOpen(false)}>
-              Fermer
+  <div className="bg-gray-100 dark:bg-gray-800 px-6 py-4 flex justify-end gap-4 rounded-b-lg no-print">
+    <Button variant="outline" onClick={() => setPreviewOpen(false)} className="dark:border-gray-600 dark:text-white">
+              {t.common.close}
             </Button>
             <Button 
               onClick={exportPreviewedReport} 
               className="bg-green-600 hover:bg-green-700 text-white"
             >
-              <FileDown className="mr-2 h-4 w-4" /> Exporter en PDF
+              <FileDown className="mr-2 h-4 w-4" /> {t.reports.exportPDF}
             </Button>
             <Button 
               onClick={printPreviewedReport} 
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
-              <Printer className="mr-2 h-4 w-4" /> Imprimer
+              <Printer className="mr-2 h-4 w-4" /> {t.common.print}
             </Button>
           </div>
         </DialogContent>

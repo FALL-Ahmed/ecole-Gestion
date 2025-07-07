@@ -246,6 +246,50 @@
 }
 
 
+.ltr {
+  direction: ltr;
+}
+/* Dans votre fichier global CSS */
+.rtl-grid {
+  direction: rtl;
+}
+
+.rtl-text {
+  text-align: right;
+}
+
+[dir="rtl"] .rtl-reverse {
+  flex-direction: row-reverse;
+}
+.dark .progress-bg-custom {
+  background-color: #94a3b8; /* équivalent à slate-400 */
+}
+/* Correction pour les éléments Select en RTL */
+[dir="rtl"] .select-item {
+  text-align: right;
+}
+/* Ajoutez ceci à la fin de votre fichier CSS */
+/* Garantit l'affichage des icônes */
+.fi {
+  display: inline-block;
+  width: 1.2em;
+  height: 1.2em;
+  background-size: contain;
+  background-position: 50%;
+  background-repeat: no-repeat;
+  vertical-align: middle;
+  margin-right: 0.3em;
+}
+
+.fis {
+  width: 1.2em;
+  height: 1.2em;
+  vertical-align: middle;
+}
+/* Ajustement des marges pour RTL */
+[dir="rtl"] .select-trigger {
+  padding-right: 0.5rem;
+}
 /* Pour l'écran */
 .observation-column {
   width: 30% !important;
@@ -275,7 +319,10 @@ html, body, #root {
     page-break-before: avoid;
     page-break-inside: avoid;
   }
-
+@page {
+  size: A4 landscape;
+  margin: 15mm;
+}
   #bulletin-preview-content-area {
     width: 100%; /* Occupy full width of the A4 page */
     height: auto; /* Let height adjust to content */

@@ -321,10 +321,15 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
     }
 
     try {
+            const token = localStorage.getItem('token');
+
       const results = await Promise.all(trimestresPayload.map(trimestre =>
         fetch(`${API_URL}/api/trimestres`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
           body: JSON.stringify(trimestre)
         }).then(res => {
           if (!res.ok) return res.json().then(err => Promise.reject(err));
@@ -358,9 +363,14 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
     if (!anneeToConfirm) return;
 
     try {
+            const token = localStorage.getItem('token');
+
       const response = await fetch(`${API_URL}/api/annees-academiques`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ libelle: anneeToConfirm.libelle, date_debut: anneeToConfirm.debut, date_fin: anneeToConfirm.fin })
       });
 
@@ -387,8 +397,14 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
     if (!anneeToDelete) return;
 
     try {
+            const token = localStorage.getItem('token');
+
       const response = await fetch(`${API_URL}/api/annees-academiques/${anneeToDelete.id}`, {
         method: 'DELETE',
+                headers: {
+          Authorization: `Bearer ${token}`,
+        },
+
       });
 
       if (!response.ok) {
@@ -1071,11 +1087,15 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
           <form
             onSubmit={async (e) => {
               e.preventDefault();
+              const token = localStorage.getItem('token');
 
               const res = await fetch(`${API_URL}/api/classes`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ nom: classeNom, niveau: classeNiveau, anneeScolaireId }),
+ headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
+                                body: JSON.stringify({ nom: classeNom, niveau: classeNiveau, anneeScolaireId }),
               });
 
               const nouvelleClasse = await res.json();
@@ -1093,8 +1113,10 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
                   if (classeExistante) {
                     await fetch(`${API_URL}/api/coefficientclasse/clone`, {
                       method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
+   headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                      },                      body: JSON.stringify({
                         fromClasseId: classeExistante.id,
                         toClasseId: nouvelleClasse.id,
                       }),
@@ -1215,7 +1237,7 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
 
       {/* Add Coefficient Dialog */}
       <Dialog open={isAddCoeffOpen} onOpenChange={setIsAddCoeffOpen}>
-        <DialogContent className="h-full w-full max-h-screen overflow-y-auto rounded-lg border-2 border-blue-300 bg-white p-0 shadow-xl dark:border-blue-900 dark:bg-gray-900 sm:h-auto sm:max-h-[90vh] sm:max-w-2xl">
+        <DialogContent className="h-full w-full max-h-screen overflow-y-auto rounded-lg border-2 border-blue-300 bg-white p-0 shadow-xl dark:border-blue-900 dark:bg-gray-900 sm:h-auto sm:max-h-[90vh] sm:max-w-4xl">
           <DialogHeader className="p-6">
             <div className="flex items-center justify-center mb-2">
               <DialogTitle className="text-center text-2xl font-bold text-blue-700 dark:text-blue-300">
@@ -1251,10 +1273,14 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
                 }
 
               try {
+                                const token = localStorage.getItem('token');
+
                 const response = await fetch(`${API_URL}/api/coefficientclasse`, {
                   method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(payload),
+ headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                  },                  body: JSON.stringify(payload),
                 });
 
                 if (!response.ok) {
@@ -1321,7 +1347,7 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
               </p>
 
               {coeffClasse && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {(() => {
                     const existingCoeffsForSelectedClass = coefficients.filter(
                       (c: any) => String(c.classe?.id) === String(coeffClasse)
@@ -1427,11 +1453,16 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
                 toast.error(t.schoolManagement.coefficients.errorInvalidCoefficient);
                 return;
               }
+              
               try {
+                                const token = localStorage.getItem('token');
+
                 const response = await fetch(`${API_URL}/api/coefficientclasse/${currentEditingCoeff.id}`, {
                   method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ coefficient: Number(currentEditingCoeff.coefficient) }),
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                  },                  body: JSON.stringify({ coefficient: Number(currentEditingCoeff.coefficient) }),
                 });
                 if (!response.ok) {
                   const errorData = await response.json();
@@ -1494,12 +1525,15 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
                 toast.error(t.common.requiredFieldsError);
                 return;
               }
+              const token = localStorage.getItem('token');
 
               const affectationPromises = affectClasses.map(classeId => {
                 return fetch(`${API_URL}/api/affectations`, {
                   method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
+ headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                  },                  body: JSON.stringify({
                     professeur_id: affectProf,
                     matiere_id: affectMatiere,
                     classe_id: classeId,

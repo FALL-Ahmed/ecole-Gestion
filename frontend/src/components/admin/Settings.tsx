@@ -24,15 +24,18 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { Eye, EyeOff, Mail, Phone} from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useEstablishmentInfo } from '@/contexts/EstablishmentInfoContext'; // Import the context hook
+import { useEstablishmentInfo } from '@/contexts/EstablishmentInfoContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
 
 export function Settings() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('account');
+  const { t, language } = useLanguage();
 
   // School data
   const [accountForm, setAccountForm] = useState({
@@ -60,6 +63,14 @@ export function Settings() {
     passwordPolicy: true,
     sessionTimeout: 30
   });
+  
+  // Password change state
+  const [ancienMotDePasse, setAncienMotDePasse] = useState('');
+  const [nouveauMotDePasse, setNouveauMotDePasse] = useState('');
+  const [confirmerMotDePasse, setConfirmerMotDePasse] = useState('');
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState({ old: false, new: false, confirm: false });
+  const { user } = useAuth();
 
   // Data for current academic year
   const [academicYearsList, setAcademicYearsList] = useState<any[]>([]);
@@ -67,15 +78,13 @@ export function Settings() {
   const [isLoadingAcademicConfig, setIsLoadingAcademicConfig] = useState(true);
   const [isLoadingEstablishmentInfo, setIsLoadingEstablishmentInfo] = useState(true);
 
-  const { fetchEstablishmentInfo: fetchEstablishmentInfoContext } = useEstablishmentInfo(); // Get the context's fetch function
+  const { fetchEstablishmentInfo: fetchEstablishmentInfoContext } = useEstablishmentInfo();
 
-  // Utility function to find academic year name by ID
   const getAcademicYearNameById = useCallback((id: number | null) => {
     if (id === null) {
-      return "Sélectionnez une année scolaire";
+      return t.settings.selectAcademicYear;
     }
     const numericId = typeof id === 'string' ? parseInt(id) : id;
-
     const year = academicYearsList.find((y: any) => y.id === numericId);
 
     if (year) {
@@ -83,45 +92,46 @@ export function Settings() {
       const endDate = new Date(year.date_fin);
       if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
         console.error("Invalid dates for academic year:", year);
-        return year.libelle || `Année ID ${id} (dates invalides)`;
+        return year.libelle || `${t.common.academicYears} ID ${id} (${t.common.invalidDate})`;
       }
       return `${year.libelle} (${format(startDate, 'yyyy')} - ${format(endDate, 'yyyy')})`;
     }
-    return "Année inconnue";
-  }, [academicYearsList]);
+    return t.common.unknownYear;
+  }, [academicYearsList, t]);
 
-  // Fetches all available academic years
   const fetchAcademicYears = async () => {
     try {
       const response = await fetch(`${API_URL}/api/annees-academiques`);
       if (!response.ok) {
-        throw new Error('Failed to fetch academic years');
+        throw new Error(t.settings.errorFetchingAcademicYears);
       }
       const data = await response.json();
       setAcademicYearsList(data);
     } catch (error: any) {
       console.error('Error fetching academic years:', error);
       toast({
-        title: "Erreur",
-        description: `Impossible de charger les années académiques disponibles: ${error.message}.`,
+        title: t.common.error,
+        description: `${t.settings.errorLoadingAcademicYears}: ${error.message}.`,
         variant: "destructive",
       });
     }
   };
 
-  // Fetches establishment information
   const fetchEstablishmentInfo = async () => {
     setIsLoadingEstablishmentInfo(true);
     try {
       const response = await fetch(`${API_URL}/api/establishment-info`);
       if (!response.ok) {
         if (response.status === 404) {
-          // No info found, use defaults or empty strings
           setAccountForm({ schoolName: "", directorName: "", email: "", phone: "", address: "", website: "" });
-          toast({ title: "Information", description: "Aucune information d'établissement trouvée. Vous pouvez en configurer.", variant: "default" });
+          toast({ 
+            title: t.common.information, 
+            description: t.settings.noEstablishmentInfoFound,
+            variant: "default" 
+          });
           return;
         }
-        throw new Error('Failed to fetch establishment information');
+        throw new Error(t.settings.errorFetchingEstablishmentInfo);
       }
       const data = await response.json();
       setAccountForm({
@@ -134,14 +144,17 @@ export function Settings() {
       });
     } catch (error: any) {
       console.error('Error fetching establishment information:', error);
-      toast({ title: "Erreur", description: `Impossible de charger les informations de l'établissement: ${error.message}.`, variant: "destructive" });
-      setAccountForm({ schoolName: "Erreur chargement", directorName: "", email: "", phone: "", address: "", website: "" });
+      toast({ 
+        title: t.common.error, 
+        description: `${t.settings.errorLoadingEstablishmentInfo}: ${error.message}.`, 
+        variant: "destructive" 
+      });
+      setAccountForm({ schoolName: t.settings.errorLoading, directorName: "", email: "", phone: "", address: "", website: "" });
     } finally {
       setIsLoadingEstablishmentInfo(false);
     }
   };
 
-  // Fetches the currently configured academic year ID
   const fetchCurrentAcademicYearConfiguration = async () => {
     try {
       const response = await fetch(`${API_URL}/api/configuration`);
@@ -150,44 +163,39 @@ export function Settings() {
           setCurrentAcademicYearId(null);
           return;
         }
-        throw new Error('Failed to fetch current academic year configuration');
+        throw new Error(t.settings.errorFetchingCurrentYear);
       }
       const data = await response.json();
-      // The backend returns annee_scolaire as an object, so we access its id
-      setCurrentAcademicYearId(data.annee_scolaire?.id || null); // Use optional chaining for safety
+      setCurrentAcademicYearId(data.annee_scolaire?.id || null);
     } catch (error: any) {
       console.error('Error fetching current academic year configuration:', error);
       toast({
-        title: "Erreur",
-        description: `Impossible de charger la configuration de l'année scolaire actuelle: ${error.message}.`,
+        title: t.common.error,
+        description: `${t.settings.errorLoadingCurrentYear}: ${error.message}.`,
         variant: "destructive",
       });
       setCurrentAcademicYearId(null);
     }
   };
 
-  // Combined effect to load all academic data
   useEffect(() => {
     const loadAcademicData = async () => {
       setIsLoadingAcademicConfig(true);
       await fetchAcademicYears();
-      // Establishment info is independent of academic years list for its initial fetch
       await fetchEstablishmentInfo();
     };
     loadAcademicData();
   }, []);
 
-  // This useEffect will run when academicYearsList is updated
   useEffect(() => {
-    if (academicYearsList.length > 0 || !isLoadingAcademicConfig) { // Ensure it runs even if list is empty but initial load attempt finished
+    if (academicYearsList.length > 0 || !isLoadingAcademicConfig) {
       fetchCurrentAcademicYearConfiguration().then(() => {
         setIsLoadingAcademicConfig(false);
       });
-    } else if (academicYearsList.length === 0 && !isLoadingAcademicConfig) { // Handles case where fetchAcademicYears finishes with empty list
+    } else if (academicYearsList.length === 0 && !isLoadingAcademicConfig) {
       setIsLoadingAcademicConfig(false);
     }
   }, [academicYearsList]);
-
 
   const handleAccountChange = (field: string, value: string) => {
     setAccountForm(prev => ({ ...prev, [field]: value }));
@@ -205,77 +213,146 @@ export function Settings() {
     setCurrentAcademicYearId(parseInt(value));
   };
 
+  const handlePasswordChange = async () => {
+    if (!ancienMotDePasse || !nouveauMotDePasse || !confirmerMotDePasse) {
+      toast({
+        title: t.settings.requiredFields,
+        description: t.settings.fillAllPasswordFields,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (nouveauMotDePasse !== confirmerMotDePasse) {
+      toast({
+        title: t.common.error,
+        description: t.settings.passwordMismatch,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!user) {
+      toast({
+        title: t.common.error,
+        description: t.settings.unauthenticatedUser,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingPassword(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/api/users/${user.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          ancienMotDePasse: ancienMotDePasse,
+          nouveauMotDePasse: nouveauMotDePasse,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || t.settings.passwordChangeFailed);
+      }
+
+      toast({ 
+        title: t.common.success, 
+        description: t.settings.passwordChangedSuccess 
+      });
+      setAncienMotDePasse('');
+      setNouveauMotDePasse('');
+      setConfirmerMotDePasse('');
+    } catch (error: any) {
+      toast({ 
+        title: t.common.error, 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsSavingPassword(false);
+    }
+  };
+
   const saveSettings = async () => {
     let success = true;
-    let description = `Vos paramètres ${getTabDescription(activeTab)} ont été mis à jour.`;
+    let description = `${t.settings.settingsSaved} ${getTabDescription(activeTab)} ${t.settings.haveBeenUpdated}.`;
 
     if (activeTab === 'account') {
       try {
+        const token = localStorage.getItem('token');
         const response = await fetch(`${API_URL}/api/establishment-info`, {
-          method: 'POST', // Or PUT, depending on your API design for single resource
-          headers: { 'Content-Type': 'application/json' },
- body: JSON.stringify({
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
             ...accountForm,
-            // Convert empty strings to null for optional URL fields
             website: accountForm.website === "" ? null : accountForm.website,
-            // Ajoutez d'autres champs optionnels si nécessaire
-          }),        });
+          }),
+        });
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.message || "Échec de la sauvegarde des informations de l'établissement.");
+          throw new Error(errorData.message || t.settings.errorSavingEstablishmentInfo);
         }
-        await fetchEstablishmentInfo(); // Re-fetch to confirm
-        await fetchEstablishmentInfoContext(); // Trigger update in shared context
+        await fetchEstablishmentInfo();
+        await fetchEstablishmentInfoContext();
       } catch (error: any) {
         console.error('Error saving establishment information:', error);
-        description = `Erreur lors de la sauvegarde des informations de l'établissement: ${error.message}`;
+        description = `${t.settings.errorSavingEstablishmentInfo}: ${error.message}`;
         success = false;
       }
     } else if (activeTab === 'notifications') {
-      // TODO: Implement saving notification settings to a dedicated endpoint or /api/configuration
-      description = "La sauvegarde des paramètres de notification n'est pas encore implémentée.";
-      success = false; // Mark as not successful until implemented
+      description = t.settings.notificationsNotImplemented;
+      success = false;
     } else if (activeTab === 'security') {
       // TODO: Implement saving security settings
     } else if (activeTab === 'academic') {
       if (currentAcademicYearId === null) {
         toast({
-          title: "Erreur de sauvegarde",
-          description: "Veuillez sélectionner une année scolaire avant d'enregistrer.",
+          title: t.settings.saveError,
+          description: t.settings.selectYearBeforeSave,
           variant: "destructive",
         });
         return;
       }
 
       try {
+        const token = localStorage.getItem('token');
         const response = await fetch(`${API_URL}/api/configuration`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            annee_scolaire_id: currentAcademicYearId // Send as direct ID
+            annee_scolaire_id: currentAcademicYearId
           }),
-          // --- END OF FIX ---
         });
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.message || 'Failed to save academic year configuration');
+          throw new Error(errorData.message || t.settings.errorSavingAcademicYear);
         }
 
-        await fetchCurrentAcademicYearConfiguration(); // Re-fetch to ensure UI reflects the DB
-        description = "L'année scolaire actuelle a été configurée avec succès.";
+        await fetchCurrentAcademicYearConfiguration();
+        description = t.settings.academicYearConfigured;
 
       } catch (error: any) {
         console.error('Error saving academic year configuration:', error);
-        description = `Erreur lors de l'enregistrement de l'année scolaire actuelle : ${error.message}`;
+        description = `${t.settings.errorSavingAcademicYear}: ${error.message}`;
         success = false;
       }
     }
 
     toast({
-      title: success ? "Paramètres sauvegardés" : "Erreur de sauvegarde",
+      title: success ? t.settings.settingsSaved : t.settings.saveError,
       description: description,
       variant: success ? "default" : "destructive",
     });
@@ -283,223 +360,269 @@ export function Settings() {
 
   const getTabDescription = (tab: string) => {
     switch (tab) {
-      case 'account': return "de l'établissement";
-      case 'notifications': return "de notification";
-      case 'academic': return "d'année scolaire";
-      case 'security': return "de sécurité";
+      case 'account': return t.settings.establishment;
+      case 'notifications': return t.settings.notification;
+      case 'academic': return t.settings.academicYear;
+      case 'security': return t.settings.security;
       default: return "";
     }
   };
 
+  const isRTL = language === 'ar';
+  const textDirection = isRTL ? 'rtl' : 'ltr';
+  const flexDirection = isRTL ? 'flex-row-reverse' : 'flex-row';
+
   return (
-    <div className="p-6 w-full mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Paramètres de l'établissement</h1>
+    <div 
+      className="p-6 w-full mx-auto"
+      dir={textDirection}
+    >
+      <h1 className="text-2xl font-bold mb-6">{t.settings.title}</h1>
 
-      <Tabs defaultValue="account" value={activeTab} onValueChange={setActiveTab} className="space-y-6 w-full">
-       <TabsList className="flex flex-row flex-wrap w-full gap-2 sm:gap-4 justify-center mb-8">
-  <TabsTrigger
-    value="account"
-    className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
-  >
-    Établissement
-  </TabsTrigger>
-  <TabsTrigger
-    value="notifications"
-    className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
-  >
-    Notifications
-  </TabsTrigger>
-  <TabsTrigger
-    value="academic"
-    className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
-  >
-    Année scolaire
-  </TabsTrigger>
-  <TabsTrigger
-    value="security"
-    className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
-  >
-    Sécurité
-  </TabsTrigger>
-</TabsList>
-<div className="h-4 sm:h-12"></div>
+      <Tabs 
+        defaultValue="account" 
+        value={activeTab} 
+        onValueChange={setActiveTab} 
+        className="space-y-6 w-full"
+        dir={textDirection}
+      >
+        <TabsList className={`flex ${flexDirection} flex-wrap w-full gap-2 sm:gap-4 justify-center mb-8`}>
+          <TabsTrigger
+            value="account"
+            className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
+          >
+            {t.settings.establishment}
+          </TabsTrigger>
+       
+          <TabsTrigger
+            value="academic"
+            className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
+          >
+            {t.settings.academicYear}
+          </TabsTrigger>
+          <TabsTrigger
+            value="security"
+            className="flex-1 sm:flex-none border bg-gray-100 text-gray-800 shadow-md sm:border-0 sm:bg-transparent sm:text-inherit sm:shadow-none"
+          >
+            {t.settings.security}
+          </TabsTrigger>
+        </TabsList>
+        <div className="h-4 sm:h-12"></div>
 
-        <TabsContent value="account" className="w-full">
-          <Card className="w-full">
-            <CardHeader>
-              <CardTitle>Informations de l'établissement</CardTitle>
-              <CardDescription>
-                Gérez les informations générales et les coordonnées de votre établissement
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-                <FormItem className="w-full">
-                  <FormLabel>Nom de l'établissement *</FormLabel>
-                  <Input
-                    value={accountForm.schoolName}
-                    onChange={(e) => handleAccountChange('schoolName', e.target.value)}
-                    required
-                    className="w-full"
-                  />
-                </FormItem>
-                <FormItem className="w-full">
-                  <FormLabel>Nom du directeur *</FormLabel>
-                  <Input
-                    value={accountForm.directorName}
-                    onChange={(e) => handleAccountChange('directorName', e.target.value)}
-                    required
-                    className="w-full"
-                  />
-                </FormItem>
-                
-              </div>
+      <TabsContent value="account" className="w-full">
+  <Card className="w-full">
+    <CardHeader>
+      <CardTitle>{t.settings.establishmentInfo}</CardTitle>
+      <CardDescription>
+        {t.settings.establishmentInfoDescription}
+      </CardDescription>
+    </CardHeader>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-                <FormItem className="w-full">
-                  <FormLabel>Email de contact *</FormLabel>
-                  <Input
-                    type="email"
-                    value={accountForm.email}
-                    onChange={(e) => handleAccountChange('email', e.target.value)}
-                    required
-                    className="w-full"
-                  />
-                </FormItem>
+    <CardContent className="space-y-6">
+      {/* Section Contacts Plateforme - Version garantie */}
+     <div className="relative bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-md overflow-hidden transition-all hover:shadow-xl">
+  {/* Header */}
+  <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/40 dark:to-blue-800/40 border-b border-gray-100 dark:border-gray-700">
+    <div className="flex items-center justify-between">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+        <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-400 dark:from-blue-300 dark:to-blue-100">
+          {t.settings.platformContacts}
+        </span>
+      </h3>
+      <span className="text-xs font-medium bg-white dark:bg-gray-800/70 text-blue-600 dark:text-blue-200 px-3 py-1 rounded-full border border-blue-100 dark:border-blue-900/40 shadow-sm">
+        {t.settings.responseTime}
+      </span>
+    </div>
+  </div>
 
-                <FormItem className="w-full">
-                  <FormLabel>Téléphone *</FormLabel>
-                  <Input
-                    value={accountForm.phone}
-                    onChange={(e) => handleAccountChange('phone', e.target.value)}
-                    required
-                    className="w-full"
-                  />
-                </FormItem>
-              </div>
+  {/* Contact list */}
+  <div className="divide-y divide-gray-100 dark:divide-gray-700">
+    {/* Contact email */}
+    <div
+      className="group px-6 py-4 hover:bg-blue-50/40 dark:hover:bg-blue-900/10 transition-all cursor-pointer"
+      onClick={() => {
+        navigator.clipboard.writeText("contact@edusynch.com");
+        toast({
+          title: t.settings.emailCopied,
+          description: t.settings.emailCopiedDescription,
+        });
+      }}
+    >
+      <div className="flex items-center gap-4">
+        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg ring-1 ring-inset ring-blue-200 dark:ring-blue-700 group-hover:scale-105 transition-transform">
+          <Mail className="w-5 h-5 text-blue-600 dark:text-blue-300" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">
+            {t.settings.professionalEmail}
+          </p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
+            contact@test.com
+          </p>
+        </div>
+      </div>
+    </div>
 
-              <FormItem className="w-full">
-                <FormLabel>Adresse *</FormLabel>
-                <Input
-                  value={accountForm.address}
-                  onChange={(e) => handleAccountChange('address', e.target.value)}
-                  required
-                  className="w-full"
-                />
-              </FormItem>
+    {/* Contact Maroc */}
+    <a
+      href="tel:+212700360608"
+      className="block px-6 py-4 hover:bg-green-50/40 dark:hover:bg-green-900/10 transition-all"
+      onClick={(e) => {
+        if (!confirm(t.settings.confirmCall.replace("{{number}}", "+212 700 360 608")))
+          e.preventDefault();
+      }}
+    >
+      <div className="flex items-center gap-4">
+        <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg ring-1 ring-inset ring-green-200 dark:ring-green-700 group-hover:scale-105 transition-transform">
+          <Phone className="w-5 h-5 text-green-600 dark:text-green-300" />
+        </div>
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <img
+            src="https://flagcdn.com/ma.svg"
+            width="22"
+            alt={t.settings.morocco}
+            className="rounded-full border border-gray-300 dark:border-gray-600 shadow-sm"
+          />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">
+              {t.settings.supportMorocco}
+            </p>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">+212 700 360 608</p>
+          </div>
+        </div>
+      </div>
+    </a>
 
-              <FormItem className="w-full">
-                <FormLabel>Site web</FormLabel>
-                <Input
-                  value={accountForm.website}
-                  onChange={(e) => handleAccountChange('website', e.target.value)}
-                  placeholder="https://www.exemple.fr"
-                  className="w-full"
-                />
-              </FormItem>
+    {/* Contact Mauritanie */}
+    <a
+      href="tel:+22241513211"
+      className="block px-6 py-4 hover:bg-green-50/40 dark:hover:bg-green-900/10 transition-all"
+      onClick={(e) => {
+        if (!confirm(t.settings.confirmCall.replace("{{number}}", "+222 41 07 03 18")))
+          e.preventDefault();
+      }}
+    >
+      <div className="flex items-center gap-4">
+        <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg ring-1 ring-inset ring-green-200 dark:ring-green-700 group-hover:scale-105 transition-transform">
+          <Phone className="w-5 h-5 text-green-600 dark:text-green-300" />
+        </div>
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <img
+            src="https://flagcdn.com/mr.svg"
+            width="22"
+            alt={t.settings.mauritania}
+            className="rounded-full border border-gray-300 dark:border-gray-600 shadow-sm"
+          />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">
+              {t.settings.supportMauritania}
+            </p>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">+222 41 07 03 18</p>
+          </div>
+        </div>
+      </div>
+    </a>
+  </div>
 
-              <Separator />
+  {/* Footer */}
+  <div className="px-6 py-3 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-t border-gray-100 dark:border-gray-700">
+    <p className="text-xs text-gray-600 dark:text-gray-300 text-center flex items-center justify-center gap-2">
+      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+        />
+      </svg>
+      {t.settings.assistance} <span className="font-medium text-blue-600 dark:text-blue-300">{t.settings.availableDays}</span> {t.settings.availableHours} (GMT)
+    </p>
+  </div>
+</div>
 
-              
-            </CardContent>
-            <CardFooter className="flex justify-end">
-              <Button onClick={saveSettings}>Enregistrer</Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
+      <Separator />
 
-        <TabsContent value="notifications" className="w-full">
-          <Card className="w-full">
-            <CardHeader>
-              <CardTitle>Paramètres de notification</CardTitle>
-              <CardDescription>
-                Configurez les préférences de notification pour l'établissement
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex flex-col gap-6 w-full">
-                <FormItem className="flex items-center justify-between space-y-0 w-full">
-                  <div className="space-y-1">
-                    <FormLabel>Notifications par email</FormLabel>
-                    <FormDescription>
-                      Activer les notifications par email pour les administrateurs
-                    </FormDescription>
-                  </div>
-                  <Switch
-                    checked={notificationSettings.emailNotifications}
-                    onCheckedChange={(checked) => handleNotificationChange('emailNotifications', checked)}
-                  />
-                </FormItem>
+      {/* Formulaire Établissement */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+        <FormItem>
+          <FormLabel>{t.settings.schoolName} *</FormLabel>
+          <Input
+            value={accountForm.schoolName}
+            onChange={(e) => handleAccountChange('schoolName', e.target.value)}
+            required
+          />
+        </FormItem>
 
-                <Separator />
+        <FormItem>
+          <FormLabel>{t.settings.directorName} *</FormLabel>
+          <Input
+            value={accountForm.directorName}
+            onChange={(e) => handleAccountChange('directorName', e.target.value)}
+            required
+          />
+        </FormItem>
 
-                
+        <FormItem>
+          <FormLabel>{t.settings.contactEmail} *</FormLabel>
+          <Input
+            type="email"
+            value={accountForm.email}
+            onChange={(e) => handleAccountChange('email', e.target.value)}
+            required
+          />
+        </FormItem>
 
+        <FormItem>
+          <FormLabel>{t.settings.phone} *</FormLabel>
+          <Input
+            value={accountForm.phone}
+            onChange={(e) => handleAccountChange('phone', e.target.value)}
+            required
+          />
+        </FormItem>
 
-                <FormItem className="flex items-center justify-between space-y-0 w-full">
-                  <div className="space-y-1">
-                    <FormLabel>Absences des élèves</FormLabel>
-                    <FormDescription>
-                      Notifiez les responsables lors des absences non justifiées
-                    </FormDescription>
-                  </div>
-                  <Switch
-                    checked={notificationSettings.absenceNotifications}
-                    onCheckedChange={(checked) => handleNotificationChange('absenceNotifications', checked)}
-                  />
-                </FormItem>
+        <FormItem className="md:col-span-2">
+          <FormLabel>{t.settings.address} *</FormLabel>
+          <Input
+            value={accountForm.address}
+            onChange={(e) => handleAccountChange('address', e.target.value)}
+            required
+          />
+        </FormItem>
 
-                <Separator />
+        <FormItem className="md:col-span-2">
+          <FormLabel>{t.settings.website}</FormLabel>
+          <Input
+            value={accountForm.website}
+            onChange={(e) => handleAccountChange('website', e.target.value)}
+            placeholder="https://www.example.com"
+          />
+        </FormItem>
+      </div>
+    </CardContent>
 
-                <FormItem className="flex items-center justify-between space-y-0 w-full">
-                  <div className="space-y-1">
-                    <FormLabel>Modifications d'emploi du temps</FormLabel>
-                    <FormDescription>
-                      Notifiez les enseignants des changements d'emploi du temps
-                    </FormDescription>
-                  </div>
-                  <Switch
-                    checked={notificationSettings.scheduleChanges}
-                    onCheckedChange={(checked) => handleNotificationChange('scheduleChanges', checked)}
-                  />
-                </FormItem>
+    <CardFooter className="flex justify-end gap-2">
+      <Button onClick={saveSettings}>{t.common.save}</Button>
+    </CardFooter>
+  </Card>
+</TabsContent>
 
-                <Separator />
-
-                <FormItem className="flex items-center justify-between space-y-0 w-full">
-                  <div className="space-y-1">
-                    <FormLabel>Notifications système</FormLabel>
-                    <FormDescription>
-                      Recevoir les mises à jour et informations système
-                    </FormDescription>
-                  </div>
-                  <Switch
-                    checked={notificationSettings.systemNotifications}
-                    onCheckedChange={(checked) => handleNotificationChange('systemNotifications', checked)}
-                  />
-                </FormItem>
-              </div>
-            </CardContent>
-            <CardFooter className="flex justify-end">
-              <Button onClick={saveSettings}>Enregistrer</Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
+        
 
         <TabsContent value="academic" className="w-full">
           <Card className="w-full">
             <CardHeader>
-              <CardTitle>Configuration de l'année actuelle</CardTitle>
+              <CardTitle>{t.settings.currentYearConfiguration}</CardTitle>
               <CardDescription>
-                Sélectionnez l'année scolaire actuellement en cours pour votre établissement.
+                {t.settings.currentYearConfigurationDescription}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <FormItem className="w-full">
-                <FormLabel>Année scolaire actuelle *</FormLabel>
+                <FormLabel>{t.settings.currentAcademicYear} *</FormLabel>
                 
-                {isLoadingAcademicConfig || isLoadingEstablishmentInfo ? ( // Check both loading states if they affect this part
-                  <div>Chargement des années scolaires...</div>
+                {isLoadingAcademicConfig || isLoadingEstablishmentInfo ? (
+                  <div>{t.common.loading}</div>
                 ) : (
                   <Select
                     onValueChange={handleCurrentAcademicYearChange}
@@ -518,96 +641,98 @@ export function Settings() {
                   </Select>
                 )}
                 <FormDescription>
-                  Cette année sera utilisée par défaut pour les opérations du système.
+                  {t.settings.currentYearUsageNote}
                 </FormDescription>
               </FormItem>
             </CardContent>
-            <CardFooter className="flex justify-end">
-              <Button onClick={saveSettings}>Enregistrer</Button>
+            <CardFooter className={`flex ${isRTL ? 'justify-start' : 'justify-end'}`}>
+              <Button onClick={saveSettings}>{t.common.save}</Button>
             </CardFooter>
           </Card>
         </TabsContent>
 
         <TabsContent value="security" className="w-full">
-          <Card className="w-full">
-            <CardHeader>
-              <CardTitle>Paramètres de sécurité</CardTitle>
-              <CardDescription>
-                Configurez les options de sécurité pour votre établissement
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex flex-col gap-6 w-full">
-                <FormItem className="flex items-center justify-between space-y-0 w-full">
-                  <div className="space-y-1">
-                    <FormLabel>Authentification à deux facteurs</FormLabel>
-                    <FormDescription>
-                      Exiger une vérification supplémentaire pour les comptes administrateurs
-                    </FormDescription>
-                  </div>
-                  <Switch
-                    checked={securitySettings.twoFactorAuth}
-                    onCheckedChange={(checked) => handleSecurityChange('twoFactorAuth', checked)}
-                  />
-                </FormItem>
+  
 
-                <Separator />
-
-                <FormItem className="flex items-center justify-between space-y-0 w-full">
-                  <div className="space-y-1">
-                    <FormLabel>Verrouillage automatique</FormLabel>
-                    <FormDescription>
-                      Verrouiller les sessions après une période d'inactivité
-                    </FormDescription>
-                  </div>
-                  <Switch
-                    checked={securitySettings.autoLock}
-                    onCheckedChange={(checked) => handleSecurityChange('autoLock', checked)}
-                  />
-                </FormItem>
-
-                {securitySettings.autoLock && (
-                  <div className="ml-6 pl-6 border-l w-full">
-                    <FormItem className="w-full">
-                      <FormLabel>Délai avant verrouillage (minutes)</FormLabel>
-                      <Input
-                        type="number"
-                        value={securitySettings.sessionTimeout}
-                        onChange={(e) => handleSecurityChange('sessionTimeout', parseInt(e.target.value))}
-                        min="5"
-                        max="120"
-                        className="w-full"
-                      />
-                    </FormItem>
-                  </div>
-                )}
-
-                <Separator />
-
-                <FormItem className="flex items-center justify-between space-y-0 w-full">
-                  <div className="space-y-1">
-                    <FormLabel>Politique de mot de passe</FormLabel>
-                    <FormDescription>
-                      Exiger des mots de passe complexes pour tous les utilisateurs
-                    </FormDescription>
-                  </div>
-                  <Switch
-                    checked={securitySettings.passwordPolicy}
-                    onCheckedChange={(checked) => handleSecurityChange('passwordPolicy', checked)}
-                  />
-                </FormItem>
-
-                <Separator />
-
-                
-              </div>
-            </CardContent>
-            <CardFooter className="flex justify-end">
-              <Button onClick={saveSettings}>Enregistrer</Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
+  <Card className="w-full mt-6">
+    <CardHeader className={isRTL ? "text-right" : "text-left"}>
+      <CardTitle>{t.settings.changePassword}</CardTitle>
+      <CardDescription>
+        {t.settings.changePasswordDescription}
+      </CardDescription>
+    </CardHeader>
+    <CardContent className="space-y-4">
+      <FormItem className={isRTL ? "text-right" : ""}>
+        <FormLabel>{t.settings.oldPassword}</FormLabel>
+        <div className="relative">
+          <Input
+            type={showPassword.old ? 'text' : 'password'}
+            value={ancienMotDePasse}
+            onChange={(e) => setAncienMotDePasse(e.target.value)}
+            autoComplete="current-password"
+          />
+          <Button 
+            type="button" 
+            variant="ghost" 
+            size="icon" 
+            className={`absolute ${isRTL ? 'left-1' : 'right-1'} top-1/2 -translate-y-1/2 h-7 w-7`} 
+            onClick={() => setShowPassword(p => ({ ...p, old: !p.old }))}
+          >
+            {showPassword.old ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </Button>
+        </div>
+      </FormItem>
+      <FormItem className={isRTL ? "text-right" : ""}>
+        <FormLabel>{t.settings.newPassword}</FormLabel>
+        <div className="relative">
+          <Input
+            type={showPassword.new ? 'text' : 'password'}
+            value={nouveauMotDePasse}
+            onChange={(e) => setNouveauMotDePasse(e.target.value)}
+            autoComplete="new-password"
+          />
+          <Button 
+            type="button" 
+            variant="ghost" 
+            size="icon" 
+            className={`absolute ${isRTL ? 'left-1' : 'right-1'} top-1/2 -translate-y-1/2 h-7 w-7`} 
+            onClick={() => setShowPassword(p => ({ ...p, new: !p.new }))}
+          >
+            {showPassword.new ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </Button>
+        </div>
+      </FormItem>
+      <FormItem className={isRTL ? "text-right" : ""}>
+        <FormLabel>{t.settings.confirmPassword}</FormLabel>
+        <div className="relative">
+          <Input
+            type={showPassword.confirm ? 'text' : 'password'}
+            value={confirmerMotDePasse}
+            onChange={(e) => setConfirmerMotDePasse(e.target.value)}
+            autoComplete="new-password"
+          />
+          <Button 
+            type="button" 
+            variant="ghost" 
+            size="icon" 
+            className={`absolute ${isRTL ? 'left-1' : 'right-1'} top-1/2 -translate-y-1/2 h-7 w-7`} 
+            onClick={() => setShowPassword(p => ({ ...p, confirm: !p.confirm }))}
+          >
+            {showPassword.confirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </Button>
+        </div>
+      </FormItem>
+    </CardContent>
+    <CardFooter className={`flex ${isRTL ? 'justify-start' : 'justify-end'}`}>
+      <Button onClick={handlePasswordChange} disabled={isSavingPassword}>
+        {isSavingPassword ? t.settings.changingPassword : t.settings.changePasswordButton}
+      </Button>
+    </CardFooter>
+  </Card>
+</TabsContent>
       </Tabs>
     </div>
   );
 }
+
+export default Settings;
