@@ -8,7 +8,7 @@ const HomePage: React.FC = () => {
 
     useEffect(() => {
         if (isAuthenticated) {
-            navigate('/*');
+            navigate('/dashboard');
         } else {
             const timer = setTimeout(() => {
                 navigate('/login');
