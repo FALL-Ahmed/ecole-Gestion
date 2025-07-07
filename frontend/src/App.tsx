@@ -5,7 +5,6 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import 'flag-icons/css/flag-icons.min.css';
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { MainContent } from "@/components/MainContent";
