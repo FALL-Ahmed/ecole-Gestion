@@ -42,7 +42,7 @@ const HomePage: React.FC = () => {
                         display: 'block'
                     }}
                 >
-                    <source src="/src/logo.mp4" type="video/mp4" />
+                    <source src="/logo.mp4" type="video/mp4" />
                 </video>
             </div>
         </div>
