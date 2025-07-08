@@ -36,18 +36,6 @@ interface MainContentProps {
 
 export function MainContent({ activeSection, onSectionChange }: MainContentProps) {
   const { user, isAuthenticated, isLoading } = useAuth();
-  
-  // Gestion dynamique de la hauteur pour mobile et desktop
-  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
-
-  useEffect(() => {
-    const handleResize = () => {
-      setWindowHeight(window.innerHeight);
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   if (isLoading) {
     return (
@@ -123,23 +111,11 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
   };
 
   return (
-    <div 
-      className="relative bg-gray-50 dark:bg-gray-900"
-      style={{
-        // Hauteur totale moins la hauteur de la navbar si elle existe
-        height: `calc(${windowHeight}px - var(--navbar-height, 0px))`,
-        // Gestion safe-area pour les mobiles (notch, etc.)
-        paddingTop: 'env(safe-area-inset-top, 0px)',
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-      }}
-    >
-      {/* Conteneur principal avec défilement */}
-      <div className="h-full overflow-y-auto">
-        {/* Contenu dynamique avec padding adaptatif */}
-        <main className="min-h-full p-4 md:p-6">
-          {renderContent()}
-        </main>
-      </div>
+    // Le parent (App.tsx) gère déjà le padding (pt-[80px]) et le défilement.
+    // Ce composant doit juste afficher le contenu de la section active.
+    // Le padding (p-4 md:p-6) est appliqué ici pour que chaque "page" ait un espacement correct.
+    <div className="p-4 md:p-6 bg-gray-50 dark:bg-gray-900 min-h-full">
+      {renderContent()}
     </div>
   );
 }
