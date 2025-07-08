@@ -653,9 +653,14 @@ export default function UserManagement() {
   }, [filterAnneeId, filterClasseId, availableClassesForInscriptionFilter]);
 
   return (
-  <div
-  className="flex flex-col bg-gray-50 dark:bg-gray-900 h-full p-6 pb-[env(safe-area-inset-bottom)]"
-  style={{ minHeight: '100vh', boxSizing: 'border-box' }}
+<div
+  className="flex flex-col bg-gray-50 dark:bg-gray-900 h-[100dvh] p-6 pb-[env(safe-area-inset-bottom)]"
+  style={{
+    boxSizing: 'border-box',
+    paddingTop: 'env(safe-area-inset-top)',
+    paddingLeft: 'env(safe-area-inset-left)',
+    paddingRight: 'env(safe-area-inset-right)'
+  }}
 >
   <div className="mb-4 flex flex-col md:flex-row justify-center items-stretch md:items-center gap-3 md:gap-4">
    <Button
