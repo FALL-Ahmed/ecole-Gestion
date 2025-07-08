@@ -106,7 +106,7 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
   };
 
   return (
-<div className="flex-1 overflow-auto min-h-[100dvh] pb-[env(safe-area-inset-bottom)]">
+<div className="flex-1 overflow-auto pt-[80px] pb-[env(safe-area-inset-bottom)]">
       {renderContent()}
 
     </div>
