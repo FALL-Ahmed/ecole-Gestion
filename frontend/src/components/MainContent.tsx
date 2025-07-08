@@ -38,7 +38,7 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
   const { user, isAuthenticated, isLoading } = useAuth();
 
   // 1. Gestion dynamique de la hauteur du viewport
-  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
+   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
 
   useEffect(() => {
     const handleResize = () => setWindowHeight(window.innerHeight);

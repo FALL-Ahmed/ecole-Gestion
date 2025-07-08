@@ -138,13 +138,15 @@ export default function UserManagement() {
   const [editUser, setEditUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [classes, setClasses] = useState<Classe[]>([]);
-  const [windowHeight, setWindowHeight] = React.useState(window.innerHeight);
+  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
 
-React.useEffect(() => {
-  const onResize = () => setWindowHeight(window.innerHeight);
-  window.addEventListener('resize', onResize);
-  return () => window.removeEventListener('resize', onResize);
-}, []);
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowHeight(window.innerHeight);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const [academicYears, setAcademicYears] = useState<AnneeScolaire[]>([]);
   const [searchTermUsers, setSearchTermUsers] = useState('');
@@ -662,13 +664,12 @@ React.useEffect(() => {
 
   return (
  <div
-  className="flex flex-col bg-gray-50 dark:bg-gray-900 p-6 pb-[env(safe-area-inset-bottom,20px)] box-border overflow-auto"
-  style={{
-    height: 'calc(100vh - 64px - env(safe-area-inset-top))',
-  }}
->
-  <div className="mb-4 flex flex-col md:flex-row justify-center items-stretch md:items-center gap-3 md:gap-4">
- <Button
+      className="flex flex-col bg-gray-50 dark:bg-gray-900 p-6 pb-[env(safe-area-inset-bottom,20px)] box-border overflow-auto"
+      style={{ height: windowHeight }}
+    >
+      {/* Ici ton contenu */}
+      <div className="mb-4 flex flex-col md:flex-row justify-center items-stretch md:items-center gap-3 md:gap-4">
+   <Button
     onClick={() => setActiveTab('users')}
     className={cn(
       "px-8 py-3 text-lg rounded-xl transition-all duration-300 ease-in-out w-full md:w-auto",
