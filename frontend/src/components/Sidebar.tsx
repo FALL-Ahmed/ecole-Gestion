@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Home,
   Users,
@@ -41,6 +41,14 @@ export function Sidebar({
   const { user, logout } = useAuth();
   const { language, toggleLanguage, t } = useLanguage();
   const isRTL = language === "ar";
+
+  // Gestion dynamique de la hauteur viewport (évite bugs Android)
+  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
+  useEffect(() => {
+    const handleResize = () => setWindowHeight(window.innerHeight);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const [isDarkMode, setIsDarkMode] = useState(
     document.documentElement.classList.contains("dark")
@@ -108,17 +116,23 @@ export function Sidebar({
   return (
     <>
       <motion.aside
-  className={`fixed top-0 z-40 min-h-[100dvh] pt-[80px] bg-white dark:bg-gray-900 flex flex-col
-    ${isRTL ? "right-0 left-auto border-l border-gray-200 dark:border-gray-700" : "left-0 right-auto border-r border-gray-200 dark:border-gray-700"}
-    w-64
-  `}
-
+        className={`fixed top-0 z-40 pt-[80px] bg-white dark:bg-gray-900 flex flex-col
+          ${isRTL ? "right-0 left-auto border-l border-gray-200 dark:border-gray-700" : "left-0 right-auto border-r border-gray-200 dark:border-gray-700"}
+          w-64
+        `}
+        style={{ height: windowHeight }} // hauteur dynamique
         initial={false}
         animate={isSidebarOpen ? "open" : "closed"}
         variants={variants}
         dir={isRTL ? "rtl" : "ltr"}
       >
-<div className="flex flex-col flex-grow overflow-hidden pb-[env(safe-area-inset-bottom)]">
+        <div
+          className="flex flex-col flex-grow overflow-hidden"
+          // padding bas avec fallback manuel
+          style={{
+            paddingBottom: "env(safe-area-inset-bottom, 20px)",
+          }}
+        >
           <nav
             className="flex-grow overflow-y-auto p-2"
             aria-label={t.sidebar.mainNavigation}
@@ -127,35 +141,33 @@ export function Sidebar({
               {menuItems.map(({ id, label, icon: Icon }) => (
                 <li key={id}>
                   <Button
-  variant={activeSection === id ? "default" : "ghost"}
-  className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ease-in-out group flex items-center
-    ${
-      activeSection === id
-        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md hover:from-blue-700 hover:to-blue-800"
-        : "text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-indigo-900 hover:text-blue-700 dark:hover:text-blue-300 hover:shadow-sm"
-    }
-    ${isRTL ? "flex-row-reverse justify-end" : "flex-row justify-start"}
-  `}
-  onClick={() => {
-    onSectionChange(id);
-    if (isMobile) onCloseSidebar();
-  }}
-  aria-current={activeSection === id ? "page" : undefined}
->
-  {isRTL ? (
-    <>
-      <span className="whitespace-nowrap ml-3">{label}</span>
-      <Icon className="h-5 w-5 flex-shrink-0 group-hover:scale-110 transition-transform duration-200" />
-    </>
-  ) : (
-    <>
-      <Icon className="h-5 w-5 flex-shrink-0 group-hover:scale-110 transition-transform duration-200" />
-      <span className="whitespace-nowrap ml-3">{label}</span>
-    </>
-  )}
-</Button>
-
-
+                    variant={activeSection === id ? "default" : "ghost"}
+                    className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ease-in-out group flex items-center
+                    ${
+                      activeSection === id
+                        ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md hover:from-blue-700 hover:to-blue-800"
+                        : "text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-indigo-900 hover:text-blue-700 dark:hover:text-blue-300 hover:shadow-sm"
+                    }
+                    ${isRTL ? "flex-row-reverse justify-end" : "flex-row justify-start"}
+                  `}
+                    onClick={() => {
+                      onSectionChange(id);
+                      if (isMobile) onCloseSidebar();
+                    }}
+                    aria-current={activeSection === id ? "page" : undefined}
+                  >
+                    {isRTL ? (
+                      <>
+                        <span className="whitespace-nowrap ml-3">{label}</span>
+                        <Icon className="h-5 w-5 flex-shrink-0 group-hover:scale-110 transition-transform duration-200" />
+                      </>
+                    ) : (
+                      <>
+                        <Icon className="h-5 w-5 flex-shrink-0 group-hover:scale-110 transition-transform duration-200" />
+                        <span className="whitespace-nowrap ml-3">{label}</span>
+                      </>
+                    )}
+                  </Button>
                 </li>
               ))}
             </ul>
