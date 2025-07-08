@@ -167,7 +167,7 @@ export function AttendanceManagement() {
   }, []);
 
   return (
-<div className={`bg-gray-50 dark:bg-gray-900 w-full ${language === 'ar' ? 'text-right' : 'text-left'}`}>      <CardHeader className="pb-4">
+<div className={`bg-gray-50 dark:bg-gray-900 w-full pb-[env(safe-area-inset-bottom)] ${language === 'ar' ? 'text-right' : 'text-left'}`}>      <CardHeader className="pb-4">
   <CardTitle className="text-2xl font-bold text-gray-800 dark:text-white">
           {t.attendance.title}
         </CardTitle>

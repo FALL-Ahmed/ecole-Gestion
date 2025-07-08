@@ -102,7 +102,7 @@ export function CourseMaterials() {
   const isFormComplete = selectedCourse && selectedChapter;
 
   return (
-    <div className="p-6">
+    <div className="p-6 pb-[env(safe-area-inset-bottom)]">
       <h1 className="text-2xl font-bold mb-6">Supports de Cours</h1>
 
       <Card className="mb-6">

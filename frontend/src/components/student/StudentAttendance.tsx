@@ -125,7 +125,7 @@ export function StudentAttendance() {
           setSelectedSchoolYearId(defaultYear.id.toString());
         }
       } catch (err) {
-        console.error("Error fetching academic years:", err);
+        console.log("ERROR: Error fetching academic years:", err);
         toast({ title: "Erreur", description: "Impossible de charger les années académiques.", variant: "destructive" });
         setError("Impossible de charger les années académiques.");
       }
@@ -154,7 +154,7 @@ export function StudentAttendance() {
           setSelectedTermId('');
         }
       } catch (err) {
-        console.error("Error fetching trimestres:", err);
+        console.log("ERROR: Error fetching trimestres:", err);
         toast({ title: "Erreur", description: "Impossible de charger les trimestres.", variant: "destructive" });
         setTrimestres([]);
         setSelectedTermId('');
@@ -204,7 +204,7 @@ export function StudentAttendance() {
       try {
         initialNotifiedIdsFromStorage = new Set(JSON.parse(storedNotifiedIds).map(Number));
       } catch (e) {
-        console.error("Failed to parse notified absence IDs from localStorage", e);
+        console.log("ERROR: Failed to parse notified absence IDs from localStorage", e);
       }
     }
     setNotifiedAbsenceIds(initialNotifiedIdsFromStorage);
@@ -277,7 +277,7 @@ export function StudentAttendance() {
           }
         }
       } catch (err) {
-        console.error("Error fetching absences:", err);
+        console.log("ERROR: Error fetching absences:", err);
         toast({ title: "Erreur", description: "Impossible de charger vos absences.", variant: "destructive" });
         setError("Impossible de charger vos absences.");
       } finally {

@@ -465,7 +465,7 @@ const getStatusBadgeClasses = (status) => {
   }
 
   return (
-    <div className={`p-6 ${isRTL ? 'text-right' : 'text-left'}`} dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className={`p-6 pb-[env(safe-area-inset-bottom)] ${isRTL ? 'text-right' : 'text-left'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       <h1 className="text-2xl font-bold mb-6 dark:text-white">
         {t.chapterMonitoring.title}
       </h1>

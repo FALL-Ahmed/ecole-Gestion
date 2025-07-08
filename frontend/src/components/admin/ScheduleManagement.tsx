@@ -911,7 +911,7 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
   const filteredClassesForSelect = classes.filter(cls => cls.annee_scolaire_id === parseInt(selectedAnneeAcademiqueId));
 
   return (
-<div className={`p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 min-h-screen ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>      <div className="w-full">
+<div className={`p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 min-h-screen pb-[env(safe-area-inset-bottom)] ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>      <div className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6" dir={isRTL ? 'rtl' : 'ltr'}>
           <h1 className="text-2xl font-bold mb-6">
             {t.schedule.title}

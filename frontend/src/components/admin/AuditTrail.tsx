@@ -289,7 +289,7 @@ export function AuditTrail() {
   );
 
   return (
-    <div className="p-4 md:p-6" dir={textDirection}>
+    <div className="p-4 md:p-6 pb-[env(safe-area-inset-bottom)]" dir={textDirection}>
       <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
         <History className="h-6 w-6 text-primary" />
         {t.audit.title}

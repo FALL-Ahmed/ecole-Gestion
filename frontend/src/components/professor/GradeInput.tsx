@@ -169,7 +169,7 @@ throw new Error(t.gradeInput.errorLoadingData(name, errorText));
 
         const processed = rawAffectations.map(aff => {
           if (!aff.professeur || !aff.matiere || !aff.classe || !aff.annee_scolaire) {
-console.warn(t.gradeInput.invalidAssignment(aff));
+console.log('WARN:', t.gradeInput.invalidAssignment(aff));
             return null;
           }
           return {
@@ -193,7 +193,7 @@ console.warn(t.gradeInput.invalidAssignment(aff));
 ) as Matiere[];
 setAllMatieres(uniqueMatieres);
       } catch (error) {
-console.error(t.gradeInput.globalError(String(error)));
+console.log('ERROR:', t.gradeInput.globalError(String(error)));
         toast({
           title: t.common.loadingError,
           description: error instanceof Error ? error.message : t.gradeInput.unknownLoadingError,
@@ -297,7 +297,7 @@ console.error(t.gradeInput.globalError(String(error)));
         const trimestreData = JSON.parse(responseText);
         setCurrentTrimestre(trimestreData);
       } catch (error) {
-console.error(t.gradeInput.errorFetchingTerm(String(error)));
+console.log('ERROR:', t.gradeInput.errorFetchingTerm(String(error)));
         toast({
           title: t.gradeInput.termError,
           description: error instanceof Error ? error.message : t.gradeInput.unknownTermError,
@@ -394,7 +394,7 @@ console.error(t.gradeInput.errorFetchingTerm(String(error)));
         setNotes(initialNotes);
 
       } catch (error) {
-        console.error(t.gradeInput.errorLoadingStudents(error));
+        console.log('ERROR:', t.gradeInput.errorLoadingStudents(error));
         toast({
           title: t.common.error,
           description: error instanceof Error ? error.message : t.gradeInput.unknownStudentError,
@@ -547,7 +547,7 @@ console.error(t.gradeInput.errorFetchingTerm(String(error)));
       setNotes(prev => prev.map(n => ({ ...n, note: '' })));
 
     } catch (error) {
-      console.error(t.gradeInput.savingError(error));
+      console.log('ERROR:', t.gradeInput.savingError(error));
       toast({
         title: t.common.error,
         description: error instanceof Error ? error.message : t.gradeInput.unknownSavingError,
@@ -589,7 +589,7 @@ console.error(t.gradeInput.errorFetchingTerm(String(error)));
   }
 
   return (
-<div className="min-h-screen p-6 md:p-4" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+<div className="min-h-screen p-6 md:p-4 pb-[env(safe-area-inset-bottom)]" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       <div className="space-y-10">
         <h1 className="text-2xl font-bold mb-6">{t.gradeInput.title}</h1>
 

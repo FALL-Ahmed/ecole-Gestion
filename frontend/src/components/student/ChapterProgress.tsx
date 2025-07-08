@@ -78,7 +78,7 @@ const formatDisplayDate = (dateString?: string) => {
   if (!dateString) return '-';
   const date = parseISO(dateString);
   if (!isValid(date)) {
-    console.warn("Invalid date string for formatting:", dateString);
+    console.log("WARN: Invalid date string for formatting:", dateString);
     return 'Date invalide';
   }
   return format(date, 'dd MMMM yyyy', { locale: fr });
@@ -155,7 +155,7 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
         setAllMatieres(matieresRes);
         setAllClasses(classesRes);
       } catch (err: any) {
-        console.error('Error fetching initial data:', err);
+        console.log('ERROR: Error fetching initial data:', err);
         setError(err.message || 'Une erreur est survenue lors du chargement des données initiales.');
       } finally {
         setIsLoading(false);
@@ -211,7 +211,7 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
 
         setChapters(chaptersWithNames);
       } catch (err: any) {
-        console.error('Error fetching chapters:', err);
+        console.log('ERROR: Error fetching chapters:', err);
         setError(err.message || "Impossible de charger les chapitres.");
         setChapters([]);
       } finally {

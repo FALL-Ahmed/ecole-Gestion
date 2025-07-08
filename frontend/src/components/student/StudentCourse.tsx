@@ -127,7 +127,7 @@ export function StudentCourses() {
         setCourses(Array.from(uniqueCourses.values()));
 
       } catch (err: any) {
-        console.error("Error fetching student courses:", err);
+        console.log("ERROR: Error fetching student courses:", err);
         setError(err.message || "Impossible de charger vos cours.");
         toast({
           title: "Erreur",

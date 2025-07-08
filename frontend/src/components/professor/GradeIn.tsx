@@ -138,7 +138,7 @@ export function GradeInput() {
 
 
           if (!isValidMatiere || !isValidClasse || !isValidAnneeScolaire || !isValidProfesseur) {
-            console.warn('Affectation invalide ignorée en raison de données manquantes ou malformées:', rawAff);
+            console.log('WARN: Affectation invalide ignorée en raison de données manquantes ou malformées:', rawAff);
             return null; // Ignore l'affectation invalide
           }
 
@@ -190,7 +190,7 @@ export function GradeInput() {
         console.log('Unique Professeurs (from Affectations):', uniqueProfesseurs);
 
       } catch (error) {
-        console.error('Erreur globale lors du chargement des données initiales:', error);
+        console.log('ERROR: Erreur globale lors du chargement des données initiales:', error);
         toast({
           title: 'Erreur de chargement',
           description: error instanceof Error ? error.message : 'Impossible de charger les données initiales du formulaire. Veuillez réessayer.',
@@ -258,7 +258,7 @@ export function GradeInput() {
     )
       .then(res => {
         if (!res.ok) {
-          console.error('Erreur HTTP lors du chargement des inscriptions:', res.status, res.statusText);
+          console.log('ERROR: Erreur HTTP lors du chargement des inscriptions:', res.status, res.statusText);
           throw new Error('Erreur lors du chargement des inscriptions.');
         }
         return res.json();
@@ -275,7 +275,7 @@ export function GradeInput() {
         setNotes(fetchedEleves.map(e => ({ eleveId: e.id, nom: e.nom, prenom: e.prenom, note: '' })));
       })
       .catch((error) => {
-        console.error("Échec du chargement des élèves:", error);
+        console.log("ERROR: Échec du chargement des élèves:", error);
         toast({
           title: 'Erreur',
           description: 'Impossible de charger les élèves pour la sélection actuelle.',
@@ -366,7 +366,7 @@ export function GradeInput() {
       });
 
     } catch (error: any) { // Explicitly type error as 'any' or 'unknown'
-      console.error("Erreur lors de l'enregistrement :", error);
+      console.log("ERROR: Erreur lors de l'enregistrement :", error);
       toast({
         title: 'Erreur',
         description: error.message || 'Une erreur inconnue est survenue.',

@@ -416,7 +416,7 @@ setGradeData(prevData => ({
   const evaluationsToDisplay = getEvaluationsForDisplay();
 
   return (
-    <div className="p-6" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+    <div className="p-6 pb-[env(safe-area-inset-bottom)]" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       <h1 className="text-2xl font-bold mb-6">{t.gradeManagement.title}</h1>
       <Card className="mb-6">
         <CardHeader>
