@@ -1180,7 +1180,7 @@ export function Dashboard() {
     }
   };
 return (
-  <div className="p-6 pb-[env(safe-area-inset-bottom)]">
+  <div className="p-6 min-h-[100dvh] pb-[env(safe-area-inset-bottom)]">
     <div className="mb-6">
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
         {t.dashboard.title} - {user?.role === 'admin'

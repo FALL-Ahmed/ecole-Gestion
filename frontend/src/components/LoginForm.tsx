@@ -172,7 +172,7 @@ export function LoginForm() {
   };
 
   return (
-    <div className={`fixed inset-0 overflow-y-auto bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 ${language === 'ar' ? 'rtl' : 'ltr'} pb-[env(safe-area-inset-bottom)]`}>
+    <div className={`fixed inset-0 overflow-y-auto bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 ${language === 'ar' ? 'rtl' : 'ltr'} min-h-[100dvh] pb-[env(safe-area-inset-bottom)]`}>
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {floatingElements.map((item) => (
           <motion.div

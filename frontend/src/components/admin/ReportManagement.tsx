@@ -996,7 +996,7 @@ export function ReportManagement() {
   }
 };
  return (
-  <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen pb-[env(safe-area-inset-bottom)]" dir={isRTL ? 'rtl' : 'ltr'}>
+  <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen min-h-[100dvh] pb-[env(safe-area-inset-bottom)]" dir={isRTL ? 'rtl' : 'ltr'}>
     <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 border-b pb-4">
       {t.reports.title}
     </h1>
@@ -1195,7 +1195,7 @@ export function ReportManagement() {
 
                   {/* Vue mobile */}
                   <div
-                    className="block lg:hidden space-y-2 p-2 bg-white rounded-md pb-[env(safe-area-inset-bottom)]"
+                    className="block lg:hidden space-y-2 p-2 bg-white rounded-md min-h-[100dvh] pb-[env(safe-area-inset-bottom)]"
                     style={{
                       height: 'calc(81vh - 180px)',
                       overflowY: 'auto',
