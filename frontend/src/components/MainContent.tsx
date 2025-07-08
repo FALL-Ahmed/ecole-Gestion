@@ -37,8 +37,9 @@ interface MainContentProps {
 export function MainContent({ activeSection, onSectionChange }: MainContentProps) {
   const { user, isAuthenticated, isLoading } = useAuth();
 
-  // Gestion hauteur dynamique viewport
+  // 1. Gestion dynamique de la hauteur du viewport
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
+
   useEffect(() => {
     const handleResize = () => setWindowHeight(window.innerHeight);
     window.addEventListener('resize', handleResize);
@@ -111,15 +112,18 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
     }
   };
 
+  // 2. Structure avec wrapper scrollable pour éviter débordements
   return (
     <div
-      className="overflow-auto pt-[80px]"
+      className="overflow-hidden pt-[80px]"
       style={{
         height: windowHeight,
-        paddingBottom: "env(safe-area-inset-bottom, 20px)",
+        paddingBottom: "env(safe-area-inset-bottom, 20px)", // safe-area pour iOS + fallback 20px
       }}
     >
-      {renderContent()}
+      <div className="h-full overflow-auto">
+        {renderContent()}
+      </div>
     </div>
   );
 }
