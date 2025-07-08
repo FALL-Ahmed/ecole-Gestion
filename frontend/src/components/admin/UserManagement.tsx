@@ -653,9 +653,12 @@ export default function UserManagement() {
   }, [filterAnneeId, filterClasseId, availableClassesForInscriptionFilter]);
 
   return (
-    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-[100dvh] pb-[env(safe-area-inset-bottom)]">
-      <div className="mb-4 flex flex-col md:flex-row justify-center items-stretch md:items-center gap-3 md:gap-4">
-  <Button
+  <div
+  className="flex flex-col bg-gray-50 dark:bg-gray-900 h-full p-6 pb-[env(safe-area-inset-bottom)]"
+  style={{ minHeight: '100vh', boxSizing: 'border-box' }}
+>
+  <div className="mb-4 flex flex-col md:flex-row justify-center items-stretch md:items-center gap-3 md:gap-4">
+   <Button
     onClick={() => setActiveTab('users')}
     className={cn(
       "px-8 py-3 text-lg rounded-xl transition-all duration-300 ease-in-out w-full md:w-auto",
