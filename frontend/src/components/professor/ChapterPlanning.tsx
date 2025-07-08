@@ -815,7 +815,7 @@ export function ChapterPlanning() {
           </div>
 
           {/* Mobile Cards */}
-          <div className="md:hidden space-y-4 p-4">
+          <div className="md:hidden space-y-4 p-4 pb-[env(safe-area-inset-bottom)">
             {filteredChapters.length > 0 ? (
               filteredChapters.map((chapter) => (
                 <Card key={chapter.id} className="dark:bg-gray-700">

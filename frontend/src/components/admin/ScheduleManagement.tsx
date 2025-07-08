@@ -1151,7 +1151,7 @@ className={`font-semibold text-center py-2 rounded-lg transition-colors ${dayInf
                 </div>
 
                 {/* Mobile View: List */}
-<div className="block lg:hidden">
+<div className="block lg:hidden pb-[env(safe-area-inset-bottom)]">
   <ScrollArea className="h-[calc(100vh-400px)] rounded-md border p-4 bg-white dark:bg-gray-800 dark:border-gray-700">
     {currentWeekDaysInfo.map((dayInfo) => (
       <div key={dayInfo.date.toISOString()} className="mb-6">

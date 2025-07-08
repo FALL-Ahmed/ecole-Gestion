@@ -722,7 +722,7 @@ const skeletonStyles = {
             </div>
 
            {/* Mobile View */}
-<div className="lg:hidden">
+<div className="lg:hidden pb-[env(safe-area-inset-bottom)">
   {(isRTL ? [...currentWeekDaysInfo].reverse() : currentWeekDaysInfo).map(dayInfo => (
     <div key={dayInfo.dayNameCapitalized} className="mb-8">
       <div className={cn(

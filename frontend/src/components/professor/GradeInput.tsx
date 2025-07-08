@@ -801,7 +801,7 @@ console.log('ERROR:', t.gradeInput.errorFetchingTerm(String(error)));
                   </div>
 
                   {/* Mobile Cards */}
-                  <div className="md:hidden space-y-4">
+                  <div className="md:hidden space-y-4 pb-[env(safe-area-inset-bottom)">
                     {notes.map(noteEntry => (
                       <Card key={noteEntry.eleveId} className="p-4">
                         <div className="flex justify-between items-center">

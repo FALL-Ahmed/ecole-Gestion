@@ -705,35 +705,42 @@ export function StudentSchedule() {
             {format(currentTime, 'EEEE dd MMMM yyyy', { locale: currentLocale })}
           </p>
         </div>
-        <div className={`flex items-center flex-wrap justify-end gap-2 bg-gray-50/50 dark:bg-gray-700/50 p-2 rounded-xl shadow-inner border border-gray-100 dark:border-gray-600 ${isRTL ? 'flex-row-reverse' : ''}`}>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handlePreviousWeek}
-            className="rounded-full shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-x-1 hover:bg-blue-100 dark:hover:bg-blue-900"
-          >
-            {isRTL ? <ChevronRight className="w-5 h-5 text-gray-700 dark:text-gray-300" /> : <ChevronLeft className="w-5 h-5 text-gray-700 dark:text-gray-300" />}
-          </Button>
-          <span className="font-extrabold text-lg md:text-xl text-gray-800 dark:text-white select-none mx-2 text-center">
-            {format(currentWeekStart, 'dd MMMM', { locale: currentLocale })} - {format(currentWeekEnd, 'dd MMMM', { locale: currentLocale })}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleNextWeek}
-            className="rounded-full shadow-md hover:shadow-lg transition-all duration-300 transform hover:translate-x-1 hover:bg-blue-100 dark:hover:bg-blue-900"
-          >
-            {isRTL ? <ChevronLeft className="w-5 h-5 text-gray-700 dark:text-gray-300" /> : <ChevronRight className="w-5 h-5 text-gray-700 dark:text-gray-300" />}
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={handleGoToToday}
-            className={`ml-2 md:ml-4 bg-blue-600 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-900 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 flex items-center ${isRTL ? 'flex-row-reverse' : ''}`}
-          >
-            <Home className="h-4 w-4 mr-2" /> {t.schedule.weekNavigation}
-          </Button>
-        </div>
+       <div className={`flex flex-wrap items-center justify-between gap-2 bg-gray-50/50 dark:bg-gray-700/50 p-2 rounded-xl shadow-inner border border-gray-100 dark:border-gray-600 ${isRTL ? 'flex-row-reverse' : ''}`}>
+  {/* Contrôles de navigation */}
+  <div className={`flex items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={handlePreviousWeek}
+      className="rounded-full shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-x-1 hover:bg-blue-100 dark:hover:bg-blue-900"
+    >
+      {isRTL ? <ChevronRight className="w-5 h-5 text-gray-700 dark:text-gray-300" /> : <ChevronLeft className="w-5 h-5 text-gray-700 dark:text-gray-300" />}
+    </Button>
+    
+    <span className="font-extrabold text-lg md:text-xl text-gray-800 dark:text-white select-none mx-2 text-center min-w-[180px]">
+      {format(currentWeekStart, 'dd MMMM', { locale: currentLocale })} - {format(currentWeekEnd, 'dd MMMM', { locale: currentLocale })}
+    </span>
+    
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={handleNextWeek}
+      className="rounded-full shadow-md hover:shadow-lg transition-all duration-300 transform hover:translate-x-1 hover:bg-blue-100 dark:hover:bg-blue-900"
+    >
+      {isRTL ? <ChevronLeft className="w-5 h-5 text-gray-700 dark:text-gray-300" /> : <ChevronRight className="w-5 h-5 text-gray-700 dark:text-gray-300" />}
+    </Button>
+  </div>
+
+  {/* Bouton "Semaine actuelle" - maintenant en dessous sur mobile */}
+  <Button
+    variant="default"
+    size="sm"
+    onClick={handleGoToToday}
+    className={`bg-blue-600 hover:bg-blue-700 dark:bg-blue-800 dark:hover:bg-blue-900 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 flex items-center w-full sm:w-auto justify-center mt-2 sm:mt-0 ${isRTL ? 'flex-row-reverse' : ''}`}
+  >
+    <Home className="h-4 w-4 mr-2" /> {t.schedule.weekNavigation}
+  </Button>
+</div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">

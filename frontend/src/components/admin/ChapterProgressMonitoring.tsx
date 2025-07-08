@@ -711,7 +711,7 @@ const getStatusBadgeClasses = (status) => {
 
                   {/* Mobile View */}
 <div
-  className={`block lg:hidden space-y-5 p-4 ${isRTL ? 'text-right' : 'text-left'}`}
+  className={`block lg:hidden space-y-5 p-4 pb-[env(safe-area-inset-bottom)] ${isRTL ? 'text-right' : 'text-left'}`}
   dir={isRTL ? 'rtl' : 'ltr'}
 >
   {displayChapters.map((chapter) => {

@@ -1122,8 +1122,8 @@ const translateSubject = (subjectName: string): string => {
   }
 
   return (
-<div 
-  className="p-6 h-[calc(100vh-80px)] overflow-y-auto pb-[env(safe-area-inset-bottom)]" 
+<div
+  className="p-6 h-[calc(100vh-80px)] overflow-y-auto pb-[env(safe-area-inset-bottom)]"
   dir={language === 'ar' ? 'rtl' : 'ltr'}
 >
  <h1 className={`text-2xl font-bold mb-6 ${getTextAlignment(language)}`}>

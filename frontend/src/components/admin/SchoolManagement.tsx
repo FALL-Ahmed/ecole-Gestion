@@ -444,7 +444,7 @@ headers: {
   }
 
   return (
-    
+
 <div
   className="w-full py-10 px-4 pb-[env(safe-area-inset-bottom)]"
   style={{ direction: isRTL ? 'rtl' : 'ltr', textAlign: isRTL ? 'right' : 'left' }}

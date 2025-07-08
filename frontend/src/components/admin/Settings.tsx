@@ -373,7 +373,7 @@ export function Settings() {
   const flexDirection = isRTL ? 'flex-row-reverse' : 'flex-row';
 
   return (
-    <div 
+    <div
       className="p-6 w-full mx-auto pb-[env(safe-area-inset-bottom)]"
       dir={textDirection}
     >

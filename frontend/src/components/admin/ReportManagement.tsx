@@ -1195,7 +1195,7 @@ export function ReportManagement() {
 
                   {/* Vue mobile */}
                   <div
-                    className="block lg:hidden space-y-2 p-2 bg-white rounded-md"
+                    className="block lg:hidden space-y-2 p-2 bg-white rounded-md pb-[env(safe-area-inset-bottom)]"
                     style={{
                       height: 'calc(81vh - 180px)',
                       overflowY: 'auto',

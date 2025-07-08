@@ -703,7 +703,7 @@ className="w-5 h-5 border-2 border-blue-400 data-[state=checked]:bg-blue-500 dat
                       </div>
                       
                       {/* Mobile View */}
-                      <div className="block md:hidden space-y-4">
+                      <div className="block md:hidden space-y-4 pb-[env(safe-area-inset-bottom)]">
                         {attendanceData.map((student) => (
                           <Card key={student.etudiant_id} className="p-4 bg-white dark:bg-gray-800 shadow-sm">
   <p className="font-semibold text-base text-gray-800 dark:text-white mb-3">{student.nom}</p>
