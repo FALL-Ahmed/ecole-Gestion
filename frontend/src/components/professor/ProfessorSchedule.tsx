@@ -546,7 +546,7 @@ const skeletonStyles = {
   }
 
   return (
-    <div className={`min-h-screen p-6 md:p-4 bg-gray-50 dark:bg-gray-900  pb-[env(safe-area-inset-bottom)] ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className={`min-h-screen p-6 md:p-4 bg-gray-50 dark:bg-gray-900 min-h-[100dvh] pb-[env(safe-area-inset-bottom)] ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 p-4 bg-white/70 dark:bg-gray-800/70 backdrop-blur-md rounded-2xl border border-gray-100 dark:border-gray-700 ${isRTL ? 'text-right' : 'text-left'}`}>
   <h1 className="text-2xl font-bold text-gray-900 dark:text-white leading-tight drop">
     {t.schedule.title} <span className="text-blue-700 dark:text-blue-400"></span>
@@ -722,7 +722,7 @@ const skeletonStyles = {
             </div>
 
            {/* Mobile View */}
-<div className="lg:hidden pb-[env(safe-area-inset-bottom)">
+<div className="lg:hidden min-h-[100dvh] pb-[env(safe-area-inset-bottom)">
   {(isRTL ? [...currentWeekDaysInfo].reverse() : currentWeekDaysInfo).map(dayInfo => (
     <div key={dayInfo.dayNameCapitalized} className="mb-8">
       <div className={cn(

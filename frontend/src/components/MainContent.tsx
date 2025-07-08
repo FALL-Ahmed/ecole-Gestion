@@ -115,7 +115,7 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
   // 2. Structure avec wrapper scrollable pour éviter débordements
   return (
     <div
-      className="overflow-hidden pt-[80px]"
+      className="overflow-hidden"
       style={{
         height: windowHeight,
         paddingBottom: "env(safe-area-inset-bottom, 20px)", // safe-area pour iOS + fallback 20px

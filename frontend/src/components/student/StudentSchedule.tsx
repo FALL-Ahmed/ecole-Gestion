@@ -690,7 +690,7 @@ export function StudentSchedule() {
   }
 
   return (
-    <div className={`p-6 pb-[env(safe-area-inset-bottom)] ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className={`p-6 min-h-[100dvh] pb-[env(safe-area-inset-bottom)] ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       <header className={`mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10 p-4 bg-white/70 dark:bg-gray-800/70 backdrop-blur-md rounded-2xl border border-gray-100 dark:border-gray-700 ${isRTL ? 'text-right' : 'text-left'}`}>
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white leading-tight drop">

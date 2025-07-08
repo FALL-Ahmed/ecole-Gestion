@@ -374,7 +374,7 @@ export function Settings() {
 
   return (
     <div
-      className="p-6 w-full mx-auto  pb-[env(safe-area-inset-bottom)]"
+      className="p-6 w-full mx-auto min-h-[100dvh] pb-[env(safe-area-inset-bottom)]"
       dir={textDirection}
     >
       <h1 className="text-2xl font-bold mb-6">{t.settings.title}</h1>

@@ -653,7 +653,7 @@ export default function UserManagement() {
   }, [filterAnneeId, filterClasseId, availableClassesForInscriptionFilter]);
 
   return (
-    <div className="p-6 bg-gray-50 dark:bg-gray-900 pb-[env(safe-area-inset-bottom)]">
+    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-[100dvh] pb-[env(safe-area-inset-bottom)]">
       <div className="mb-4 flex flex-col md:flex-row justify-center items-stretch md:items-center gap-3 md:gap-4">
   <Button
     onClick={() => setActiveTab('users')}
