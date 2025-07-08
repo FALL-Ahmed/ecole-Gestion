@@ -663,10 +663,12 @@ React.useEffect(() => {
   return (
  <div
   className="flex flex-col bg-gray-50 dark:bg-gray-900 p-6 pb-[env(safe-area-inset-bottom,20px)] box-border overflow-auto"
-  style={{ height: 'calc(100vh - 80px)' }}
+  style={{
+    height: 'calc(100vh - 64px - env(safe-area-inset-top))',
+  }}
 >
   <div className="mb-4 flex flex-col md:flex-row justify-center items-stretch md:items-center gap-3 md:gap-4">
-   <Button
+ <Button
     onClick={() => setActiveTab('users')}
     className={cn(
       "px-8 py-3 text-lg rounded-xl transition-all duration-300 ease-in-out w-full md:w-auto",
