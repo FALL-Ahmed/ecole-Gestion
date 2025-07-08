@@ -36,20 +36,25 @@ interface MainContentProps {
 
 export function MainContent({ activeSection, onSectionChange }: MainContentProps) {
   const { user, isAuthenticated, isLoading } = useAuth();
-
-  // 1. Gestion dynamique de la hauteur du viewport
-   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
+  
+  // Gestion dynamique de la hauteur du viewport (identique à Sidebar)
+  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
 
   useEffect(() => {
-    const handleResize = () => setWindowHeight(window.innerHeight);
+    const handleResize = () => {
+      setWindowHeight(window.innerHeight);
+    };
+
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   if (isLoading) {
     return (
-      <div className="p-6 text-center text-gray-500">
-        Chargement du contenu...
+      <div className="flex items-center justify-center h-screen">
+        <div className="p-6 text-center text-gray-500">
+          Chargement du contenu...
+        </div>
       </div>
     );
   }
@@ -58,6 +63,7 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
     return <Navigate to="/login" replace />;
   }
 
+  // Sections Admin
   const renderAdminSection = () => {
     switch (activeSection) {
       case 'dashboard': return <Dashboard />;
@@ -76,6 +82,7 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
     }
   };
 
+  // Sections Professeur
   const renderProfessorSection = () => {
     switch (activeSection) {
       case 'dashboard': return <Dashboard />;
@@ -87,6 +94,7 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
     }
   };
 
+  // Sections Élève
   const renderStudentSection = () => {
     switch (activeSection) {
       case 'dashboard': return <Dashboard />;
@@ -98,7 +106,10 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
     }
   };
 
+  // Rendu du contenu en fonction du rôle
   const renderContent = () => {
+    if (!user) return null;
+    
     switch (user.role) {
       case 'admin': return renderAdminSection();
       case 'professeur': return renderProfessorSection();
@@ -112,17 +123,25 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
     }
   };
 
-  // 2. Structure avec wrapper scrollable pour éviter débordements
   return (
-    <div
-      className="overflow-hidden"
+    <div 
+      className="relative overflow-hidden bg-gray-50 dark:bg-gray-900"
       style={{
         height: windowHeight,
-        paddingBottom: "env(safe-area-inset-bottom, 20px)", // safe-area pour iOS + fallback 20px
+        paddingBottom: "env(safe-area-inset-bottom, 20px)",
       }}
     >
-      <div className="h-full overflow-auto">
-        {renderContent()}
+      {/* Conteneur principal avec défilement si nécessaire */}
+      <div className="h-full overflow-y-auto">
+        {/* Header fixe (si nécessaire) */}
+        {/* <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 p-4 shadow-sm">
+          Header content
+        </div> */}
+        
+        {/* Contenu dynamique */}
+        <main className="flex-1 p-4 md:p-6">
+          {renderContent()}
+        </main>
       </div>
     </div>
   );
