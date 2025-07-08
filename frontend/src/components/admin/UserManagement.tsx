@@ -138,6 +138,14 @@ export default function UserManagement() {
   const [editUser, setEditUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [classes, setClasses] = useState<Classe[]>([]);
+  const [windowHeight, setWindowHeight] = React.useState(window.innerHeight);
+
+React.useEffect(() => {
+  const onResize = () => setWindowHeight(window.innerHeight);
+  window.addEventListener('resize', onResize);
+  return () => window.removeEventListener('resize', onResize);
+}, []);
+
   const [academicYears, setAcademicYears] = useState<AnneeScolaire[]>([]);
   const [searchTermUsers, setSearchTermUsers] = useState('');
   const [searchTermInscriptions, setSearchTermInscriptions] = useState('');
@@ -653,12 +661,12 @@ export default function UserManagement() {
   }, [filterAnneeId, filterClasseId, availableClassesForInscriptionFilter]);
 
   return (
-  <div
-  className="flex flex-col bg-gray-50 dark:bg-gray-900 min-h-[100dvh] p-6 pb-[env(safe-area-inset-bottom)] box-border"
-  style={{ height: '100dvh' }}
+ <div
+  className="flex flex-col bg-gray-50 dark:bg-gray-900 p-6 pb-[env(safe-area-inset-bottom,20px)] box-border overflow-auto"
+  style={{ height: 'calc(100vh - 80px)' }}
 >
   <div className="mb-4 flex flex-col md:flex-row justify-center items-stretch md:items-center gap-3 md:gap-4">
-  <Button
+   <Button
     onClick={() => setActiveTab('users')}
     className={cn(
       "px-8 py-3 text-lg rounded-xl transition-all duration-300 ease-in-out w-full md:w-auto",
