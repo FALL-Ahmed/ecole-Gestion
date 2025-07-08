@@ -1,16 +1,46 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>رؤية</title>
-   
-  </head>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <!-- Viewport universel -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+  
+  <!-- Compatibilité PWA -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-  <body>
-    <div id="root"></div>
-    <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
-    <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+  <!-- Titre -->
+  <title>رؤية</title>
+
+  <!-- Favicon (important pour tous les navigateurs) -->
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+  <!-- Couleur de thème (pour Android Chrome/iOS Safari) -->
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1a1a1a" media="(prefers-color-scheme: dark)">
+
+  <!-- Pré-chargement des polices/CSS critiques -->
+  <link rel="preload" href="/fonts/your-font.woff2" as="font" type="font/woff2" crossorigin>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
+  <script type="module" src="/src/main.tsx"></script>
+
+  <!-- Fallback si JS désactivé -->
+  <noscript>
+    <div style="position:fixed;top:0;left:0;right:0;bottom:0;display:grid;place-items:center;background:white;z-index:9999;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)">
+      <p style="font-size:1.2rem;text-align:center;max-width:90%">
+        JavaScript est requis pour utiliser cette application.<br>
+        Merci d'activer JavaScript dans les paramètres de votre navigateur.
+      </p>
+    </div>
+  </noscript>
+</body>
 </html>

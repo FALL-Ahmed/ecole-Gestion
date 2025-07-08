@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
-// Admin
+// Importations des composants Admin
 import { Dashboard } from './Dashboard';
 import UserMan from './admin/UserManagement';
 import SchoolManagement from './admin/SchoolManagement';
@@ -16,14 +16,14 @@ import { Settings } from './admin/Settings';
 import { ChapterProgressMonitoring } from './admin/ChapterProgressMonitoring';
 import { AuditTrail } from './admin/AuditTrail';
 
-// Prof
+// Importations des composants Professeur
 import { CourseMaterials } from './professor/CourseMaterials';
 import { ProfessorAttendance } from './professor/ProfessorAttendance';
 import { ProfessorSchedule } from './professor/ProfessorSchedule';
 import { GradeInput } from './professor/GradeInput';
 import { ChapterPlanning } from './professor/ChapterPlanning';
 
-// Élève
+// Importations des composants Élève
 import { StudentSchedule } from './student/StudentSchedule';
 import { StudentCourses } from './student/StudentCourse';
 import { StudentGrades } from './student/StudentGrades';
@@ -37,7 +37,7 @@ interface MainContentProps {
 export function MainContent({ activeSection, onSectionChange }: MainContentProps) {
   const { user, isAuthenticated, isLoading } = useAuth();
   
-  // Gestion dynamique de la hauteur du viewport (identique à Sidebar)
+  // Gestion dynamique de la hauteur pour mobile et desktop
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
 
   useEffect(() => {
@@ -106,7 +106,6 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
     }
   };
 
-  // Rendu du contenu en fonction du rôle
   const renderContent = () => {
     if (!user) return null;
     
@@ -125,21 +124,19 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
 
   return (
     <div 
-      className="relative overflow-hidden bg-gray-50 dark:bg-gray-900"
+      className="relative bg-gray-50 dark:bg-gray-900"
       style={{
-        height: windowHeight,
-        paddingBottom: "env(safe-area-inset-bottom, 20px)",
+        // Hauteur totale moins la hauteur de la navbar si elle existe
+        height: `calc(${windowHeight}px - var(--navbar-height, 0px))`,
+        // Gestion safe-area pour les mobiles (notch, etc.)
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       }}
     >
-      {/* Conteneur principal avec défilement si nécessaire */}
+      {/* Conteneur principal avec défilement */}
       <div className="h-full overflow-y-auto">
-        {/* Header fixe (si nécessaire) */}
-        {/* <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 p-4 shadow-sm">
-          Header content
-        </div> */}
-        
-        {/* Contenu dynamique */}
-        <main className="flex-1 p-4 md:p-6">
+        {/* Contenu dynamique avec padding adaptatif */}
+        <main className="min-h-full p-4 md:p-6">
           {renderContent()}
         </main>
       </div>
