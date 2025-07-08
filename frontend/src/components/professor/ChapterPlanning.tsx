@@ -554,7 +554,7 @@ export function ChapterPlanning() {
   }
 
   return (
-    <div className={`p-6 min-h-[100dvh] pb-[env(safe-area-inset-bottom)] ${isRTL ? 'text-right' : 'text-left'}`} dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className={`p-6 pb-[env(safe-area-inset-bottom)] ${isRTL ? 'text-right' : 'text-left'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       <h1 className="text-2xl font-bold mb-6 dark:text-white">{t.chapterPlanning.title}</h1>
       
       {/* Stats Cards */}
@@ -815,7 +815,7 @@ export function ChapterPlanning() {
           </div>
 
           {/* Mobile Cards */}
-          <div className="md:hidden space-y-4 p-4 min-h-[100dvh] pb-[env(safe-area-inset-bottom)">
+          <div className="md:hidden space-y-4 p-4  pb-[env(safe-area-inset-bottom)">
             {filteredChapters.length > 0 ? (
               filteredChapters.map((chapter) => (
                 <Card key={chapter.id} className="dark:bg-gray-700">

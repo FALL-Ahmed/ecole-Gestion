@@ -167,7 +167,7 @@ export function AttendanceManagement() {
   }, []);
 
   return (
-<div className={`bg-gray-50 dark:bg-gray-900 w-full min-h-[100dvh] pb-[env(safe-area-inset-bottom)] ${language === 'ar' ? 'text-right' : 'text-left'}`}>      <CardHeader className="pb-4">
+<div className={`bg-gray-50 dark:bg-gray-900 w-full  pb-[env(safe-area-inset-bottom)] ${language === 'ar' ? 'text-right' : 'text-left'}`}>      <CardHeader className="pb-4">
   <CardTitle className="text-2xl font-bold text-gray-800 dark:text-white">
           {t.attendance.title}
         </CardTitle>
@@ -703,7 +703,7 @@ className="w-5 h-5 border-2 border-blue-400 data-[state=checked]:bg-blue-500 dat
                       </div>
                       
                       {/* Mobile View */}
-                      <div className="block md:hidden space-y-4 min-h-[100dvh] pb-[env(safe-area-inset-bottom)]">
+                      <div className="block md:hidden space-y-4  pb-[env(safe-area-inset-bottom)]">
                         {attendanceData.map((student) => (
                           <Card key={student.etudiant_id} className="p-4 bg-white dark:bg-gray-800 shadow-sm">
   <p className="font-semibold text-base text-gray-800 dark:text-white mb-3">{student.nom}</p>

@@ -66,7 +66,7 @@ export function CourseManagement() {
   );
 
   return (
-    <div className="p-6  min-h-[100dvh] pb-[env(safe-area-inset-bottom)]">
+    <div className="p-6   pb-[env(safe-area-inset-bottom)]">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Gestion des Cours</h1>
         <p className="text-gray-600">Gérez les cours, matières et affectations</p>

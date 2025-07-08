@@ -289,7 +289,7 @@ export function AuditTrail() {
   );
 
   return (
-    <div className="p-4 md:p-6 min-h-[100dvh] pb-[env(safe-area-inset-bottom)]" dir={textDirection}>
+    <div className="p-4 md:p-6 pb-[env(safe-area-inset-bottom)]" dir={textDirection}>
       <h1 className="text-2xl font-bold mb-6 flex items-center gap-2">
         <History className="h-6 w-6 text-primary" />
         {t.audit.title}
@@ -442,7 +442,7 @@ export function AuditTrail() {
           )}
 
           {/* Mobile View */}
-          <div className="lg:hidden space-y-4 min-h-[100dvh] pb-[env(safe-area-inset-bottom)]">
+          <div className="lg:hidden space-y-4  pb-[env(safe-area-inset-bottom)]">
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
