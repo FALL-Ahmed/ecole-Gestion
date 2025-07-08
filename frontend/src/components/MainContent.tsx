@@ -1,7 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { NotificationBell } from '@/components/layout/NotificationBell';
 
 // Admin
 import { Dashboard } from './Dashboard';
@@ -37,6 +36,14 @@ interface MainContentProps {
 
 export function MainContent({ activeSection, onSectionChange }: MainContentProps) {
   const { user, isAuthenticated, isLoading } = useAuth();
+
+  // Gestion hauteur dynamique viewport
+  const [windowHeight, setWindowHeight] = useState(window.innerHeight);
+  useEffect(() => {
+    const handleResize = () => setWindowHeight(window.innerHeight);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   if (isLoading) {
     return (
@@ -84,8 +91,7 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
       case 'dashboard': return <Dashboard />;
       case 'schedule-view': return <StudentSchedule />;
       case 'my-courses': return <StudentCourses />;
-      case 'my-grades':
-        return <StudentGrades key={user.id} userId={user.id} />;
+      case 'my-grades': return <StudentGrades key={user.id} userId={user.id} />;
       case 'my-attendance': return <StudentAttendance />;
       default: return <Dashboard />;
     }
@@ -106,9 +112,14 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
   };
 
   return (
-<div className="flex-1 overflow-auto pt-[80px] pb-[env(safe-area-inset-bottom)]">
+    <div
+      className="overflow-auto pt-[80px]"
+      style={{
+        height: windowHeight,
+        paddingBottom: "env(safe-area-inset-bottom, 20px)",
+      }}
+    >
       {renderContent()}
-
     </div>
   );
 }
