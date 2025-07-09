@@ -60,12 +60,12 @@ const AppLayout = ({
         isMobile={isMobile}
       />
       <main
-        className={`flex-1 overflow-auto pt-[80px] transition-all duration-300 ${
+        className={`flex-1 overflow-auto pt-[80px] pb-8 transition-all duration-300 ${
           isSidebarOpen && !isMobile
             ? isRTL
               ? "pr-64"
               : "pl-64"
-            : "p-0"
+            : ""
         }`}
       >
         {children}
