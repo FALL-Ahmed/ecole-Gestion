@@ -94,7 +94,7 @@ export function ProfessorAttendance() {
   const unjustifiedCount = absenceCount - justifiedCount;
 
   return (
-    <div className="p-6 pb-[env(safe-area-inset-bottom)]">
+    <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">Gestion des Présences</h1>
 
       <Card className="mb-6">

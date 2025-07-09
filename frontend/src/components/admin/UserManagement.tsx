@@ -664,9 +664,7 @@ export default function UserManagement() {
 
   return (
  <div
-      className="flex flex-col bg-gray-50 dark:bg-gray-900 p-6 pb-[env(safe-area-inset-bottom,20px)] box-border overflow-auto"
-      style={{ height: windowHeight }}
-    >
+      className="flex flex-col bg-gray-50 dark:bg-gray-900 p-6 box-border overflow-auto">
       {/* Ici ton contenu */}
       <div className="mb-4 flex flex-col md:flex-row justify-center items-stretch md:items-center gap-3 md:gap-4">
    <Button

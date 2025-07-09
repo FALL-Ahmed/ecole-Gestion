@@ -589,7 +589,7 @@ console.log('ERROR:', t.gradeInput.errorFetchingTerm(String(error)));
   }
 
   return (
-<div className="min-h-screen p-6 md:p-4 min-h-[100dvh] pb-[env(safe-area-inset-bottom)]" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+<div className="p-6 md:p-4" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       <div className="space-y-10">
         <h1 className="text-2xl font-bold mb-6">{t.gradeInput.title}</h1>
 
@@ -801,7 +801,7 @@ console.log('ERROR:', t.gradeInput.errorFetchingTerm(String(error)));
                   </div>
 
                   {/* Mobile Cards */}
-                  <div className="md:hidden space-y-4 min-h-[100dvh] pb-[env(safe-area-inset-bottom)">
+                  <div className="md:hidden space-y-4">
                     {notes.map(noteEntry => (
                       <Card key={noteEntry.eleveId} className="p-4">
                         <div className="flex justify-between items-center">
