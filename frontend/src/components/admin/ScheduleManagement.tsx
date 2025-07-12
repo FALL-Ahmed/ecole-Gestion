@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -63,6 +63,15 @@ interface EmploiDuTempsEntry {
   classe_id: number;
   matiere_id: number;
   professeur_id: number;
+}
+interface Trimestre {
+  id: number;
+  nom: string;
+  date_debut: string;
+  date_fin: string;
+  anneeScolaire: {
+    id: number;
+  };
 }
 interface ExceptionEmploiDuTempsEntry {
   id: number;
@@ -251,6 +260,7 @@ export function ScheduleManagement() {
   const [affectations, setAffectations] = useState<Affectation[]>([]);
   const [emploisDuTemps, setEmploisDuTemps] = useState<EmploiDuTempsEntry[]>([]);
   const [exceptionsEmploisDuTemps, setExceptionsEmploisDuTemps] = useState<ExceptionEmploiDuTempsEntry[]>([]);
+  const [trimestresAnnee, setTrimestresAnnee] = useState<Trimestre[]>([]);
 
   const [selectedAnneeAcademiqueId, setSelectedAnneeAcademiqueId] = useState<string>('');
   const [selectedClassId, setSelectedClassId] = useState<string>('');
@@ -273,6 +283,15 @@ const [currentModalDate, setCurrentModalDate] = useState<Date | null>(null);
   const [filteredMatieres, setFilteredMatieres] = useState<Matiere[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const handleAnneeAcademiqueChange = (anneeId: string) => {
+    setSelectedAnneeAcademiqueId(anneeId);
+    // Réinitialiser la classe et le professeur pour forcer une nouvelle sélection
+    // qui correspond à la nouvelle année.
+    setSelectedClassId('');
+    setSelectedTeacherId('');
+    setEmploisDuTemps([]);
+    setExceptionsEmploisDuTemps([]);
+  };
   const convertToFrenchDay = (date: Date): FrenchDay => {
   const dayMap: Record<string, FrenchDay> = {
     'Monday': 'Lundi',
@@ -399,6 +418,32 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
     fetchData();
   }, []);
 
+  
+  // Récupération des trimestres de l'année sélectionnée
+  useEffect(() => {
+    if (selectedAnneeAcademiqueId) {
+      const fetchTrimestres = async () => {
+        try {
+          const response = await fetch(`${API_URL}/api/trimestres?anneeScolaireId=${selectedAnneeAcademiqueId}`);
+          if (!response.ok) {
+            throw new Error('Failed to fetch trimesters');
+          }
+          const data = await response.json();
+          setTrimestresAnnee(data);
+        } catch (error) {
+          console.error(error);
+          toast({
+            title: t.common.error,
+            description: t.schedule.errorLoadingTerms,
+            variant: "destructive",
+          });
+        }
+      };
+      fetchTrimestres();
+    }
+  }, [selectedAnneeAcademiqueId, t]);
+
+
   // Récupération des données de l'emploi du temps
   const fetchEmploiDuTemps = useCallback(async () => {
     const currentAnneeIdNum = parseInt(selectedAnneeAcademiqueId);
@@ -425,10 +470,15 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
 
       const weekStartDate = format(currentWeekStart, 'yyyy-MM-dd');
       const weekEndDate = format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'yyyy-MM-dd');
-      let exceptionsUrl = `${API_URL}/api/exception-emploi-du-temps?start_date=${weekStartDate}&end_date=${weekEndDate}`;
+      // Ajout de annee_scolaire_id pour filtrer les exceptions par année également.
+      // C'est crucial pour les exceptions globales comme les jours fériés.
+      let exceptionsUrl = `${API_URL}/api/exception-emploi-du-temps?start_date=${weekStartDate}&end_date=${weekEndDate}&annee_scolaire_id=${currentAnneeIdNum}`;
 
-      if (scheduleView === 'class') exceptionsUrl += `&classe_id=${currentClassIdNum}`;
-      else if (scheduleView === 'teacher') exceptionsUrl += `&professeur_id=${currentTeacherIdNum}`;
+      if (scheduleView === 'class' && !isNaN(currentClassIdNum)) {
+        exceptionsUrl += `&classe_id=${currentClassIdNum}`;
+      } else if (scheduleView === 'teacher' && !isNaN(currentTeacherIdNum)) {
+        exceptionsUrl += `&professeur_id=${currentTeacherIdNum}`;
+      }
 
       const exceptionsRes: ExceptionEmploiDuTempsEntry[] = await fetch(exceptionsUrl).then(res => res.json());
       setExceptionsEmploisDuTemps(exceptionsRes);
@@ -464,6 +514,24 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
     }
   }, [selectedClassId, matieres, affectations, selectedAnneeAcademiqueId]);
 
+
+   // Calculer la date de fin du troisième trimestre
+  const finTroisiemeTrimestre = useMemo(() => {
+    if (trimestresAnnee.length === 0) return null;
+
+    // On cherche le trimestre dont le nom contient "3"
+    const troisiemeTrimestre = trimestresAnnee.find(t => t.nom.includes('3'));
+    
+    if (troisiemeTrimestre) {
+        return parseISO(troisiemeTrimestre.date_fin);
+    }
+    
+    // Fallback: si aucun n'est nommé "Trimestre 3", on prend le dernier par date de fin
+    const sortedTrimestres = [...trimestresAnnee].sort((a, b) => new Date(a.date_fin).getTime() - new Date(b.date_fin).getTime());
+    return sortedTrimestres.length > 0 ? parseISO(sortedTrimestres[sortedTrimestres.length - 1].date_fin) : null;
+  }, [trimestresAnnee]);
+
+
   // Obtenir les données de l'emploi du temps pour un créneau spécifique
   const getScheduleItemData = (day: string, date: Date, timeSlot: string): ScheduleItemData | null => {
     const dayMapping: { [key: string]: EmploiDuTempsEntry['jour'] } = {
@@ -493,6 +561,11 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
     );
 
     if (exception) {
+       // Nouvelle logique : Ne pas afficher les exceptions après la fin de l'année scolaire
+      if (finTroisiemeTrimestre && date > finTroisiemeTrimestre) {
+        return null;
+      }
+
       if (exception.type_exception === 'annulation') {
         return {
           subjectName: t.schedule.status.canceled,
@@ -550,6 +623,12 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
       (scheduleView === 'class' ? entry.classe_id === currentClassIdNum : entry.professeur_id === currentTeacherIdNum)
     );
 
+      // Nouvelle logique : Arrêter l'affichage des cours de base après la fin du 3ème trimestre
+   if (baseEntry && finTroisiemeTrimestre && date > finTroisiemeTrimestre) {
+      // Si la date du créneau est après la fin de l'année scolaire, ne pas afficher le cours de base, quel que soit le mode.
+        return null;
+    }
+    
     if (baseEntry) {
       const matiere = matieres.find(m => m.id === baseEntry.matiere_id);
       const teacher = teachers.find(t => t.id === baseEntry.professeur_id);
@@ -584,7 +663,16 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
       });
       return;
     }
-
+// Empêcher l'ajout de nouvelles entrées (base ou exception) après la fin de l'année scolaire.
+    // On autorise le clic sur une entrée existante pour la modifier/supprimer, même si elle est hors date.
+    if (!existingData && finTroisiemeTrimestre && date > finTroisiemeTrimestre) {
+      toast({
+        title: t.schedule.endOfYearTitle, // "Fin de l'année scolaire"
+        description: t.schedule.endOfYearMessage, // "Impossible d'ajouter des cours ou exceptions après la fin du 3ème trimestre."
+        variant: "default",
+      });
+      return;
+    }
     setCurrentModalDate(date);
     setCurrentTimeSlot(timeSlot);
     setCurrentModalDate(date);
@@ -813,7 +901,7 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
 
     const payload = {
       date_exception: dateExceptionFormatted,
-      jour: currentModalDate,
+      jour: convertToFrenchDay(currentModalDate),
       heure_debut: heureDebutFormatted,
       heure_fin: heureFinFormatted,
       classe_id: selectedClassIdNum,
@@ -823,8 +911,8 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
       nouveau_professeur_id: (formExceptionType === 'annulation' || formExceptionType === 'jour_ferie') ? null : formProfesseurIdNum,
       nouvelle_heure_debut: formExceptionType === 'deplacement_cours' ? heureDebutFormatted : null,
       nouvelle_heure_fin: formExceptionType === 'deplacement_cours' ? heureFinFormatted : null,
-      nouvelle_classe_id: formExceptionType === 'deplacement_cours' ? selectedClassIdNum : null,
-      nouveau_jour: formExceptionType === 'deplacement_cours' ? currentModalDate : null,
+      nouvelle_classe_id: formExceptionType === 'deplacement_cours' ? selectedClassIdNum : null, // Assuming the class doesn't change for a moved course in this UI
+      nouveau_jour: formExceptionType === 'deplacement_cours' ? convertToFrenchDay(currentModalDate) : null,
       motif: formMotif || null,
     };
 
@@ -940,7 +1028,7 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
                 <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">{t.schoolManagement.schoolYears.title}</label>
                 <Select
                   value={selectedAnneeAcademiqueId}
-                  onValueChange={setSelectedAnneeAcademiqueId}
+                  onValueChange={handleAnneeAcademiqueChange}
                   disabled={isLoading}
                 >
 <SelectTrigger className="bg-white dark:bg-gray-800 dark:border-gray-700">
@@ -1231,7 +1319,11 @@ className={`font-semibold text-center py-2 rounded-lg transition-colors ${dayInf
     <label htmlFor="matiere" className="text-right text-sm font-medium text-gray-700 dark:text-gray-300">
       {t.common.subject}
     </label>
-    <Select>
+    <Select
+      onValueChange={handleFormMatiereChange}
+      value={formMatiereId}
+      disabled={isSaving}
+    >
       <SelectTrigger className="col-span-3 bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
         <SelectValue placeholder={t.common.selectASubject} />
       </SelectTrigger>
@@ -1256,7 +1348,7 @@ className={`font-semibold text-center py-2 rounded-lg transition-colors ${dayInf
                     <Select
                       value={formProfesseurId}
                       onValueChange={setFormProfesseurId}
-                      disabled={isSaving || true}
+                      disabled={true}
                     >
                       <SelectTrigger className="col-span-3 bg-gray-50">
                         <SelectValue placeholder={t.common.selectATeacher} />

@@ -199,23 +199,6 @@ export function GradeManagement() {
     [t.gradeManagement.term3]: 6 
   };
   
-  const termEvaluationTypeMap = {
-  [t.gradeManagement.term1]: { 
-    devoir1: "Devoir 1", // Gardez les valeurs françaises ici
-    devoir2: "Devoir 2", 
-    composition: "Composition 1" 
-  },
-  [t.gradeManagement.term2]: { 
-    devoir1: "Devoir 3", 
-    devoir2: "Devoir 4", 
-    composition: "Composition 2" 
-  },
-  [t.gradeManagement.term3]: { 
-    devoir1: "Devoir 5", 
-    devoir2: "Devoir 6", 
-    composition: "Composition 3" 
-  },
-};
   const formatAcademicYearDisplay = (annee: { libelle: string; date_debut?: string; date_fin?: string }): string => {
     if (!annee || !annee.date_debut || !annee.date_fin) {
       return annee.libelle || t.common.unknownYear;
@@ -228,26 +211,29 @@ export function GradeManagement() {
   };
 
   const getEvaluationsForDisplay = useCallback(() => {
-  if (!selectedTerm || allEvaluations.length === 0) {
-    return [];
-  }
+    if (!selectedTerm || allEvaluations.length === 0) {
+      return [];
+    }
 
-  const typeMapping = termEvaluationTypeMap[selectedTerm];
-  if (!typeMapping) {
-    return [];
-  }
+    // Directly return the fetched evaluations, sorted.
+    // Sorting logic: Devoirs first, then Compositions, then by number inside the name.
+    return [...allEvaluations].sort((a, b) => {
+      const typeA = a.type.toLowerCase();
+      const typeB = b.type.toLowerCase();
+      
+      const isADevoir = typeA.includes('devoir');
+      const isBDevoir = typeB.includes('devoir');
+      
+      if (isADevoir && !isBDevoir) return -1;
+      if (!isADevoir && isBDevoir) return 1;
 
-  const displayEvaluations = [];
-  const devoir1Eval = allEvaluations.find(e => e.type === typeMapping.devoir1);
-  const devoir2Eval = allEvaluations.find(e => e.type === typeMapping.devoir2);
-  const compositionEval = allEvaluations.find(e => e.type === typeMapping.composition);
-
-  if (devoir1Eval) displayEvaluations.push({...devoir1Eval, displayType: t.gradeManagement.test1});
-  if (devoir2Eval) displayEvaluations.push({...devoir2Eval, displayType: t.gradeManagement.test2});
-  if (compositionEval) displayEvaluations.push({...compositionEval, displayType: t.gradeManagement.exam1});
-
-  return displayEvaluations;
-}, [allEvaluations, selectedTerm, t]);
+      // If both are devoirs or both are compositions, sort by number
+      const numA = parseInt(typeA.replace(/[^0-9]/g, ''), 10) || 0;
+      const numB = parseInt(typeB.replace(/[^0-9]/g, ''), 10) || 0;
+      
+      return numA - numB;
+    });
+  }, [allEvaluations, selectedTerm]);
 
   useEffect(() => {
     const getAnnees = async () => {
@@ -322,14 +308,10 @@ export function GradeManagement() {
           const evals = await fetchEvaluations(classIdNum, matiereIdNum, trimestreNum, anneeAcademiqueIdNum);
           setAllEvaluations(evals);
 
-          const initialGradeData = {};
-          const evaluationsToLoadNotesFor = evals.filter(e =>
-            Object.values(termEvaluationTypeMap[selectedTerm] || {}).includes(e.type)
-          );
-
-          if (evaluationsToLoadNotesFor.length > 0) {
+          if (evals.length > 0) {
+            const initialGradeData = {};
             const notePromises = eleves.flatMap(eleve =>
-              evaluationsToLoadNotesFor.map(async evaluation => {
+              evals.map(async evaluation => {
                 const note = await fetchNote(evaluation.id, eleve.id);
                 return { eleveId: eleve.id, evaluationId: evaluation.id, noteValue: note ? note.note : '' };
               })
@@ -341,8 +323,8 @@ export function GradeManagement() {
               }
               initialGradeData[item.eleveId][item.evaluationId] = item.noteValue;
             });
+            setGradeData(initialGradeData);
           }
-          setGradeData(initialGradeData);
         } catch (error) {
           console.error("Failed to load evaluations or grades:", error);
           toast({
@@ -527,10 +509,10 @@ setGradeData(prevData => ({
         <TableHead 
           key={evalItem.id} 
           className="min-w-[100px] px-4 py-3 font-semibold text-center dark:text-gray-200"
-          title={evalItem.displayType}
+          title={evalItem.type}
         >
           <div className="flex flex-col items-center">
-            <span>{evalItem.displayType}</span>
+            <span>{evalItem.type}</span>
             {evalItem.date_eval && (
               <span className="text-xs font-normal text-gray-500 dark:text-gray-400">
                 {new Date(evalItem.date_eval).toLocaleDateString()}
@@ -568,7 +550,7 @@ setGradeData(prevData => ({
                       ? 'border-red-500 bg-red-50 dark:bg-red-900/20' 
                       : 'border-gray-300 hover:border-gray-400 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:hover:border-gray-500 dark:focus:border-blue-400'
                   } focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 transition-colors`}
-                  aria-label={`${t.gradeManagement.gradeFor} ${eleve.prenom} ${eleve.nom} ${t.common.forLabel} ${evalItem.displayType}`}
+                  aria-label={`${t.gradeManagement.gradeFor} ${eleve.prenom} ${eleve.nom} ${t.common.forLabel} ${evalItem.type}`}
                   aria-invalid={isInvalid}
                 />
                 {isInvalid && (<span className="sr-only">{t.gradeManagement.invalidGrade}</span>)}

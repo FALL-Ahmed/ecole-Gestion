@@ -230,6 +230,11 @@ missingFields: "Champs manquants",
             successTitle: "Connexion réussie",
             successDescription: "Bienvenue {user}",
             errorTitle: "Erreur de connexion",
+            loginFailedTitle: "Échec de la connexion",
+  errorConfig: "Impossible de vérifier la configuration de l'année scolaire.",
+  errorNoActiveYear: "Aucune année scolaire active n'est configurée. Connexion impossible.",
+  errorEnrollment: "Erreur lors de la vérification de votre inscription.",
+  errorNotEnrolled: "Vous n'êtes pas inscrit pour l'année scolaire en cours. Veuillez contacter l'administration.",
             errorDescription: "Email ou mot de passe incorrect",
             unknownError: "Une erreur inconnue est survenue.",
             assignmentsErrorTitle: "Attention !",
@@ -850,9 +855,12 @@ studentAttendance: {
     schedule: {
         viewClass: "Par Classe",
         viewTeacher: "Par Professeur",
+         endOfYearTitle: "Fin de l'année scolaire",
+  endOfYearMessage: "L'année scolaire est terminée. Les données ne sont plus modifiables.",
         missingEntryId: "ID d'entrée de base manquant",
         missingExceptionId: "ID d'exception manquant",
         teacherViewNotAllowedTitle: "Action non permise",
+        errorLoadingTerms: "Erreur lors du chargement des trimestres.",
          today: "Aujourd'hui",
     nextCourse: "Prochain cours",
     timeUntilNext: "Début dans",
@@ -1003,6 +1011,11 @@ checkOtherDays: "Vérifiez les autres jours",
 
     schoolManagement: {
         title: "Gestion Scolaire",
+        levels: {
+      primary: "Primaire",
+      middle: "Collège",
+      high: "Lycée"
+    },
         description: "Gérez les entités fondamentales de l'établissement.",
         tabs: {
             schoolYears: "Années Scolaires",

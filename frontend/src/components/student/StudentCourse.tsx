@@ -47,6 +47,8 @@ interface Affectation {
   id: number;
   professeur: { id: number; nom: string; prenom: string };
   matiere: { id: number; nom: string };
+  classe: { id: number };
+  annee_scolaire: { id: number };
 }
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -117,16 +119,18 @@ export function StudentCourses() {
         const studentClassId = studentInscription.classe.id;
 
         const [affectationsRes, matieresRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/affectations?classe_id=${studentClassId}&annee_scolaire_id=${activeAnneeId}`),
+          fetch(`${API_BASE_URL}/affectations?_expand=professeur&_expand=matiere&_expand=classe&_expand=annee_scolaire`),
           fetch(`${API_BASE_URL}/matieres`)
         ]);
 
         if (!affectationsRes.ok) throw new Error(t.common.errorLoadingData('affectations', affectationsRes.statusText));
         if (!matieresRes.ok) throw new Error(t.common.errorLoadingData('matières', matieresRes.statusText));
 
-        const affectations: Affectation[] = await affectationsRes.json();
+        const allAffectations: Affectation[] = await affectationsRes.json();
         const allMatieres: { id: number; nom: string }[] = await matieresRes.json();
         const allMatieresIds = new Set(allMatieres.map(m => m.id));
+
+        const affectations = allAffectations.filter(aff => aff.classe?.id === studentClassId && aff.annee_scolaire?.id === activeAnneeId);
 
         const validAffectations = affectations.filter(aff => aff.matiere && allMatieresIds.has(aff.matiere.id));
 

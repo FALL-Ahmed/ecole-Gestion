@@ -220,37 +220,53 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
   }, [t]);
 
   function sortAnnees(annees) {
-    const order = (annee) => {
-      if (annee === "Terminale") return 99;
-      if (annee === "4ème année (Brevet)") return 4;
-      const match = annee.match(/^(\d+)/);
-      return match ? parseInt(match[1], 10) : 100;
-    };
-    return Object.keys(annees).sort((a, b) => order(a) - order(b));
-  }
+  const order = (annee) => {
+    if (annee === (isRTL ? "بكالوريا" : "Terminale")) return 99;
+    if (annee === (isRTL ? "شهادة التعليم المتوسط" : "Brevet")) return 4;
+    const match = annee.match(isRTL ? /السنة (\d+)/ : /^(\d+)/);
+    return match ? parseInt(match[1], 10) : 100;
+  };
+  return Object.keys(annees).sort((a, b) => order(a) - order(b));
+}
 
-  function groupClassesByNiveauAndAnnee(classes: { id: string, nom: string, niveau?: string }[]) {
-    const grouped: { [niveau: string]: { [annee: string]: { id: string, nom: string }[] } } = {};
-    classes.forEach(classe => {
-      const niveau = (classe.niveau || t.common.unknown).toLowerCase();
-      const match = classe.nom.match(/^(\d+)/);
-      let annee = t.common.unknown;
-      if (match) {
-        if (match[1] === "4") {
-          annee = t.schoolManagement.classes.levelOptions[1];
-        } else if (match[1] === "7") {
-          annee = t.schoolManagement.classes.levelOptions[2];
-        } else {
-          annee = `${match[1]}ème année`;
-        }
+ function groupClassesByNiveauAndAnnee(classes: { id: string, nom: string, niveau?: string }[]) {
+  const grouped: { [niveau: string]: { [annee: string]: { id: string, nom: string }[] } } = {};
+
+  const translateNiveau = (niveauToTranslate: string) => {
+    if (!niveauToTranslate) return t.common.unknown;
+    const lowerNiveau = niveauToTranslate.toLowerCase();
+    switch (lowerNiveau) {
+      case 'primaire': return t.schoolManagement.levels.primary;
+      case 'collège':
+      case 'college': return t.schoolManagement.levels.middle;
+      case 'lycée':
+      case 'lycee': return t.schoolManagement.levels.high;
+      default: return niveauToTranslate;
+    }
+  };
+
+  classes.forEach(classe => {
+    const niveau = translateNiveau(classe.niveau || t.common.unknown);
+
+    // Détermine l'affichage de l'année en arabe
+    const match = classe.nom.match(/^(\d+)/);
+    let annee = t.common.unknown;
+    if (match) {
+      if (match[1] === "4") {
+        annee = "شهادة التعليم المتوسط";
+      } else if (match[1] === "7") {
+        annee = "بكالوريا";
+      } else {
+        annee = `السنة ${match[1]}`;
       }
-      if (!grouped[niveau]) grouped[niveau] = {};
-      if (!grouped[niveau][annee]) grouped[niveau][annee] = [];
-      grouped[niveau][annee].push(classe);
-    });
-    return grouped;
-  }
+    }
 
+    if (!grouped[niveau]) grouped[niveau] = {};
+    if (!grouped[niveau][annee]) grouped[niveau][annee] = [];
+    grouped[niveau][annee].push(classe);
+  });
+  return grouped;
+}
   function groupCoefficientsByNiveauEtAnnee() {
     const grouped = {};
     coefficients.forEach(c => {
@@ -589,42 +605,44 @@ headers: {
                         Object.keys(anneesObj).sort();
 
                       return Object.entries(grouped).map(([niveau, annees]) => (
-                        <div key={niveau} className="mb-10">
-                          <h3 className="text-xl font-bold text-blue-700 mb-4 capitalize flex items-center gap-2">
-                            <Users className="h-6 w-6" /> {niveau}
-                          </h3>
+                        <div key={niveau} className={`mb-10 ${isRTL ? 'text-right' : 'text-left'}`}>
+                         <h3 className={`text-xl font-bold text-blue-700 mb-4 capitalize flex items-center ${isRTL ? 'flex-row-reverse' : 'flex-row'}`}>
+    <Users className={`h-6 w-6 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+    <span>{niveau}</span>
+  </h3>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                            {sortedAnneesKeys(annees).map((annee) => (
-                              <div
-                                key={annee}
-                                className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 border border-blue-200 dark:border-blue-800 rounded-2xl shadow p-4
-                                  transition-transform duration-300 ease-out hover:scale-105 hover:shadow-xl"
-                              >
-                                <div className="flex items-center gap-2 mb-3">
-                                  <Calendar className="h-5 w-5 text-indigo-600 dark:text-indigo-300" />
-                                  <span className="text-base font-semibold text-indigo-700 dark:text-indigo-200">
-                                    {annee}
-                                  </span>
-                                </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6" style={{ direction: isRTL ? 'rtl' : 'ltr' }}>
+      {sortAnnees(annees).map((annee) => (
+        <div
+          key={annee}
+          className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 border border-blue-200 dark:border-blue-800 rounded-2xl shadow p-4
+            transition-transform duration-300 ease-out hover:scale-105 hover:shadow-xl"
+          style={{ textAlign: isRTL ? 'right' : 'left' }}
+        >
+          <div className={`flex items-center gap-2 mb-3 ${isRTL ? 'flex-row-reverse' : 'flex-row'}`}>
+            <Calendar className={`h-5 w-5 text-indigo-600 dark:text-indigo-300 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+            <span className="text-base font-semibold text-indigo-700 dark:text-indigo-200">
+              {annee}
+            </span>
+          </div>
 
-                                <ul className="flex flex-wrap gap-3">
-                                  {annees[annee].map((classe) => (
-                                    <li
-                                      key={classe.id}
-                                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-700 shadow-sm font-semibold text-blue-900 dark:text-blue-100 text-base
-                                        transition-colors duration-300 ease-out hover:bg-blue-100 dark:hover:bg-blue-900 hover:scale-105"
-                                    >
-                                      <span className="inline-block w-2 h-2 rounded-full bg-blue-400 mr-1" />
-                                      {classe.nom}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ));
+           <ul className={`flex flex-wrap gap-3 ${isRTL ? 'justify-end' : 'justify-start'}`}>
+            {annees[annee].map((classe) => (
+              <li
+                key={classe.id}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-700 shadow-sm font-semibold text-blue-900 dark:text-blue-100 text-base
+                  transition-colors duration-300 ease-out hover:bg-blue-100 dark:hover:bg-blue-900 hover:scale-105 ${isRTL ? 'flex-row-reverse' : 'flex-row'}`}
+              >
+                <span className="inline-block w-2 h-2 rounded-full bg-blue-400" style={{ [isRTL ? 'marginLeft' : 'marginRight']: '0.25rem' }} />
+                {classe.nom}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  </div>
+));
                     })()
                   )}
                 </div>
@@ -703,12 +721,14 @@ headers: {
                                     return matieresUniques.map(c => (
                                       <li
                                         key={c.matiere.id}
-                                        className="flex flex-col items-start gap-2 px-4 py-3 rounded-2xl bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-700 shadow transition-all duration-300 hover:bg-blue-50 dark:hover:bg-blue-800 hover:shadow-lg"
-                                      >
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <Award className="h-5 w-5 text-indigo-500 dark:text-indigo-300" />
-                                          <span className="font-semibold text-blue-900 dark:text-blue-100 text-base">{c.matiere.nom}</span>
-                                        </div>
+  className="flex flex-col items-start gap-2 px-4 py-3 rounded-2xl bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-700 shadow transition-all duration-300 hover:bg-blue-50 dark:hover:bg-blue-800 hover:shadow-lg"
+>
+  <div className="flex items-center gap-2 mb-1 w-full"> {/* Ajout de w-full */}
+    <Award className="h-5 w-5 text-indigo-500 dark:text-indigo-300" />
+    <span className="font-semibold text-blue-900 dark:text-blue-100 text-base truncate flex-1"> {/* Ajout de truncate et flex-1 */}
+      {c.matiere.nom}
+    </span>
+  </div>
                                         <span className="px-3 py-1 rounded-full bg-yellow-200 dark:bg-yellow-700 text-yellow-900 dark:text-yellow-100 text-xs font-bold shadow">
                                           {t.schoolManagement.coefficients.coefficient}&nbsp;{c.coefficient}
                                         </span>
@@ -1368,44 +1388,48 @@ headers: {
                       const isSelected = coeffData[matiere.id] !== undefined;
                       return (
                         <div
-                          key={matiere.id}
-                          className={`border-2 p-3 rounded-xl transition-all duration-200 ease-in-out flex items-center justify-between cursor-pointer
-                            ${
-                              isSelected
-                                ? "border-blue-500 bg-blue-100 dark:bg-blue-800 shadow-md"
-                                : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-blue-400"
-                            }`}
-                          onClick={() => {
-                            if (isSelected) {
-                              const updated = { ...coeffData };
-                              delete updated[matiere.id];
-                              setCoeffData(updated);
-                            } else {
-                              setCoeffData({ ...coeffData, [matiere.id]: 1 });
-                            }
-                          }}
-                        >
-                          <div className="flex items-center">
-                            <div className={`w-3 h-3 rounded-full mr-3 ${isSelected ? 'bg-blue-600' : 'bg-gray-400'}`} />
-                            <span className="font-medium text-gray-900 dark:text-gray-100">{matiere.nom}</span>
-                          </div>
-                          {isSelected && (
-                            <div className="flex items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400 mr-2">{t.schoolManagement.coefficients.coefficient}:</span>
-                              <input
-                                type="number"
-                                value={coeffData[matiere.id]}
-                                onChange={(e) => {
-                                  const value = e.target.value;
-                                  setCoeffData({ ...coeffData, [matiere.id]: value === '' ? '' : parseFloat(value) });
-                                }}
-                                className="w-16 border border-blue-300 dark:border-blue-700 rounded-md px-2 py-1 text-center text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                min="1" step="1"
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                            </div>
-                          )}
-                        </div>
+  key={matiere.id}
+  className={`border-2 p-3 rounded-xl transition-all duration-200 ease-in-out flex items-center justify-between cursor-pointer
+    ${
+      isSelected
+        ? "border-blue-500 bg-blue-100 dark:bg-blue-800 shadow-md"
+        : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-blue-400"
+    }`}
+  onClick={() => {
+    if (isSelected) {
+      const updated = { ...coeffData };
+      delete updated[matiere.id];
+      setCoeffData(updated);
+    } else {
+      setCoeffData({ ...coeffData, [matiere.id]: 1 });
+    }
+  }}
+>
+  <div className="flex items-center min-w-0"> {/* Ajout de min-w-0 */}
+    <div className={`w-3 h-3 rounded-full mr-3 ${isSelected ? 'bg-blue-600' : 'bg-gray-400'}`} />
+    <span className="font-medium text-gray-900 dark:text-gray-100 truncate"> {/* Ajout de truncate */}
+      {matiere.nom}
+    </span>
+  </div>
+  {isSelected && (
+    <div className="flex items-center ml-2"> {/* Ajout de ml-2 */}
+      <span className="text-sm text-gray-600 dark:text-gray-400 mr-2 whitespace-nowrap"> {/* Ajout de whitespace-nowrap */}
+        {t.schoolManagement.coefficients.coefficient}:
+      </span>
+      <input
+        type="number"
+        value={coeffData[matiere.id]}
+        onChange={(e) => {
+          const value = e.target.value;
+          setCoeffData({ ...coeffData, [matiere.id]: value === '' ? '' : parseFloat(value) });
+        }}
+        className="w-16 border border-blue-300 dark:border-blue-700 rounded-md px-2 py-1 text-center text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        min="1" step="1"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  )}
+</div>
                       );
                     });
                   })()}

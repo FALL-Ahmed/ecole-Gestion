@@ -19,35 +19,36 @@ import { useNavigate } from 'react-router-dom';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const educationalTips = [
-  "رؤية centralise toute la gestion scolaire pour que chaque acteur gagne en efficacité.",
+  "Madrastak centralise toute la gestion scolaire pour que chaque acteur gagne en efficacité.",
   "Une plateforme unique, pour piloter l'école de demain avec simplicité et précision.",
-  "رؤية connecte professeurs, parents, élèves et administration dans un même élan.",
+  "Madrastak connecte professeurs, parents, élèves et administration dans un même élan.",
   "Gérer les absences, notes, emplois du temps... n'a jamais été aussi fluide et sécurisé.",
-  "Plus qu'un outil, رؤية est un partenaire de confiance pour les écoles mauritaniennes.",
+  "Plus qu'un outil, Madrastak est un partenaire de confiance pour les écoles mauritaniennes.",
   "La digitalisation de l'école, pensée pour tous, accessible à chacun.",
-  "رؤية facilite la communication et renforce la coopération entre tous les acteurs scolaires.",
+  "Madrastak facilite la communication et renforce la coopération entre tous les acteurs scolaires.",
   "Donnez à votre établissement les moyens de ses ambitions avec une gestion moderne et intégrée.",
   "En un clic, visualisez l'état de votre école, planifiez et optimisez chaque journée.",
-  "رؤية, la plateforme qui fait rimer technologie et humanité au service de l'éducation.",
-  "Avec رؤية, l'école se déplace vers l'élève et les parents, et non l'inverse.",
-  "À chaque connexion sur رؤية, un rêve se rapproche.",
-  "Avec رؤية, la digitalisation de l'école devient accessible, intuitive et complète."
+  "Madrastak, la plateforme qui fait rimer technologie et humanité au service de l'éducation.",
+  "Avec Madrastak, l'école se déplace vers l'élève et les parents, et non l'inverse.",
+  "À chaque connexion sur Madrastak, un rêve se rapproche.",
+  "Avec Madrastak, la digitalisation de l'école devient accessible, intuitive et complète."
 ];
 
+
 const educationalTipsAr = [
-  "رؤية ت centralise إدارة المدرسة لتحقيق أقصى قدر من الكفاءة",
-  "منصة فريدة لإدارة مدرسة الغد بدقة وسهولة",
-  "رؤية توصل الأساتذة وأولياء الأمور والتلاميذ والإدارة في انسجام تام",
-  "إدارة الغياب والنتائج والجداول الزمنية... بسلاسة وأمان غير مسبوقين",
-  "أكثر من أداة، رؤية شريك موثوق للمدارس الموريتانية",
-  "رقمنة المدرسة، مصممة للجميع ومتاحة للكل",
-  "رؤية تسهل التواصل وتعزز التعاون بين كل الفاعلين التربويين",
-  "زود مؤسستك بأدوات العصر لتحقيق طموحاتها",
-  "بنقرة واحدة، تتبع حالة مؤسستك، خطط وحسن كل يوم دراسي",
-  "رؤية، المنصة التي تجمع بين التكنولوجيا والإنسانية لخدمة التعليم",
-  "مع رؤية، المدرسة تأتي إلى التلميذ وولي الأمر... وليس العكس",
-  "مع كل اتصال على رؤية، حلم يقترب أكثر",
-  "مع رؤية، تصبح رقمنة المدرسة شاملة، سهلة ومتاحة للجميع"
+  "مدرستك تُركز إدارة المدرسة لتحقيق أقصى قدر من الكفاءة.",
+  "منصة موحدة لإدارة مدرسة المستقبل بدقة وسهولة.",
+  "مدرستك تربط بين الأساتذة، الأولياء، التلاميذ والإدارة في انسجام تام.",
+  "إدارة الغيابات، النتائج، والجداول الزمنية... أصبحت أكثر سلاسة وأماناً.",
+  "أكثر من مجرد أداة، مدرستك شريك موثوق للمدارس الموريتانية.",
+  "رقمنة المدرسة مصممة للجميع ومتاحة لكل فرد.",
+  "مدرستك تسهل التواصل وتعزز التعاون بين جميع الفاعلين التربويين.",
+  "وفّر لمؤسستك الوسائل الحديثة لتحقيق طموحاتها بإدارة متكاملة.",
+  "بنقرة واحدة، تابع حالة مدرستك، خطط وحقق أفضل استغلال لكل يوم دراسي.",
+  "مدرستك، المنصة التي تمزج بين التكنولوجيا والإنسانية لخدمة التعليم.",
+  "مع مدرستك، المدرسة تقترب من التلميذ وولي الأمر... وليس العكس.",
+  "مع كل دخول إلى مدرستك، يقترب الحلم أكثر.",
+  "مع مدرستك، تصبح رقمنة المدرسة شاملة، سهلة، ومتاحة للجميع."
 ];
 
 const floatingIconsList = [
@@ -144,14 +145,51 @@ export function LoginForm() {
         body: JSON.stringify({ email, password }),
       });
 
-      if (!response.ok) throw new Error(t.login.errorDescription);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: t.login.errorDescription }));
+        throw new Error(errorData.message || t.login.errorDescription);
+      }
 
       const data = await response.json();
       const { access_token, user } = data;
 
+      // Vérification supplémentaire pour les élèves
+      if (user.role === 'eleve') {
+        // 1. Récupérer l'année scolaire active depuis la configuration
+        const configRes = await fetch(`${API_URL}/api/configuration`);
+        if (!configRes.ok) {
+          throw new Error(t.login.toast.errorConfig || "Impossible de vérifier la configuration de l'année scolaire.");
+        }
+        const configData = await configRes.json();
+        let activeAnneeId: number | undefined;
+        if (Array.isArray(configData) && configData.length > 0) {
+          activeAnneeId = configData[0].annee_academique_active_id || configData[0].annee_scolaire?.id;
+        } else if (configData && !Array.isArray(configData)) {
+          activeAnneeId = configData.annee_academique_active_id || configData.annee_scolaire?.id;
+        }
+
+        if (!activeAnneeId) {
+          throw new Error(t.login.toast.errorNoActiveYear || "Aucune année scolaire active n'est configurée. Connexion impossible.");
+        }
+
+        // 2. Vérifier si l'élève a une inscription active pour cette année
+        const inscriptionsRes = await fetch(`${API_URL}/api/inscriptions?utilisateurId=${user.id}&anneeScolaireId=${activeAnneeId}`);
+        if (inscriptionsRes.status === 404) { // Pas d'inscription trouvée
+          throw new Error(t.login.toast.errorNotEnrolled || "Vous n'êtes pas inscrit pour l'année scolaire en cours. Veuillez contacter l'administration.");
+        }
+        if (!inscriptionsRes.ok) { // Autre erreur serveur
+          throw new Error(t.login.toast.errorEnrollment || "Erreur lors de la vérification de votre inscription.");
+        }
+        const inscriptions = await inscriptionsRes.json();
+        const hasActiveInscription = inscriptions.some((insc: any) => insc.actif);
+
+        if (!hasActiveInscription) {
+          throw new Error(t.login.toast.errorNotEnrolled || "Vous n'êtes pas inscrit pour l'année scolaire en cours. Veuillez contacter l'administration.");
+        }
+      }
+
       setLoginSuccess(true);
 
-      // Show success state for 1.5 seconds before redirect
       setTimeout(() => {
         setRedirecting(true);
         
@@ -162,11 +200,10 @@ export function LoginForm() {
       }, 1500);
     } catch (error: any) {
       toast({
-        title: t.common.error,
-        description: error.message || t.login.toast.errorDescription,
+        title: t.login.toast.loginFailedTitle || "Échec de la connexion",
+        description: error.message,
         variant: "destructive",
       });
-    } finally {
       setIsLoading(false);
     }
   };

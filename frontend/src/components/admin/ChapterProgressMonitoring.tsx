@@ -296,63 +296,78 @@ const getStatusBadgeClasses = (status) => {
 
   // --- Fetch Chapters based on Filters ---
   const fetchChapters = useCallback(async () => {
-    if (!selectedAnneeId) {
-      setChapters([]);
-      return;
+  if (!selectedAnneeId) {
+    setChapters([]);
+    return;
+  }
+
+  setIsFetchingChapters(true);
+  try {
+    let url = `${API_BASE_URL}/chapitres?annee_scolaire_id=${selectedAnneeId}`;
+    
+    if (selectedClasseId !== 'all') {
+      url += `&classe_id=${selectedClasseId}`;
+    }
+    
+    if (selectedMatiereId !== 'all') {
+      url += `&matiere_id=${selectedMatiereId}`;
     }
 
-    setIsFetchingChapters(true);
-    try {
-      let url = `${API_BASE_URL}/chapitres?annee_scolaire_id=${selectedAnneeId}`;
-      if (selectedClasseId !== 'all') url += `&classe_id=${selectedClasseId}`;
-      if (selectedMatiereId !== 'all') url += `&matiere_id=${selectedMatiereId}`;
-
-      const response = await fetch(url);
-      if (!response.ok) {
-        if (response.status === 404 || response.status === 204) {
-          setChapters([]);
-          return;
-        }
-        const errorText = await response.text();
-        throw new Error(`Failed to fetch chapters: ${response.status} - ${errorText}`);
+    const response = await fetch(url);
+    if (!response.ok) {
+      if (response.status === 404 || response.status === 204) {
+        setChapters([]);
+        return;
       }
-      const data: ChapterDisplay[] = await response.json();
-
-      const chaptersWithNames = data.map(ch => {
-        const classe = allClasses.find(c => c.id === ch.classeId);
-        const matiere = allMatieres.find(m => m.id === ch.matiereId);
-                 return {
-          ...ch,
-          className: classe?.nom || t.common.unknownClass,
-          subjectName: matiere ? matiere.nom : t.common.unknownSubject,
-        };
-      });
-
-      setChapters(chaptersWithNames);
-    } catch (error) {
-      console.error('Error fetching chapters:', error);
-      toast({
-        title: t.common.errorLoading,
-        description: error instanceof Error 
-          ? error.message 
-          : t.common.errorLoadingChapters,
-        variant: "destructive"
-      });
-      setChapters([]);
-    } finally {
-      setIsFetchingChapters(false);
+      const errorText = await response.text();
+      throw new Error(`Failed to fetch chapters: ${response.status} - ${errorText}`);
     }
-  }, [selectedAnneeId, selectedClasseId, selectedMatiereId, allClasses, allMatieres, t]);
+    
+    const data: ChapterDisplay[] = await response.json();
+    
+    // Filtrer une seconde fois côté client pour être sûr
+    const filteredData = data.filter(ch => {
+      const classe = allClasses.find(c => c.id === ch.classeId);
+      return classe?.annee_scolaire_id?.toString() === selectedAnneeId;
+    });
+
+    const chaptersWithNames = filteredData.map(ch => {
+      const classe = allClasses.find(c => c.id === ch.classeId);
+      const matiere = allMatieres.find(m => m.id === ch.matiereId);
+      return {
+        ...ch,
+        className: classe?.nom || t.common.unknownClass,
+        subjectName: matiere ? matiere.nom : t.common.unknownSubject,
+      };
+    });
+
+    setChapters(chaptersWithNames);
+  } catch (error) {
+    console.error('Error fetching chapters:', error);
+    toast({
+      title: t.common.errorLoading,
+      description: error instanceof Error 
+        ? error.message 
+        : t.common.errorLoadingChapters,
+      variant: "destructive"
+    });
+    setChapters([]);
+  } finally {
+    setIsFetchingChapters(false);
+  }
+}, [selectedAnneeId, selectedClasseId, selectedMatiereId, allClasses, allMatieres, t]);
 
   useEffect(() => {
     fetchChapters();
   }, [fetchChapters]);
 
   // --- Filter Options for Selects ---
-  const classesForSelectedAnnee = useMemo(() => {
-    if (!selectedAnneeId) return [];
-    return allClasses.filter(cls => String(cls.annee_scolaire_id) === selectedAnneeId);
-  }, [allClasses, selectedAnneeId]);
+ const classesForSelectedAnnee = useMemo(() => {
+  if (!selectedAnneeId) return [];
+  return allClasses.filter(cls => 
+    cls.annee_scolaire_id?.toString() === selectedAnneeId
+  );
+}, [allClasses, selectedAnneeId]);
 
   const matieresForSelectedAnneeAndClasse = useMemo(() => {
     if (!selectedAnneeId || selectedClasseId === 'all') return [];
@@ -422,25 +437,30 @@ const getStatusBadgeClasses = (status) => {
   }, [displayChapters, allAffectations, selectedAnneeId, allProfessors, t, translateSubject]);
 
   // --- Calculations for Summary Cards ---
-  const calculateOverallProgress = () => {
-    const total = displayChapters.length;
-    if (total === 0) return 0;
-    const completed = displayChapters.filter(ch => ch.statut === 'terminé').length;
-    return (completed / total) * 100;
-  };
+const calculateOverallProgress = () => {
+  const filteredChapters = chapters; // déjà filtrés par fetchChapters
+  const total = filteredChapters.length;
+  if (total === 0) return 0;
+  const completed = filteredChapters.filter(ch => ch.statut === 'terminé').length;
+  return (completed / total) * 100;
+};
 
-  const calculateTimelineAdherence = () => {
-    const completedChapters = displayChapters.filter(ch => ch.statut === 'terminé' && ch.dateFinReel && ch.dateFinPrevue);
-    if (completedChapters.length === 0) return 100;
+const calculateTimelineAdherence = () => {
+  const filteredChapters = chapters; // déjà filtrés par fetchChapters
+  const completedChapters = filteredChapters.filter(ch => 
+    ch.statut === 'terminé' && ch.dateFinReel && ch.dateFinPrevue
+  );
+  
+  if (completedChapters.length === 0) return 100;
 
-    const onTimeChapters = completedChapters.filter(ch => {
-      const planned = new Date(ch.dateFinPrevue!);
-      const actual = new Date(ch.dateFinReel!);
-      return isValid(planned) && isValid(actual) && actual <= planned;
-    }).length;
-    return (onTimeChapters / completedChapters.length) * 100;
-  };
-
+  const onTimeChapters = completedChapters.filter(ch => {
+    const planned = new Date(ch.dateFinPrevue!);
+    const actual = new Date(ch.dateFinReel!);
+    return isValid(planned) && isValid(actual) && actual <= planned;
+  }).length;
+  
+  return (onTimeChapters / completedChapters.length) * 100;
+};
   // --- Handle Filter Changes ---
   const handleAnneeChange = (value: string) => {
     setSelectedAnneeId(value);
@@ -488,25 +508,30 @@ const getStatusBadgeClasses = (status) => {
             </div>
           </CardContent>
         </Card>
-        <Card className="dark:bg-gray-800">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                  {t.chapterMonitoring.overallProgress}
-                </p>
-                <p className="text-2xl font-bold dark:text-white">
-                  {Math.round(calculateOverallProgress())}%
-                </p>
-              </div>
-              <div className="p-3 bg-green-100 dark:bg-green-900 rounded-full text-green-600 dark:text-green-300">
-                <AlertCircle className="h-6 w-6" />
-              </div>
-            </div>
-            <Progress value={calculateOverallProgress()}   className="h-2 mt-4 bg-gray-200 dark:bg-gray-600" 
- />
-          </CardContent>
-        </Card>
+      <Card className="dark:bg-gray-800">
+  <CardContent className="p-6">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+          {t.chapterMonitoring.overallProgress}
+        </p>
+        <p className="text-2xl font-bold dark:text-white">
+          {chapters.length > 0 ? Math.round(calculateOverallProgress()) : 0}%
+        </p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          {chapters.length} {t.chapterMonitoring.chapters.toLowerCase()}
+        </p>
+      </div>
+      <div className="p-3 bg-green-100 dark:bg-green-900 rounded-full text-green-600 dark:text-green-300">
+        <AlertCircle className="h-6 w-6" />
+      </div>
+    </div>
+    <Progress 
+      value={calculateOverallProgress()} 
+      className="h-2 mt-4 bg-gray-200 dark:bg-gray-600" 
+    />
+  </CardContent>
+</Card>
         <Card className="dark:bg-gray-800">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -557,20 +582,24 @@ const getStatusBadgeClasses = (status) => {
                 {t.common.class}
               </label>
               <Select 
-                value={selectedClasseId} 
-                onValueChange={handleClasseChange} 
-                disabled={!selectedAnneeId || classesForSelectedAnnee.length === 0}
-              >
-                <SelectTrigger className={isRTL ? 'text-right' : 'text-left'}>
-                  <SelectValue placeholder={!selectedAnneeId ? t.common.selectYear : t.common.allClasses} />
-                </SelectTrigger>
-                <SelectContent className={isRTL ? 'text-right' : 'text-left'}>
-                  <SelectItem value="all">{t.common.allClasses}</SelectItem>
-                  {classesForSelectedAnnee.map(cls => (
-                    <SelectItem key={cls.id} value={String(cls.id)}>{cls.nom}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+  value={selectedClasseId} 
+  onValueChange={handleClasseChange} 
+  disabled={!selectedAnneeId || classesForSelectedAnnee.length === 0}
+>
+  <SelectTrigger>
+    <SelectValue placeholder={t.common.selectClass} />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="all">
+      {t.common.allClasses} ({classesForSelectedAnnee.length})
+    </SelectItem>
+    {classesForSelectedAnnee.map(cls => (
+      <SelectItem key={cls.id} value={String(cls.id)}>
+        {cls.nom}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
             </div>
             <div>
               <label className="text-sm font-medium mb-1 block dark:text-gray-300">

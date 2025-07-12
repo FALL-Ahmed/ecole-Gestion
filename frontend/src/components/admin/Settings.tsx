@@ -75,6 +75,7 @@ export function Settings() {
   // Data for current academic year
   const [academicYearsList, setAcademicYearsList] = useState<any[]>([]);
   const [currentAcademicYearId, setCurrentAcademicYearId] = useState<number | null>(null);
+  const [currentConfigId, setCurrentConfigId] = useState<number | null>(null);
   const [isLoadingAcademicConfig, setIsLoadingAcademicConfig] = useState(true);
   const [isLoadingEstablishmentInfo, setIsLoadingEstablishmentInfo] = useState(true);
 
@@ -166,7 +167,17 @@ export function Settings() {
         throw new Error(t.settings.errorFetchingCurrentYear);
       }
       const data = await response.json();
-      setCurrentAcademicYearId(data.annee_scolaire?.id || null);
+      // Handle both object and array responses from the API
+      const config = Array.isArray(data) ? data[0] : data;
+
+      if (config) {
+        setCurrentAcademicYearId(config.annee_scolaire?.id || config.annee_academique_active_id || null);
+        setCurrentConfigId(config.id || null);
+      } else {
+        setCurrentAcademicYearId(null);
+        setCurrentConfigId(null);
+      }
+
     } catch (error: any) {
       console.error('Error fetching current academic year configuration:', error);
       toast({
@@ -325,14 +336,20 @@ export function Settings() {
 
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/api/configuration`, {
-          method: 'POST',
+
+        const method = currentConfigId ? 'PUT' : 'POST';
+        const url = currentConfigId
+          ? `${API_URL}/api/configuration/${currentConfigId}`
+          : `${API_URL}/api/configuration`;
+
+        const response = await fetch(url, {
+          method: method,
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            annee_scolaire_id: currentAcademicYearId
+            annee_scolaire_id: currentAcademicYearId,
           }),
         });
 

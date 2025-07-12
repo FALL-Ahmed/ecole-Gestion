@@ -1,9 +1,13 @@
 // src/configuration/configuration.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Configuration } from './configuration.entity';
 import { Repository } from 'typeorm';
-import { anneescolaire } from 'src/annee-academique/annee-academique.entity';
+import { anneescolaire } from '../annee-academique/annee-academique.entity';
 
 @Injectable()
 export class ConfigurationService {
@@ -16,30 +20,71 @@ export class ConfigurationService {
   ) {}
 
   async getConfiguration(): Promise<Configuration> {
-    const config = await this.configurationRepository.findOne({
-      where: { id: 1 },
+       const configs = await this.configurationRepository.find({
+
       relations: ['annee_scolaire'],
+            take: 1,
+
     });
 
-    if (!config) {
-      throw new NotFoundException('Academic year configuration not found. Please set it up.');
+       if (configs.length === 0) {
+      throw new NotFoundException('Configuration not found. Please set it up.');
     }
-    return config;
+
+    return configs[0];
   }
 
-  async upsertConfiguration(anneeScolaireId: number): Promise<Configuration> {
-    const annee = await this.anneeRepository.findOneByOrFail({ id: anneeScolaireId });
+  /**
+   * Creates the application configuration for the first time.
+   * Throws a ConflictException if a configuration already exists.
+   */
+  async createConfiguration(anneeScolaireId: number): Promise<Configuration> {
+    const existingConfigCount = await this.configurationRepository.count();
+    if (existingConfigCount > 0) {
+      throw new ConflictException(
+        'A configuration already exists. Use PUT to update it.',
+      );
+    }
 
-    const configToSave = this.configurationRepository.create({
-      id: 1,
+    const annee = await this.anneeRepository.findOneBy({ id: anneeScolaireId });
+    if (!annee) {
+      throw new NotFoundException(
+        `Academic year with ID ${anneeScolaireId} not found.`,
+      );
+    }
+
+    const newConfig = this.configurationRepository.create({
       annee_scolaire: annee,
     });
 
-    const savedConfig = await this.configurationRepository.save(configToSave);
+    return this.configurationRepository.save(newConfig);
+  }
 
-    return this.configurationRepository.findOne({
-      where: { id: savedConfig.id },
-      relations: ['annee_scolaire'],
-    }) as Promise<Configuration>;
+  /**
+   * Updates the existing application configuration.
+   * The `id` parameter refers to the configuration record's ID.
+   */
+  async updateConfiguration(
+    id: number,
+    anneeScolaireId: number,
+  ): Promise<Configuration> {
+    const annee = await this.anneeRepository.findOneBy({ id: anneeScolaireId });
+    if (!annee) {
+      throw new NotFoundException(
+        `Academic year with ID ${anneeScolaireId} not found.`,
+      );
+    }
+
+    // Using `preload` is a safe way to find an entity by ID and update it.
+    const configToUpdate = await this.configurationRepository.preload({
+      id: id,
+      annee_scolaire: annee,
+    });
+
+    if (!configToUpdate) {
+      throw new NotFoundException(`Configuration with ID ${id} not found.`);
+    }
+
+    return this.configurationRepository.save(configToUpdate);
   }
 }
