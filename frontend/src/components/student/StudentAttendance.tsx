@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -16,23 +15,17 @@ import {
 } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
-import { CalendarIcon, Loader2, AlertCircle } from 'lucide-react';
+import { fr, ar } from 'date-fns/locale';
+import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
-import { useNotifications } from '@/contexts/NotificationContext'; // Importer le hook de notifications
-
-import { endOfYear, startOfYear } from 'date-fns';
+import { useNotifications } from '@/contexts/NotificationContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const API_BASE_URL = `${API_URL}/api`;
 
-// --- Interfaces for API Data ---
 interface AnneeAcademique {
   id: number;
   libelle: string;
@@ -42,10 +35,9 @@ interface AnneeAcademique {
 
 interface Trimestre {
   id: number;
-  nom: string; // Ex: "Trimestre 1"
+  nom: string;
   date_debut: string;
   date_fin: string;
-  anneeScolaire?: AnneeAcademique; // Assuming relation is expanded
 }
 
 interface AbsenceAPI {
@@ -55,13 +47,9 @@ interface AbsenceAPI {
   heure_fin: string;
   justifie: boolean;
   justification: string;
-  etudiant?: { id: number; nom: string; prenom: string };
   matiere?: { id: number; nom: string };
-  classe?: { id: number; nom: string };
-  anneeScolaire?: { id: number; libelle: string };
 }
 
-// Interface for processed absence records for the table
 interface AbsenceRecord {
   id: number;
   date: string;
@@ -72,123 +60,106 @@ interface AbsenceRecord {
   justification: string;
 }
 
-// Interface for attendance statistics
 interface AttendanceStats {
   totalAbsences: number;
   justifiedAbsences: number;
   unjustifiedAbsences: number;
-  // Note: Calculating total school days/presence percentage is complex
-  // without a full school calendar API. We'll stick to absence counts for now.
 }
 
-// Initial stats state
 const initialAttendanceStats: AttendanceStats = {
   totalAbsences: 0,
   justifiedAbsences: 0,
   unjustifiedAbsences: 0,
 };
 
-
-
 export function StudentAttendance() {
-  const { user } = useAuth(); // Get logged-in user
-    const { addNotification } = useNotifications(); // Récupérer la fonction d'ajout de notification
+  const { user } = useAuth();
+  const { addNotification } = useNotifications();
+  const { t, language } = useLanguage();
 
-
-  const [anneesAcademiques, setAnneesAcademiques] = useState<AnneeAcademique[]>([]);
-  const [selectedSchoolYearId, setSelectedSchoolYearId] = useState<string>('');
+  const [activeSchoolYear, setActiveSchoolYear] = useState<AnneeAcademique | null>(null);
   const [trimestres, setTrimestres] = useState<Trimestre[]>([]);
-  const [selectedTermId, setSelectedTermId] = useState<string>(''); // Use ID for terms
-
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [selectedTermId, setSelectedTermId] = useState<string>('full-year');
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
   const [notifiedAbsenceIds, setNotifiedAbsenceIds] = useState<Set<number>>(new Set());
-
   const [absenceRecords, setAbsenceRecords] = useState<AbsenceRecord[]>([]);
   const [currentAttendanceStats, setCurrentAttendanceStats] = useState<AttendanceStats>(initialAttendanceStats);
-
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Fetch academic years on mount
-  useEffect(() => {
-    const fetchYears = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/annees-academiques`);
-        if (!response.ok) throw new Error("Impossible de charger les années académiques.");
-        const data: AnneeAcademique[] = await response.json();
-        setAnneesAcademiques(data);
 
-        // Attempt to select the current or latest year
-        if (data.length > 0) {
-          const currentYear = new Date().getFullYear();
-          const defaultYear = data.find(a => new Date(a.date_debut).getFullYear() <= currentYear && new Date(a.date_fin).getFullYear() >= currentYear) || data[data.length - 1];
-          setSelectedSchoolYearId(defaultYear.id.toString());
-        }
-      } catch (err) {
-        console.log("ERROR: Error fetching academic years:", err);
-        toast({ title: "Erreur", description: "Impossible de charger les années académiques.", variant: "destructive" });
-        setError("Impossible de charger les années académiques.");
-      }
-    };
-    fetchYears();
-  }, []);
+  const dateLocale = language === 'ar' ? ar : fr;
+  const isRTL = language === 'ar';
 
-  // Fetch trimestres when academic year changes
   useEffect(() => {
-    const yearId = parseInt(selectedSchoolYearId);
-    if (!yearId) {
-      setTrimestres([]);
-      setSelectedTermId('');
-      return;
-    }
-    const fetchTrimestres = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/trimestres?anneeScolaireId=${yearId}`);
-        if (!response.ok) throw new Error("Impossible de charger les trimestres.");
-        const data: Trimestre[] = await response.json();
-        setTrimestres(data);
-        // Select the first term by default if available
-        if (data.length > 0) {
-          setSelectedTermId(data[0].id.toString());
-        } else {
-          setSelectedTermId('');
-        }
-      } catch (err) {
-        console.log("ERROR: Error fetching trimestres:", err);
-        toast({ title: "Erreur", description: "Impossible de charger les trimestres.", variant: "destructive" });
-        setTrimestres([]);
-        setSelectedTermId('');
-      }
-    };
-    fetchTrimestres();
-  }, [selectedSchoolYearId]);
-
-  // Set date range based on selected term or year
-  useEffect(() => {
-    const year = anneesAcademiques.find(a => a.id.toString() === selectedSchoolYearId);
     const term = trimestres.find(t => t.id.toString() === selectedTermId);
 
     if (term) {
       setStartDate(new Date(term.date_debut));
       setEndDate(new Date(term.date_fin));
-    } else if (year) {
-      // "Année entière" or no term selected, use year dates
-      setStartDate(new Date(year.date_debut));
-      setEndDate(new Date(year.date_fin));
+    } else if (activeSchoolYear) {
+      setStartDate(new Date(activeSchoolYear.date_debut));
+      setEndDate(new Date(activeSchoolYear.date_fin));
     } else {
-      // No year selected, clear dates
-      setStartDate(undefined);
-      setEndDate(undefined);
+      setStartDate(null);
+      setEndDate(null);
     }
-  }, [selectedTermId, selectedSchoolYearId, anneesAcademiques, trimestres]);
+  }, [selectedTermId, activeSchoolYear, trimestres]);
 
-  // Fetch absences when filters or user change
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const configRes = await fetch(`${API_BASE_URL}/configuration`);
+        if (!configRes.ok) throw new Error(t.common.errorLoadingConfig);
+        const configData: any | any[] = await configRes.json();
+        let activeYearId: number | null = null;
+
+        if (Array.isArray(configData) && configData.length > 0) {
+          // Gère la réponse sous forme de tableau
+          activeYearId = configData[0].annee_academique_active_id || configData[0].annee_scolaire?.id;
+        } else if (configData && !Array.isArray(configData)) {
+          // Gère la réponse sous forme d'objet simple
+          activeYearId = (configData as any).annee_academique_active_id || (configData as any).annee_scolaire?.id;
+        }
+        
+        if (!activeYearId) {
+          throw new Error(t.common.missingYearConfig);
+        }
+
+        const [yearsRes, trimestresRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/annees-academiques`),
+          fetch(`${API_BASE_URL}/trimestres?anneeScolaireId=${activeYearId}`)
+        ]);
+
+        if (!yearsRes.ok) throw new Error(t.common.errorLoadingYear);
+        const allYears: AnneeAcademique[] = await yearsRes.json();
+
+        const currentActiveYear = allYears.find(y => y.id === activeYearId);
+        if (!currentActiveYear) {
+          throw new Error(t.common.activeYearNotFound);
+        }
+        setActiveSchoolYear(currentActiveYear);
+
+        if (!trimestresRes.ok) throw new Error(t.common.errorLoadingData('trimestres', ''));
+        const trimestresData: Trimestre[] = await trimestresRes.json();
+        setTrimestres(trimestresData);
+
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : t.common.errorLoadingInitialData;
+        setError(errorMessage);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchInitialData();
+  }, [t]);
+
   useEffect(() => {
     const studentId = user?.id;
-    const yearId = parseInt(selectedSchoolYearId);
-    
+    const yearId = activeSchoolYear?.id;
 
-    // --- API Fetching Logic ---
     if (!studentId || !yearId || !startDate || !endDate) {
       setAbsenceRecords([]);
       setCurrentAttendanceStats(initialAttendanceStats);
@@ -196,15 +167,15 @@ export function StudentAttendance() {
       return;
     }
 
-    // Charger les IDs des absences déjà notifiées depuis localStorage
     const storageKey = `notified_absence_ids_${user.id}`;
     const storedNotifiedIds = localStorage.getItem(storageKey);
     let initialNotifiedIdsFromStorage = new Set<number>();
+    
     if (storedNotifiedIds) {
       try {
         initialNotifiedIdsFromStorage = new Set(JSON.parse(storedNotifiedIds).map(Number));
       } catch (e) {
-        console.log("ERROR: Failed to parse notified absence IDs from localStorage", e);
+        console.error("Failed to parse notified absence IDs from localStorage", e);
       }
     }
     setNotifiedAbsenceIds(initialNotifiedIdsFromStorage);
@@ -227,7 +198,6 @@ export function StudentAttendance() {
 
         if (!response.ok) {
           if (response.status === 404 || response.status === 204) {
-            // No absences found is not an error, just empty data
             setAbsenceRecords([]);
             setCurrentAttendanceStats(initialAttendanceStats);
             return;
@@ -237,24 +207,27 @@ export function StudentAttendance() {
 
         const data: AbsenceAPI[] = await response.json();
 
-        // Map API data to AbsenceRecord interface
         const mappedData: AbsenceRecord[] = data.map(item => ({
           id: item.id,
           date: item.date,
-          dayOfWeek: format(new Date(item.date), 'EEEE', { locale: fr }).charAt(0).toUpperCase() + format(new Date(item.date), 'EEEE', { locale: fr }).slice(1),
-          subject: item.matiere?.nom || 'Matière inconnue',
+          dayOfWeek: format(new Date(item.date), 'EEEE', { locale: dateLocale }).charAt(0).toUpperCase() + 
+                   format(new Date(item.date), 'EEEE', { locale: dateLocale }).slice(1),
+          subject: item.matiere?.nom || t.common.subjectNotFound,
           period: `${item.heure_debut?.substring(0, 5) || 'N/A'} - ${item.heure_fin?.substring(0, 5) || 'N/A'}`,
-          justified: item.justifie && !!item.justification, // Le statut est justifié SEULEMENT si l'API l'indique ET qu'il y a une justification textuelle.
-          justification: item.justification || 'Non fournie',
+          justified: item.justifie && !!item.justification,
+          justification: item.justification || t.common.noDetailsAvailable,
         }));
 
         setAbsenceRecords(mappedData);
 
-        // Calculate basic stats
         const total = mappedData.length;
         const justified = mappedData.filter(abs => abs.justified).length;
-        setCurrentAttendanceStats({ totalAbsences: total, justifiedAbsences: justified, unjustifiedAbsences: total - justified });
-// Logique de notification pour les nouvelles absences
+        setCurrentAttendanceStats({ 
+          totalAbsences: total, 
+          justifiedAbsences: justified, 
+          unjustifiedAbsences: total - justified 
+        });
+
         if (user?.id && mappedData.length > 0) {
           const idsKnownAtStartOfEffect = initialNotifiedIdsFromStorage;
           const newIdsAddedThisCycle = new Set<number>();
@@ -262,9 +235,13 @@ export function StudentAttendance() {
           mappedData.forEach(absence => {
             if (absence.id && !idsKnownAtStartOfEffect.has(absence.id)) {
               addNotification(
-                `Nouvelle absence enregistrée le ${format(new Date(absence.date), 'dd/MM/yyyy', { locale: fr })} en ${absence.subject} (${absence.period}).`,
+                t.studentAttendance.newAbsenceNotification({
+                  date: format(new Date(absence.date), 'dd/MM/yyyy', { locale: dateLocale }),
+                  subject: absence.subject,
+                  period: absence.period
+                }),
                 'absence',
-                '/student/my-attendance' // Lien vers la page des absences
+                '/student/my-attendance'
               );
               newIdsAddedThisCycle.add(absence.id);
             }
@@ -272,115 +249,119 @@ export function StudentAttendance() {
 
           if (newIdsAddedThisCycle.size > 0) {
             const allNotifiedIdsNow = new Set([...Array.from(idsKnownAtStartOfEffect), ...Array.from(newIdsAddedThisCycle)]);
-            setNotifiedAbsenceIds(allNotifiedIdsNow); // Mettre à jour l'état React
-            localStorage.setItem(storageKey, JSON.stringify(Array.from(allNotifiedIdsNow))); // Mettre à jour localStorage
+            setNotifiedAbsenceIds(allNotifiedIdsNow);
+            localStorage.setItem(storageKey, JSON.stringify(Array.from(allNotifiedIdsNow)));
           }
         }
       } catch (err) {
-        console.log("ERROR: Error fetching absences:", err);
-        toast({ title: "Erreur", description: "Impossible de charger vos absences.", variant: "destructive" });
-        setError("Impossible de charger vos absences.");
+        console.error("Error fetching absences:", err);
+        toast({ 
+          title: t.common.error, 
+          description: t.studentAttendance.errorLoadingAbsences, 
+          variant: "destructive" 
+        });
+        setError(t.studentAttendance.errorLoadingAbsences);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchAbsences();
+  }, [user?.id, activeSchoolYear, startDate, endDate, t, dateLocale, addNotification]);
 
-  }, [user?.id, selectedSchoolYearId, startDate, endDate, addNotification]); // Ajout de addNotification aux dépendances
-
-  
-  // Determine the currently selected year and term names for display
-  const currentYearName = anneesAcademiques.find(a => a.id.toString() === selectedSchoolYearId)?.libelle || 'Année inconnue';
-  const currentTermName = trimestres.find(t => t.id.toString() === selectedTermId)?.nom || 'Année entière';
+  const currentYearName = activeSchoolYear?.libelle || t.common.loading;
+  const currentTermName = trimestres.find(t => t.id.toString() === selectedTermId)?.nom || t.studentAttendance.fullYear;
 
   if (!user) {
     return (
-      <div className="p-6 text-center text-red-500">
-        <h2 className="text-xl font-semibold mb-2">Accès refusé.</h2>
-        <p>Veuillez vous connecter pour voir vos absences.</p>
+      <div className={`p-6 text-center text-red-500 ${isRTL ? 'text-right' : 'text-left'}`}>
+        <h2 className="text-xl font-semibold mb-2">{t.common.accessDenied}</h2>
+        <p>{t.login.pleaseLogin}</p>
       </div>
     );
   }
 
   if (error) {
     return (
-       <div className="p-6 text-center text-red-500">
-        <h2 className="text-xl font-semibold mb-2">Erreur de chargement.</h2>
+      <div className={`p-6 text-center text-red-500 ${isRTL ? 'text-right' : 'text-left'}`}>
+        <h2 className="text-xl font-semibold mb-2">{t.common.loadingError}</h2>
         <p>{error}</p>
       </div>
-      );
-  
-  };
-// Calculate stats from fetched data
-  const totalAbsences = absenceRecords.length;
-  // Utiliser les stats calculées depuis l'état
-  const justifiedAbsences = currentAttendanceStats.justifiedAbsences;
-  const unjustifiedAbsences = currentAttendanceStats.unjustifiedAbsences;
+    );
+  }
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Mes Absences</h1>
+    <div className={`p-6 ${isRTL ? 'rtl' : 'ltr'}`}>
+      <h1 className={`text-2xl font-bold mb-6 ${isRTL ? 'text-right' : 'text-left'}`}>
+        {t.studentAttendance.title}
+      </h1>
 
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <Card>
           <CardContent className="p-6">
-             <h3 className="font-semibold text-lg mb-2">Absences totales ({currentTermName})</h3>
-+            <p className="text-3xl font-bold text-red-600">{totalAbsences}</p>
-            <p className="text-sm text-gray-600">absences enregistrées</p>
+            <h3 className={`font-semibold text-lg mb-2 ${isRTL ? 'text-right' : 'text-left'}`}>
+              {t.studentAttendance.totalAbsences} ({currentTermName})
+            </h3>
+            <p className="text-3xl font-bold text-red-600">{currentAttendanceStats.totalAbsences}</p>
+            <p className={`text-sm text-gray-600 dark:text-gray-400 ${isRTL ? 'text-right' : 'text-left'}`}>
+              {t.studentAttendance.recordedAbsences}
+            </p>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="p-6">
-            <h3 className="font-semibold text-lg mb-2">Absences justifiées ({currentTermName})</h3>
-            <p className="text-3xl font-bold text-green-600">{justifiedAbsences}</p>
-            <p className="text-sm text-gray-600">absences justifiées</p>
+            <h3 className={`font-semibold text-lg mb-2 ${isRTL ? 'text-right' : 'text-left'}`}>
+              {t.studentAttendance.justifiedAbsences} ({currentTermName})
+            </h3>
+            <p className="text-3xl font-bold text-green-600">{currentAttendanceStats.justifiedAbsences}</p>
+            <p className={`text-sm text-gray-600 dark:text-gray-400 ${isRTL ? 'text-right' : 'text-left'}`}>
+              {t.studentAttendance.justifiedAbsencesCount}
+            </p>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="p-6">
-            <h3 className="font-semibold text-lg mb-2">Absences non justifiées</h3>
-+            <p className="text-3xl font-bold text-red-600">{unjustifiedAbsences}</p>
-            <p className="text-sm text-gray-600">jours sans justification</p>
+            <h3 className={`font-semibold text-lg mb-2 ${isRTL ? 'text-right' : 'text-left'}`}>
+              {t.studentAttendance.unjustifiedAbsences}
+            </h3>
+            <p className="text-3xl font-bold text-red-600">{currentAttendanceStats.unjustifiedAbsences}</p>
+            <p className={`text-sm text-gray-600 dark:text-gray-400 ${isRTL ? 'text-right' : 'text-left'}`}>
+              {t.studentAttendance.daysWithoutJustification}
+            </p>
           </CardContent>
         </Card>
       </div>
 
+      {/* Filters Card */}
       <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Filtres</CardTitle>
-          <CardDescription>Sélectionnez le trimestre</CardDescription>
+        <CardHeader className={isRTL ? 'text-right' : 'text-left'}>
+          <CardTitle>{t.common.filters}</CardTitle>
+          <CardDescription>{t.studentAttendance.selectTerm}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-               <p className="text-sm font-medium text-gray-600 mb-2">Année Scolaire</p>
-              <Select value={selectedSchoolYearId} onValueChange={setSelectedSchoolYearId} disabled={true}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Sélectionner une année" />
-                </SelectTrigger>
-                <SelectContent>
-                   {anneesAcademiques.map((annee) => (
-                    <SelectItem key={annee.id} value={annee.id.toString()}>
-                      {annee.libelle}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className={isRTL ? 'text-right' : 'text-left'}>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">{t.common.schoolYear}</p>
+              <p className="text-lg font-semibold text-gray-800 dark:text-white">{currentYearName}</p>
             </div>
             
-            <div>
-               <p className="text-sm font-medium text-gray-600 mb-2">Période (Trimestre)</p>
-              <Select value={selectedTermId} onValueChange={setSelectedTermId} disabled={trimestres.length === 0}>
+            <div className={isRTL ? 'text-right' : 'text-left'}>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">{t.studentAttendance.termPeriod}</p>
+              <Select 
+                value={selectedTermId} 
+                onValueChange={setSelectedTermId} 
+                disabled={trimestres.length === 0}
+                dir={isRTL ? 'rtl' : 'ltr'}
+              >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Sélectionner un trimestre" />
+                  <SelectValue placeholder={t.common.selectTerm} />
                 </SelectTrigger>
                 <SelectContent>
-                  {/* Option for the entire year */}
-                  {anneesAcademiques.find(a => a.id.toString() === selectedSchoolYearId) && (
-                     <SelectItem value="Année entière">Année entière</SelectItem>
+                  {activeSchoolYear && (
+                    <SelectItem value="full-year">{t.studentAttendance.fullYear}</SelectItem>
                   )}
                   {trimestres.map((term) => (
                     <SelectItem key={term.id} value={term.id.toString()}>
@@ -390,52 +371,64 @@ export function StudentAttendance() {
                 </SelectContent>
               </Select>
             </div>
-            
-            
           </div>
         </CardContent>
       </Card>
 
+      {/* Absence History Card */}
       <Card>
-        <CardHeader>
-          <CardTitle>Historique des absences</CardTitle>
-          <CardDescription>Liste de toutes vos absences</CardDescription>
+        <CardHeader className={isRTL ? 'text-right' : 'text-left'}>
+          <CardTitle>{t.studentAttendance.absenceHistory}</CardTitle>
+          <CardDescription>{t.studentAttendance.allAbsencesList}</CardDescription>
         </CardHeader>
         <CardContent>
-{isLoading ? (
+          {isLoading ? (
             <div className="text-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-4" />
-              <p className="text-gray-600">Chargement des absences...</p>
+              <p className="text-gray-600 dark:text-gray-400">{t.common.loading}</p>
             </div>
-          ) : absenceRecords.length > 0 ? (            <div className="overflow-x-auto">
+          ) : absenceRecords.length > 0 ? (
+            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow><TableHead>Date</TableHead><TableHead>Jour</TableHead><TableHead>Matière</TableHead><TableHead>Horaire</TableHead><TableHead>Statut</TableHead><TableHead>Justification</TableHead></TableRow>
-
+                  <TableRow>
+                    <TableHead>{t.common.date}</TableHead>
+                    <TableHead>{t.common.day}</TableHead>
+                    <TableHead>{t.common.subject}</TableHead>
+                    <TableHead>{t.studentAttendance.timeSlot}</TableHead>
+                    <TableHead>{t.common.status.general}</TableHead>
+                    <TableHead>{t.studentAttendance.justification}</TableHead>
+                  </TableRow>
                 </TableHeader>
                 <TableBody>
-                   {absenceRecords.map((absence) => ( // Use absenceRecords directly
-                       <TableRow key={absence.id}>{/* Use absence ID as key */}
-                      <TableCell>{format(new Date(absence.date), 'dd/MM/yyyy', { locale: fr })}</TableCell>
-                 
+                  {absenceRecords.map((absence) => (
+                    <TableRow key={absence.id}>
+                      <TableCell>
+                        {format(new Date(absence.date), 'dd/MM/yyyy', { locale: dateLocale })}
+                      </TableCell>
                       <TableCell>{absence.dayOfWeek}</TableCell>
                       <TableCell>{absence.subject}</TableCell>
                       <TableCell>{absence.period}</TableCell>
                       <TableCell>
-                                                {absence.justified ? <Badge className="bg-green-100 text-green-700 border-green-300">Justifiée</Badge> : <Badge className="bg-red-100 text-red-700 border-red-300">Non justifiée</Badge>}
-
+                        {absence.justified ? (
+                          <Badge className="bg-green-100 text-green-700 border-green-300 dark:bg-green-900 dark:text-green-200">
+                            {t.common.status.completed}
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-red-100 text-red-700 border-red-300 dark:bg-red-900 dark:text-red-200">
+                            {t.common.status.inactive}
+                          </Badge>
+                        )}
                       </TableCell>
-                      <TableCell>
-                        {absence.justification || 'Non fournie'}
-                      </TableCell>
+                      <TableCell>{absence.justification}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-             </div> // End overflow-x-auto
-          ) : ( // If absenceRecords is empty after loading
-            <div className="text-center py-8 text-gray-600">
-              <p>Aucune absence pour la période sélectionnée.</p>
+            </div>
+          ) : (
+            <div className={`text-center py-8 text-gray-600 dark:text-gray-400 ${isRTL ? 'text-right' : 'text-left'}`}>
+              <p>{t.studentAttendance.noAbsencesForPeriod}</p>
             </div>
           )}
         </CardContent>
@@ -443,3 +436,5 @@ export function StudentAttendance() {
     </div>
   );
 }
+
+export default StudentAttendance;

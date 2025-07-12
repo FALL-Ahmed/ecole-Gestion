@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -10,9 +10,10 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { CheckCircle, Clock } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from '@/hooks/use-toast';
 import { format, isValid, parseISO } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { fr, ar } from 'date-fns/locale';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -74,31 +75,9 @@ interface Configuration {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const API_BASE_URL = `${API_URL}/api`;
 
-const formatDisplayDate = (dateString?: string) => {
-  if (!dateString) return '-';
-  const date = parseISO(dateString);
-  if (!isValid(date)) {
-    console.log("WARN: Invalid date string for formatting:", dateString);
-    return 'Date invalide';
-  }
-  return format(date, 'dd MMMM yyyy', { locale: fr });
-};
-
-const getStatusBadge = (status: string) => {
-  switch (status) {
-    case 'planifié':
-      return <Badge variant="outline" className="bg-gray-50 text-gray-700">À venir</Badge>;
-    case 'en_cours':
-      return <Badge variant="outline" className="bg-blue-50 text-blue-700">En cours</Badge>;
-    case 'terminé':
-      return <Badge variant="outline" className="bg-green-50 text-green-700">Terminé</Badge>;
-    default:
-      return null;
-  }
-};
-
 export function ChapterProgress({ courseId }: ChapterProgressProps) {
   const { user } = useAuth();
+  const { t, language } = useLanguage();
   const [chapters, setChapters] = useState<ChapterDisplay[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,18 +87,49 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
   const [allClasses, setAllClasses] = useState<Classe[]>([]);
   const [currentCourseName, setCurrentCourseName] = useState<string>('');
 
+  const formatDisplayDate = (dateString?: string) => {
+    if (!dateString) return '-';
+    const date = parseISO(dateString);
+    if (!isValid(date)) {
+      console.log("WARN: Invalid date string for formatting:", dateString);
+      return t.common.invalidDate;
+    }
+    return format(date, 'dd MMMM yyyy', { locale: language === 'ar' ? ar : fr });
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'planifié':
+        return <Badge variant="outline" className="bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+          {t.chapterProgress.planned}
+        </Badge>;
+      case 'en_cours':
+        return <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-900 dark:text-blue-200">
+          {t.chapterProgress.inProgress}
+        </Badge>;
+      case 'terminé':
+        return <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900 dark:text-green-200">
+          {t.chapterProgress.completed}
+        </Badge>;
+      default:
+        return null;
+    }
+  };
+
   useEffect(() => {
     const fetchInitialData = async () => {
       if (!user || !user.id || user.role !== 'eleve') {
-        setError("Accès refusé : L'utilisateur n'est pas un élève ou l'ID est manquant.");
+        setError(t.common.accessDenied);
         setIsLoading(false);
         return;
       }
+      
       setIsLoading(true);
       setError(null);
+      
       try {
         const configRes = await fetch(`${API_BASE_URL}/configuration`);
-        if (!configRes.ok) throw new Error("Impossible de charger la configuration de l'année scolaire.");
+        if (!configRes.ok) throw new Error(t.common.errorLoadingConfig);
 
         const configData: Configuration | Configuration[] = await configRes.json();
         let activeAnneeId: number | undefined;
@@ -131,17 +141,23 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
         }
 
         if (!activeAnneeId) {
-          throw new Error("Année scolaire active non configurée.");
+          throw new Error(t.common.missingYearConfig);
         }
 
-        const inscriptionsRes = await fetch(`${API_BASE_URL}/inscriptions?utilisateurId=${user.id}&anneeScolaireId=${activeAnneeId}&_expand=classe&_expand=annee_scolaire`);
-        if (!inscriptionsRes.ok) throw new Error("Impossible de charger l'inscription de l'élève.");
+        const inscriptionsRes = await fetch(
+          `${API_BASE_URL}/inscriptions?utilisateurId=${user.id}&anneeScolaireId=${activeAnneeId}&_expand=classe&_expand=annee_scolaire`
+        );
+        if (!inscriptionsRes.ok) throw new Error(t.common.errorLoadingEnrollments);
 
         const inscriptions: Inscription[] = await inscriptionsRes.json();
-        const studentInscription = inscriptions.find(insc => insc.utilisateurId === user.id && insc.anneeScolaireId === activeAnneeId && insc.actif);
+        const studentInscription = inscriptions.find(insc => 
+          insc.utilisateurId === user.id && 
+          insc.anneeScolaireId === activeAnneeId && 
+          insc.actif
+        );
 
         if (!studentInscription || !studentInscription.classeId || !studentInscription.anneeScolaireId) {
-          throw new Error("Aucune inscription active trouvée pour cet élève dans l'année académique actuelle.");
+          throw new Error(t.common.noActiveRegistration);
         }
 
         setStudentClassId(studentInscription.classeId);
@@ -155,19 +171,23 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
         setAllMatieres(matieresRes);
         setAllClasses(classesRes);
       } catch (err: any) {
-        console.log('ERROR: Error fetching initial data:', err);
-        setError(err.message || 'Une erreur est survenue lors du chargement des données initiales.');
+        console.error('Error fetching initial data:', err);
+        setError(err.message || t.common.errorLoadingInitialData);
+        toast({
+          title: t.common.error,
+          description: err.message || t.common.errorLoadingInitialData,
+          variant: "destructive",
+        });
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchInitialData();
-  }, [user]);
+  }, [user, t]);
 
   useEffect(() => {
     const fetchChapters = async () => {
-      // Attendre que toutes les données initiales (classe, année, matières) soient prêtes.
       if (!studentClassId || !studentAnneeScolaireId || !courseId || allMatieres.length === 0) {
         setChapters([]);
         return;
@@ -179,7 +199,11 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
       try {
         const matiere = allMatieres.find(m => Number(m.id) === Number(courseId));
         if (!matiere) {
-          toast({ title: "Information", description: `Matière (ID: ${courseId}) non trouvée.`, variant: "default" });
+          toast({ 
+            title: t.common.information, 
+            description: t.common.subjectNotFound, 
+            variant: "default" 
+          });
           setChapters([]);
           return;
         }
@@ -194,33 +218,42 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
             return;
           }
           const errorText = await response.text();
-          throw new Error(`Failed to fetch chapters: ${response.status} - ${errorText}`);
+          throw new Error(`${t.common.errorLoadingData('chapters', response.statusText)} - ${errorText}`);
         }
 
         const data: ChapterDisplay[] = await response.json();
-        
-        // Ajout d'un filtre côté client pour garantir que seuls les chapitres de la matière sélectionnée sont affichés.
-        // C'est une sécurité au cas où l'API ne filtrerait pas correctement par matiereId.
-        const filteredData = data.filter(ch => Number(ch.matiereId) === Number(courseId));
+        const filteredData = data.filter(ch => 
+          Number(ch.matiereId) === Number(courseId) &&
+          Number(ch.classeId) === Number(studentClassId)
+        );
 
         const chaptersWithNames = filteredData.map(ch => {
           const classe = allClasses.find(c => c.id === ch.classeId);
           const subject = allMatieres.find(m => m.id === ch.matiereId);
-          return { ...ch, className: classe?.nom || 'Classe inconnue', subjectName: subject?.nom || 'Matière inconnue' };
+          return { 
+            ...ch, 
+            className: classe?.nom || t.common.unknownClass, 
+            subjectName: subject?.nom || t.common.unknownSubject 
+          };
         });
 
         setChapters(chaptersWithNames);
       } catch (err: any) {
-        console.log('ERROR: Error fetching chapters:', err);
-        setError(err.message || "Impossible de charger les chapitres.");
+        console.error('Error fetching chapters:', err);
+        setError(err.message || t.common.errorLoadingChapters);
         setChapters([]);
+        toast({
+          title: t.common.error,
+          description: err.message || t.common.errorLoadingChapters,
+          variant: "destructive",
+        });
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchChapters();
-  }, [studentClassId, studentAnneeScolaireId, courseId, allMatieres, allClasses]);
+  }, [studentClassId, studentAnneeScolaireId, courseId, allMatieres, allClasses, t]);
 
   const sortedChapters = useMemo(() => {
     const statusOrder = {
@@ -231,10 +264,8 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
     return [...chapters].sort((a, b) => {
       const orderA = statusOrder[a.statut] || 4;
       const orderB = statusOrder[b.statut] || 4;
-      if (orderA !== orderB) {
-        return orderA - orderB;
-      }
-      // Si les statuts sont identiques, trier par date de début
+      if (orderA !== orderB) return orderA - orderB;
+      
       try {
         const dateA = parseISO(a.dateDebutPrevue);
         const dateB = parseISO(b.dateDebutPrevue);
@@ -242,7 +273,7 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
           return dateA.getTime() - dateB.getTime();
         }
       } catch (e) {
-        // Gérer les dates invalides si nécessaire
+        console.error("Error sorting dates:", e);
       }
       return 0;
     });
@@ -253,44 +284,48 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
   const progress = totalChapters === 0 ? 0 : (completedChapters / totalChapters) * 100;
 
   return (
-    <div className="space-y-6">
-      <Card>
+<div className={`space-y-6 ${language === 'ar' ? 'text-right' : 'text-left'}`} dir={language === 'ar' ? 'rtl' : 'ltr'}>
+      <Card className="dark:bg-gray-800">
         <CardHeader>
-          <CardTitle>Progression du cours</CardTitle>
-          <CardDescription>Suivi des chapitres pour {currentCourseName}</CardDescription>
+          <CardTitle className="dark:text-white">{t.chapterProgress.courseProgress}</CardTitle>
+          <CardDescription className="dark:text-gray-300">
+            {t.chapterProgress.progressDescription} {currentCourseName}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="mb-4">
-            <div className="flex justify-between mb-2">
-              <span className="text-sm text-gray-600">
-                {completedChapters} sur {totalChapters} chapitres complétés
+            <div className={`flex justify-between mb-2 ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
+              <span className="text-sm text-gray-600 dark:text-gray-300">
+                {completedChapters} {t.common.of} {totalChapters} {t.chapterProgress.chaptersCompleted}
               </span>
-              <span className="text-sm font-medium">{Math.round(progress)}%</span>
+              <span className="text-sm font-medium dark:text-white">{Math.round(progress)}%</span>
             </div>
             <Progress value={progress} className="h-2" />
           </div>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="dark:bg-gray-800">
         <CardHeader>
-          <CardTitle>Programme du cours</CardTitle>
-          <CardDescription>Liste des chapitres prévus</CardDescription>
+          <CardTitle className="dark:text-white">{t.chapterProgress.courseProgram}</CardTitle>
+          <CardDescription className="dark:text-gray-300">{t.chapterProgress.programDescription}</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <div className="flex items-center justify-center p-4">
               <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-              <span className="ml-2 text-gray-600">Chargement des chapitres...</span>
+              <span className={`text-gray-600 dark:text-gray-300 ${language === 'ar' ? 'mr-2' : 'ml-2'}`}>
+                {t.common.loading}
+              </span>
             </div>
           ) : error ? (
-            <div className="text-center p-4 text-red-500">
-              <p>Erreur: {error}</p>
-              <p className="text-sm">Veuillez réessayer ou contacter l'administrateur.</p>
+            <div className={`text-center p-4 text-red-500 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+              <p>{t.common.error}: {error}</p>
+              <p className="text-sm dark:text-gray-300">{t.common.tryAgainLater}</p>
             </div>
           ) : sortedChapters.length === 0 ? (
-            <div className="text-center p-4 text-gray-500">
-              <p>Aucun chapitre trouvé pour cette matière et cette période.</p>
+            <div className={`text-center p-4 text-gray-500 dark:text-gray-400 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+              <p>{t.chapterProgress.noChaptersFound}</p>
             </div>
           ) : (
             <ul className="space-y-4">
@@ -298,27 +333,27 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
                 <li
                   key={chapter.id}
                   className={cn(
-                    "p-4 border rounded-lg transition-all duration-300",
-                    chapter.statut === 'en_cours' && "bg-blue-50 border-blue-200 shadow-md ring-2 ring-blue-100",
-                    chapter.statut === 'terminé' && "bg-gray-50 opacity-70"
+                    "p-4 border rounded-lg transition-all duration-300 dark:border-gray-700",
+                    chapter.statut === 'en_cours' && "bg-blue-50 border-blue-200 shadow-md ring-2 ring-blue-100 dark:bg-blue-900/30 dark:border-blue-800",
+                    chapter.statut === 'terminé' && "bg-gray-50 opacity-70 dark:bg-gray-700/30"
                   )}
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        {chapter.statut === 'en_cours' && <Clock className="h-5 w-5 text-blue-600" />}
-                        <h3 className="font-medium">{chapter.titre}</h3>
+                  <div className={`flex items-start justify-between ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex-grow ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+                      <div className={`flex items-center gap-2 ${language === 'ar' ? 'flex-row-reverse justify-end' : ''}`}>
+                        {chapter.statut === 'en_cours' && <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />}
+                        <h3 className="font-medium dark:text-white">{chapter.titre}</h3>
                         {getStatusBadge(chapter.statut)}
                       </div>
-                      <p className="text-sm text-gray-600 mt-1">
+                      <p className="text-sm text-gray-600 mt-1 dark:text-gray-300">
                         {chapter.description}
                       </p>
-                      <p className="text-xs text-gray-500 mt-2">
-                        Période: {formatDisplayDate(chapter.dateDebutPrevue)} - {formatDisplayDate(chapter.dateFinPrevue)}
+                      <p className="text-xs text-gray-500 mt-2 dark:text-gray-400">
+                        {t.chapterProgress.period}: {formatDisplayDate(chapter.dateDebutPrevue)} - {formatDisplayDate(chapter.dateFinPrevue)}
                       </p>
                     </div>
                     {chapter.statut === 'terminé' && (
-                      <div className="p-1 bg-green-100 rounded-full text-green-600">
+                      <div className="p-1 bg-green-100 rounded-full text-green-600 dark:bg-green-900 dark:text-green-300">
                         <CheckCircle className="h-5 w-5" />
                       </div>
                     )}

@@ -1143,7 +1143,7 @@ onClick={() => setFilterRole(key as "all" | UserRole)}
                 </div>
               ) : (
                 <>
-                  <div className="hidden lg:block overflow-auto max-h-[60vh]">
+                  <div className="hidden lg:block overflow-auto">
                     <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                       <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10">
                         <tr>

@@ -1133,38 +1133,35 @@ export function Dashboard() {
       case 'eleve':
         return (
           <>
-           
-
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
+              <Card className="dark:bg-gray-800">
                 <CardHeader>
-                  <CardTitle>{t.dashboard.student.latestGrades}</CardTitle>
+                  <CardTitle className="dark:text-white">{t.dashboard.student.latestGrades}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {loadingNotes && <p className="text-gray-600">{t.dashboard.student.loadingGrades}</p>}
-                    {errorNotes && <p className="text-red-500">{errorNotes}</p>}
+                  <div className="space-y-4">
+                    {loadingNotes && <p className="text-gray-600 dark:text-gray-400">{t.dashboard.student.loadingGrades}</p>}
+                    {errorNotes && <p className="text-red-500 dark:text-red-400">{errorNotes}</p>}
                     {!loadingNotes && !errorNotes && latestNotes.length === 0 && (
-                      <p className="text-gray-600">{t.dashboard.student.noRecentGrades}</p>
+                      <p className="text-gray-600 dark:text-gray-400">{t.dashboard.student.noRecentGrades}</p>
                     )}
                     {!loadingNotes && !errorNotes && latestNotes.length > 0 && (
                       latestNotes.map((note: EnrichedNote, index: number) => (
                         <div
                           key={note.id}
                           className={cn(
-                            "flex flex-col p-3 border rounded-lg shadow-sm transition-all duration-200",
-                            index === 0 ? "bg-blue-50 border-blue-200 ring-2 ring-blue-300" : "bg-white hover:shadow-md"
+                            "flex flex-col p-3 border rounded-lg shadow-sm transition-all duration-200 dark:border-gray-700",
+                            index === 0 ? "bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800 ring-2 ring-blue-300 dark:ring-blue-700" : "bg-white dark:bg-gray-800 hover:shadow-md dark:hover:bg-gray-700"
                           )}
                         >
                           <div className="flex justify-between items-center">
-                            <span className="font-medium">
+                            <span className="font-medium text-gray-800 dark:text-gray-200">
                               {note.type} {t.common.of} {note.subject}
                             </span>
-                            <span className="font-bold text-xl text-blue-600">
+                            <span className="font-bold text-xl text-blue-600 dark:text-blue-400">
                               {note.score !== null ? `${note.score}/20` : t.common.na}
                             </span>
                           </div>
-
                         </div>
                       ))
                     )}

@@ -18,7 +18,7 @@ const HomePage: React.FC = () => {
     }, [isAuthenticated, navigate]);
 
     return (
-        <div className="fixed inset-0 bg-[#1D52DB] flex items-center justify-center overflow-hidden">
+        <div className="fixed inset-0 bg-[#EDF1FF] flex items-center justify-center overflow-hidden">
             {/* Meta pour désactiver le zoom */}
             <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
             
@@ -37,12 +37,11 @@ const HomePage: React.FC = () => {
                     playsInline
                     className="w-full h-full object-contain"
                     style={{
-                        backgroundColor: '#1D52DB',
                         transform: 'scale(1)',
                         display: 'block'
                     }}
                 >
-                    <source src="/logo.mp4" type="video/mp4" />
+                    <source src="/logo2.mp4" type="video/mp4" />
                 </video>
             </div>
         </div>

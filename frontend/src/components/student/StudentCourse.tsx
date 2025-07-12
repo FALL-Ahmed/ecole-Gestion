@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -20,6 +20,7 @@ import { Search, Loader2 } from 'lucide-react';
 import { StudentMaterials } from './StudentMaterials';
 import { ChapterProgress } from './ChapterProgress';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -53,6 +54,7 @@ const API_BASE_URL = `${API_URL}/api`;
 
 export function StudentCourses() {
   const { user } = useAuth();
+  const { t, language } = useLanguage();
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,11 +63,29 @@ export function StudentCourses() {
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [viewType, setViewType] = useState<'overview' | 'materials' | 'chapters'>('overview');
 
+  const translateSubject = useCallback((subjectName: string): string => {
+    if (!subjectName) return t.common.unknownSubject;
+
+    const subjectMap: { [key: string]: string } = {
+      'Mathématiques': t.schedule.subjects.math,
+      'Physique Chimie': t.schedule.subjects.physics,
+      'Arabe': t.schedule.subjects.arabic,
+      'Français': t.schedule.subjects.french,
+      'Anglais': t.schedule.subjects.english,
+      'Éducation Islamique': t.schedule.subjects.islamic,
+      'Histoire Géographie': t.schedule.subjects.history,
+      'Éducation Civique': t.schedule.subjects.civics,
+      'Éducation Physique et Sportive': t.schedule.subjects.sport,
+      'Philosophie': t.schedule.subjects.philosophy,
+    };
+    return subjectMap[subjectName] || subjectName;
+  }, [t]);
+
   useEffect(() => {
     const fetchStudentCourses = async () => {
       if (!user || user.role !== 'eleve') {
         setIsLoading(false);
-        setError("Vous devez être connecté en tant qu'élève pour voir vos cours.");
+        setError(t.common.teachersOnly);
         return;
       }
 
@@ -73,23 +93,27 @@ export function StudentCourses() {
       setError(null);
       try {
         const configRes = await fetch(`${API_BASE_URL}/configuration`);
-        if (!configRes.ok) throw new Error("Impossible de charger la configuration de l'année scolaire.");
+        if (!configRes.ok) throw new Error(t.common.missingYearConfig);
         const configData: Configuration | Configuration[] = await configRes.json();
         let activeAnneeId: number | undefined;
+        
         if (Array.isArray(configData) && configData.length > 0) {
           activeAnneeId = configData[0].annee_academique_active_id || configData[0].annee_scolaire?.id;
         } else if (configData && !Array.isArray(configData)) {
           activeAnneeId = configData.annee_academique_active_id || configData.annee_scolaire?.id;
         }
-        if (!activeAnneeId) throw new Error("Année scolaire active non configurée.");
+        
+        if (!activeAnneeId) throw new Error(t.common.missingYearConfig);
 
         const inscriptionsRes = await fetch(`${API_BASE_URL}/inscriptions?utilisateurId=${user.id}&anneeScolaireId=${activeAnneeId}`);
-        if (!inscriptionsRes.ok) throw new Error("Impossible de charger l'inscription de l'élève.");
+        if (!inscriptionsRes.ok) throw new Error(t.common.errorLoadingEnrollments);
         const inscriptions: any[] = await inscriptionsRes.json();
         const studentInscription = inscriptions.find(insc => insc.actif);
+        
         if (!studentInscription || !studentInscription.classe?.id) {
-          throw new Error("Aucune inscription active trouvée pour cet élève.");
+          throw new Error(t.common.noActiveRegistration);
         }
+        
         const studentClassId = studentInscription.classe.id;
 
         const [affectationsRes, matieresRes] = await Promise.all([
@@ -97,8 +121,8 @@ export function StudentCourses() {
           fetch(`${API_BASE_URL}/matieres`)
         ]);
 
-        if (!affectationsRes.ok) throw new Error("Impossible de charger les cours pour votre classe.");
-        if (!matieresRes.ok) throw new Error("Impossible de charger la liste des matières.");
+        if (!affectationsRes.ok) throw new Error(t.common.errorLoadingData('affectations', affectationsRes.statusText));
+        if (!matieresRes.ok) throw new Error(t.common.errorLoadingData('matières', matieresRes.statusText));
 
         const affectations: Affectation[] = await affectationsRes.json();
         const allMatieres: { id: number; nom: string }[] = await matieresRes.json();
@@ -118,7 +142,7 @@ export function StudentCourses() {
             uniqueCourses.set(aff.matiere.id, {
               id: aff.matiere.id,
               name: aff.matiere.nom,
-              teacher: `Prof. ${aff.professeur.nom}`,
+              teacher: `${t.common.teacher} ${aff.professeur.nom}`,
               materials: Math.floor(Math.random() * 10),
               color: courseColors[uniqueCourses.size % courseColors.length],
             });
@@ -127,11 +151,11 @@ export function StudentCourses() {
         setCourses(Array.from(uniqueCourses.values()));
 
       } catch (err: any) {
-        console.log("ERROR: Error fetching student courses:", err);
-        setError(err.message || "Impossible de charger vos cours.");
+        console.error("Error fetching student courses:", err);
+        setError(err.message || t.common.errorLoadingData('courses', ''));
         toast({
-          title: "Erreur",
-          description: err.message || "Impossible de charger vos cours.",
+          title: t.common.error,
+          description: err.message || t.common.errorLoadingData('courses', ''),
           variant: "destructive",
         });
       } finally {
@@ -140,7 +164,7 @@ export function StudentCourses() {
     };
 
     fetchStudentCourses();
-  }, [user]);
+  }, [user, t]);
 
   const filteredCourses = courses.filter(course =>
     course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -156,18 +180,29 @@ export function StudentCourses() {
 
   if (isLoading) {
     return (
-      <div className="p-6 flex flex-col items-center justify-center h-64">
+      <div className={`p-6 flex flex-col items-center justify-center h-64 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
         <Loader2 className="h-12 w-12 animate-spin text-blue-500" />
-        <p className="mt-4 text-lg text-gray-600">Chargement de vos cours...</p>
+        <p className="mt-4 text-lg text-gray-600 dark:text-gray-300">
+          {t.common.loading}
+        </p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-6 text-center text-red-500">
-        <h2 className="text-xl font-semibold mb-2">Erreur</h2>
-        <p>{error}</p>
+      <div className={`p-6 text-center ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+        <h2 className="text-xl font-semibold mb-2 text-red-500 dark:text-red-400">
+          {t.common.error}
+        </h2>
+        <p className="text-gray-700 dark:text-gray-300">{error}</p>
+        <Button 
+          variant="outline" 
+          className="mt-4"
+          onClick={() => window.location.reload()}
+        >
+          {t.common.tryAgain}
+        </Button>
       </div>
     );
   }
@@ -181,22 +216,36 @@ export function StudentCourses() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
-          className="p-6"
+          className={`p-6 ${language === 'ar' ? 'text-right' : 'text-left'}`}
+          dir={language === 'ar' ? 'rtl' : 'ltr'}
         >
-          <div className="flex items-center mb-6">
-            <Button variant="outline" onClick={handleBackToCourses} className="mr-4">
-              ← Retour aux cours
+          <div className={`flex items-center mb-6 ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
+            <Button 
+              variant="outline" 
+              onClick={handleBackToCourses} 
+              className={language === 'ar' ? 'ml-4' : 'mr-4'}
+            >
+              {language === 'ar' ? `${t.common.close} →` : `← ${t.common.close}`}
             </Button>
-            <h1 className="text-2xl font-bold">{selectedCourse.name} - Programme</h1>
+            <h1 className="flex-grow text-2xl font-bold dark:text-white">
+              {translateSubject(selectedCourse.name)} - {t.chapterProgress.title}
+            </h1>
           </div>
 
           <Tabs defaultValue="chapters" className="mb-6">
-            <TabsList>
-              <TabsTrigger value="chapters" onClick={() => setViewType('chapters')}>
-                Chapitres et progression
+            <TabsList className={language === 'ar' ? 'flex-row-reverse' : ''}>
+              <TabsTrigger 
+                value="chapters" 
+                onClick={() => setViewType('chapters')}
+                className={language === 'ar' ? 'ml-2' : 'mr-2'}
+              >
+                {t.chapterProgress.title}
               </TabsTrigger>
-              <TabsTrigger value="materials" onClick={() => setViewType('materials')}>
-                Supports de cours
+              <TabsTrigger 
+                value="materials" 
+                onClick={() => setViewType('materials')}
+              >
+                {t.studentMaterials.title}
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -208,29 +257,28 @@ export function StudentCourses() {
   }
 
   return (
-    <div className="p-6">
+    <div 
+      className={`p-6 ${language === 'ar' ? 'text-right' : 'text-left'}`}
+      dir={language === 'ar' ? 'rtl' : 'ltr'}
+    >
       <motion.h1
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-2xl font-bold mb-6"
+        className="text-2xl font-bold mb-6 dark:text-white"
       >
-        Mes Cours
+        {t.studentCourses.title}
       </motion.h1>
 
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+      <div className={`flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 ${language === 'ar' ? 'md:flex-row-reverse' : ''}`}>
         <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
-            <TabsTrigger value="all">Tous</TabsTrigger>
-            <TabsTrigger value="today">Aujourd'hui</TabsTrigger>
-            <TabsTrigger value="materials">Avec documents</TabsTrigger>
-          </TabsList>
+         
         </Tabs>
 
-        <div className="relative w-full md:w-64">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
+        <div className={`relative w-full md:w-64 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+          <Search className={`absolute h-4 w-4 text-gray-500 ${language === 'ar' ? 'right-2' : 'left-2'} top-2.5`} />
           <Input
-            placeholder="Rechercher un cours..."
-            className="pl-8"
+            placeholder={t.common.search}
+            className={language === 'ar' ? 'pr-8' : 'pl-8'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -245,12 +293,8 @@ export function StudentCourses() {
           {filteredCourses
             .filter(course => {
               if (activeTab === 'all') return true;
-              if (activeTab === 'today') {
-                return true;
-              }
-              if (activeTab === 'materials') {
-                return course.materials > 0;
-              }
+              if (activeTab === 'today') return true;
+              if (activeTab === 'materials') return course.materials > 0;
               return true;
             })
             .map(course => (
@@ -263,14 +307,18 @@ export function StudentCourses() {
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.98 }}
               >
-                <Card className="overflow-hidden shadow-md rounded-lg">
+                <Card className="overflow-hidden shadow-md rounded-lg dark:bg-gray-800">
                   <div className={`h-2 ${course.color}`}></div>
                   <CardHeader>
-                    <CardTitle className="flex justify-between items-start">
-                      <span>{course.name}</span>
-                      <Badge>{course.materials} documents</Badge>
+                    <CardTitle className={`flex justify-between items-start ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
+                      <span className="dark:text-white">{translateSubject(course.name)}</span>
+                      <Badge className={language === 'ar' ? 'ml-2' : 'mr-2'}>
+                        {course.materials} {t.studentMaterials.documents}
+                      </Badge>
                     </CardTitle>
-                    <CardDescription>{course.teacher}</CardDescription>
+                    <CardDescription className={language === 'ar' ? 'text-right' : 'text-left'}>
+                      {course.teacher}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     {/* Additional content can be added here if needed */}
@@ -284,7 +332,7 @@ export function StudentCourses() {
                         setViewType('chapters');
                       }}
                     >
-                      Voir le programme
+                      {t.chapterProgress.viewProgram}
                     </Button>
                     <Button
                       variant="outline"
@@ -294,7 +342,7 @@ export function StudentCourses() {
                         setViewType('materials');
                       }}
                     >
-                      Voir les supports
+                      {t.studentMaterials.viewMaterials}
                     </Button>
                   </CardFooter>
                 </Card>
@@ -307,20 +355,25 @@ export function StudentCourses() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="text-center py-12 bg-white rounded-lg shadow-sm"
+          className="text-center py-12 bg-white rounded-lg shadow-sm dark:bg-gray-800"
         >
-          <p className="text-gray-500">Aucun cours ne correspond à votre recherche</p>
+          <p className="text-gray-500 dark:text-gray-400">
+            {t.common.noDataAvailable}
+          </p>
           <Button
             variant="link"
             onClick={() => {
               setSearchQuery('');
               setActiveTab('all');
             }}
+            className="dark:text-blue-400"
           >
-            Réinitialiser les filtres
+            {t.common.resetFilters}
           </Button>
         </motion.div>
       )}
     </div>
   );
 }
+
+export default StudentCourses;

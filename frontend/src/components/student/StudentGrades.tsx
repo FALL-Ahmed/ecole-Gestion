@@ -17,10 +17,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { FileDown, Printer } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { User as AuthUser } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { useMediaQuery } from '@/hooks/use-media-query';
 
 // --- Interfaces de Données ---
 interface AnneeAcademique {
@@ -123,335 +124,17 @@ interface ClassAverages {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-const fetchCoefficientsForClass = async (classId: number): Promise<Coefficient[]> => {
-  try {
-    const response = await fetch(`${API_URL}/api/coefficientclasse?classeId=${classId}`);
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP error! status: ${response.status} for coefficients. Response: ${errorText}`);
-    }
-    const rawCoefficients: any[] = await response.json();
-    return rawCoefficients.map(cc => ({
-      id: cc.id,
-      matiere_id: cc.matiere?.id || cc.matiere_id,
-      classe_id: cc.classe?.id || cc.classe_id,
-      coefficient: parseFloat(cc.coefficient),
-    }));
-  } catch (error) {
-    toast({
-      title: "Erreur de chargement des coefficients",
-      description: `Impossible de charger les coefficients pour la classe. Détails: ${error instanceof Error ? error.message : String(error)}.`,
-      variant: "destructive",
-    });
-    return [];
-  }
-};
-
-const fetchActiveAcademicYearId = async (): Promise<number | null> => {
-  try {
-    const response = await fetch(`${API_URL}/api/configuration`);
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP error! status: ${response.status} for configuration. Response: ${errorText}`);
-    }
-    const configData: Configuration | Configuration[] = await response.json();
-
-    let activeAnneeScolaireId: number | undefined;
-    if (Array.isArray(configData) && configData.length > 0) {
-      activeAnneeScolaireId = configData[0].annee_academique_active_id || configData[0].annee_scolaire?.id;
-    } else if (configData && !Array.isArray(configData)) {
-      activeAnneeScolaireId = configData.annee_academique_active_id || configData.annee_scolaire?.id;
-    }
-
-    return activeAnneeScolaireId !== undefined ? activeAnneeScolaireId : null;
-  } catch (error) {
-    toast({
-      title: "Erreur de configuration",
-      description: `Impossible de charger l'année académique active. Détails: ${error instanceof Error ? error.message : String(error)}.`,
-      variant: "destructive",
-    });
-    return null;
-  }
-};
-
-const fetchUserInscriptionAndClassInfo = async (userId: number, activeAnneeAcademiqueId: number): Promise<{ studentName: string; className: string; classId: number; anneeScolaireId: number; eleveId: number } | null> => {
-  try {
-    const userResponse = await fetch(`${API_URL}/api/users/${userId}`);
-    if (!userResponse.ok) {
-      throw new Error(`HTTP error! status: ${userResponse.status} for user ${userId}`);
-    }
-    const user: AuthUser = await userResponse.json();
-    const inscriptionResponse = await fetch(`${API_URL}/api/inscriptions?utilisateurId=${userId}&anneeAcademiqueId=${activeAnneeAcademiqueId}&_expand=classe&_expand=annee_scolaire&_expand=utilisateur`);
-    if (!inscriptionResponse.ok) {
-      throw new Error(`HTTP error! status: ${inscriptionResponse.status} for inscription`);
-    }
-    const inscriptions: Inscription[] = await inscriptionResponse.json();
-
-    if (inscriptions.length === 0) {
-      toast({
-        title: "Inscription introuvable",
-        description: "L'élève n'est pas inscrit pour l'année scolaire active ou l'inscription n'a pas été trouvée.",
-        variant: "destructive",
-      });
-      return null;
-    }
-
-    const currentInscription = inscriptions[0];
-    const classId = currentInscription.classe?.id;
-    const anneeScolaireId = currentInscription.annee_scolaire?.id;
-    const eleveId = currentInscription.utilisateur?.id;
-
-    if (classId === undefined || anneeScolaireId === undefined || eleveId === undefined) {
-      toast({
-        title: "Données d'inscription incomplètes",
-        description: "Les informations essentielles (classe, année, élève) sont manquantes dans l'inscription.",
-        variant: "destructive",
-      });
-      return null;
-    }
-    return {
-      studentName: user.nom || 'Nom Inconnu',
-      className: currentInscription.classe?.nom || 'Classe Inconnue',
-      classId: classId,
-      anneeScolaireId: anneeScolaireId,
-      eleveId: eleveId,
-    };
-  } catch (error) {
-    toast({
-      title: "Erreur de chargement",
-      description: `Impossible de charger les informations de l'élève. Détails: ${error instanceof Error ? error.message : String(error)}.`,
-      variant: "destructive",
-    });
-    return null;
-  }
-};
-
-const fetchNotesForEleve = async (eleveId: number): Promise<Note[]> => {
-  try {
-    const response = await fetch(`${API_URL}/api/notes?_expand=evaluation&_expand=evaluation.matiere&_cacheBust=${Date.now()}`);
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
-    }
-    const allNotesFromApi: any[] = await response.json();
-    
-    const studentApiNotes = allNotesFromApi.filter(note => {
-      if (note.etudiant && typeof note.etudiant.id !== 'undefined') {
-        return String(note.etudiant.id) === String(eleveId);
-      }
-      if (typeof note.etudiant_id !== 'undefined') {
-        return String(note.etudiant_id) === String(eleveId);
-      }
-      return false;
-    });
-
-    return studentApiNotes.map(apiNote => ({
-      id: parseInt(apiNote.id, 10),
-      eleveId: eleveId,
-      evaluationId: parseInt(apiNote.evaluation?.id, 10),
-      evaluation: apiNote.evaluation,
-      note: parseFloat(apiNote.note),
-    }));
-  } catch (error) {
-    toast({
-      title: "Erreur de chargement",
-      description: `Impossible de charger les notes de l'élève. Détails: ${error instanceof Error ? error.message : String(error)}.`,
-      variant: "destructive",
-    });
-    return [];
-  }
-};
-
-const fetchAllMatiere = async (): Promise<Matiere[]> => {
-  try {
-    const response = await fetch(`${API_URL}/api/matieres`);
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
-    }
-    return await response.json();
-  } catch (error) {
-    toast({
-      title: "Erreur de chargement",
-      description: `Impossible de charger la liste des matières. Détails: ${error instanceof Error ? error.message : String(error)}.`,
-      variant: "destructive",
-    });
-    return [];
-  }
-};
-
-const fetchAllTrimestresNames = async (): Promise<string[]> => {
-  try {
-    const response = await fetch(`${API_URL}/api/trimestres`);
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
-    }
-    const trimestres: TrimestreData[] = await response.json();
-    const terms = Array.from(new Set(trimestres.map(t => t.nom))).filter(Boolean) as string[];
-
-    terms.sort((a, b) => {
-      const numA = parseInt(a.replace('Trimestre ', '') || '0');
-      const numB = parseInt(b.replace('Trimestre ', '') || '0');
-      if (numA !== 0 && numB !== 0) {
-        return numA - numB;
-      }
-      return a.localeCompare(b);
-    });
-    return terms;
-  } catch (error) {
-    toast({
-      title: "Erreur de chargement",
-      description: `Impossible de charger la liste des noms de trimestres. Détails: ${error instanceof Error ? error.message : String(error)}.`,
-      variant: "destructive",
-    });
-    return [];
-  }
-};
-
-const fetchAllTrimestreObjects = async (): Promise<TrimestreData[]> => {
-  try {
-    const response = await fetch(`${API_URL}/api/trimestres`);
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
-    }
-    return await response.json();
-  } catch (error) {
-    toast({
-      title: "Erreur de chargement",
-      description: `Impossible de charger les objets trimestres. Détails: ${error instanceof Error ? error.message : String(error)}.`,
-      variant: "destructive",
-    });
-    return [];
-  }
-};
-
-const fetchAllStudentsInClass = async (classId: number, anneeScolaireId: number): Promise<Inscription[]> => {
-  try {
-    const response = await fetch(`${API_URL}/api/inscriptions?classeId=${classId}&anneeAcademiqueId=${anneeScolaireId}&_expand=utilisateur`);
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
-    }
-    return await response.json();
-  } catch (error) {
-    toast({
-      title: "Erreur de chargement",
-      description: `Impossible de charger la liste des élèves de la classe. Détails: ${error instanceof Error ? error.message : String(error)}.`,
-      variant: "destructive",
-    });
-
-    return [];
-  }
-};
-
-const fetchAllNotesForClass = async (classId: number, anneeScolaireId: number): Promise<Note[]> => {
-  try {
-    const response = await fetch(`${API_URL}/api/notes?_expand=evaluation&_expand=evaluation.matiere&_expand=evaluation.classe&_cacheBust=${Date.now()}`);
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
-    }
-    const allNotesFromApi: any[] = await response.json();
-    
-
-    // Décommenter pour voir des exemples de notes brutes et leurs IDs d'évaluation
-    allNotesFromApi.forEach(n => {
-      // Log actual fields from API for an evaluation, assuming trimestreId 6 is of interest
-      if (n.evaluation && (n.evaluation.trimestreId === 6 || n.evaluation.trimestre_id === 6)) { 
-        
-       }
-     });
-
-    // Filter notes for the specific class and academic year
-    const classNotesFromApi = allNotesFromApi.filter((apiNote: any) => {
-      // Get classId and anneeScolaireId from the expanded evaluation.classe object
-      // This matches the backend service configuration loading evaluation.classe
-      const apiEvalClasseId = apiNote.evaluation?.classe?.id;
-      const apiEvalAnneeScolaireId = apiNote.evaluation?.classe?.annee_scolaire_id;
-
-      const matchesClass = apiEvalClasseId === classId;
-      const matchesYear = apiEvalAnneeScolaireId === anneeScolaireId;
-      
-      const currentTrimestreId = apiNote.evaluation?.trimestreId || apiNote.evaluation?.trimestre_id;
-
-      // Enhanced logging for T3 notes (assuming ID 6) - Adjust ID if needed
-      if (currentTrimestreId === 6) {
-        if (!matchesClass || !matchesYear) {
-          
-        } else {
-          
-        }
-       }
-      return matchesClass && matchesYear;
-    });    
-    
-    const t3NotesInFiltered = classNotesFromApi.filter(n => (n.evaluation?.trimestreId === 6 || n.evaluation?.trimestre_id === 6));
-
-    return classNotesFromApi.map((apiNote: any) => {
-      let studentIdVal: number | undefined;
-      if (apiNote.etudiant && typeof apiNote.etudiant.id !== 'undefined') {
-        studentIdVal = parseInt(String(apiNote.etudiant.id), 10);
-      } else if (typeof apiNote.etudiant_id !== 'undefined') {
-        studentIdVal = parseInt(String(apiNote.etudiant_id), 10);
-      }
-
-      // Map evaluation from API (potentially snake_case) to frontend Evaluation interface (camelCase)
-      const feEvaluation: Evaluation | undefined = apiNote.evaluation ? {
-        id: parseInt(apiNote.evaluation.id, 10), // Assuming id is always present and correct
-        type: apiNote.evaluation.type,
-        matiere: apiNote.evaluation.matiere,
-        // Get classeId from the expanded evaluation.classe.id
-        // This matches the backend service configuration
-        classeId: apiNote.evaluation.classe?.id ? parseInt(apiNote.evaluation.classe.id, 10) : undefined,
-        professeur_id: parseInt(apiNote.evaluation.professeur_id, 10), // Assuming professeur_id is snake_case from API
-        professeur: apiNote.evaluation.professeur,
-        date_eval: apiNote.evaluation.date_eval,
-        // Map trimestreId from trimestre_id (API) or trimestreId (API) to trimestreId (frontend)
-        trimestreId: apiNote.evaluation.trimestreId || apiNote.evaluation.trimestre_id ? 
-                      parseInt(apiNote.evaluation.trimestreId || apiNote.evaluation.trimestre_id, 10) : undefined,
-        // Get annee_scolaire_id from the expanded evaluation.classe.annee_scolaire_id
-        // OR if evaluation itself has annee_scolaire_id, prioritize that.
-        // Based on previous logs, evaluation.annee_scolaire_id was undefined, so we rely on evaluation.classe.annee_scolaire_id
-        annee_scolaire_id: apiNote.evaluation.classe?.annee_scolaire_id ?
-                            parseInt(apiNote.evaluation.classe.annee_scolaire_id, 10) :
-                            (apiNote.evaluation.annee_scolaire_id ? parseInt(apiNote.evaluation.annee_scolaire_id, 10) : undefined),
-        anneeScolaire: apiNote.evaluation.anneeScolaire,
-      } : undefined;
-
-      return {
-        id: parseInt(apiNote.id, 10),
-        eleveId: studentIdVal as number, 
-        evaluationId: feEvaluation ? feEvaluation.id : parseInt(apiNote.evaluation?.id, 10), // Fallback
-        evaluation: feEvaluation, // Use the mapped evaluation object
-        note: parseFloat(apiNote.note),
-      };
-    }).filter(note =>
-      typeof note.eleveId === 'number' && !isNaN(note.eleveId) &&
-      note.evaluation !== undefined &&
-      typeof note.evaluation.classeId === 'number' && !isNaN(note.evaluation.classeId) && // Check mapped classeId
-      typeof note.evaluation.annee_scolaire_id === 'number' && !isNaN(note.evaluation.annee_scolaire_id) // Check mapped annee_scolaire_id
-    );
-  } catch (error) {
-    toast({
-      title: "Erreur de chargement",
-      description: `Impossible de charger les notes de la classe. Détails: ${error instanceof Error ? error.message : String(error)}.`,
-      variant: "destructive",
-    });
-    return [];
-  }
-};
-
 interface StudentGradesProps {
   userId: number;
 }
 
 export function StudentGrades({ userId }: StudentGradesProps) {
+  const { t, language } = useLanguage();
+  const isMobile = useMediaQuery('(max-width: 768px)');
   const [selectedTerm, setSelectedTerm] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
-  const [studentName, setStudentName] = useState<string>('Chargement...');
-  const [className, setClassName] = useState<string>('Chargement...');
+  const [studentName, setStudentName] = useState<string>(t.common.loading);
+  const [className, setClassName] = useState<string>(t.common.loading);
   const [studentClassId, setStudentClassId] = useState<number | null>(null);
   const [studentAnneeScolaireId, setStudentAnneeScolaireId] = useState<number | null>(null);
   const [eleveId, setEleveId] = useState<number | null>(null);
@@ -463,7 +146,6 @@ export function StudentGrades({ userId }: StudentGradesProps) {
   const [classCoefficients, setClassCoefficients] = useState<Coefficient[]>([]);
   const [classStudents, setClassStudents] = useState<Inscription[]>([]);
   const [classNotes, setClassNotes] = useState<Note[]>([]);
-  
   const [processedGrades, setProcessedGrades] = useState<{ [term: string]: StudentSubjectGrades[] }>({});
   const [generalAverages, setGeneralAverages] = useState<{ [term: string]: number }>({});
   const [classAverages, setClassAverages] = useState<ClassAverages>({});
@@ -471,9 +153,293 @@ export function StudentGrades({ userId }: StudentGradesProps) {
   const [subjectComparisonData, setSubjectComparisonData] = useState<any[]>([]);
   const { addNotification } = useNotifications();
 
+  const fetchCoefficientsForClass = async (classId: number): Promise<Coefficient[]> => {
+    try {
+      const response = await fetch(`${API_URL}/api/coefficientclasse?classeId=${classId}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status} for coefficients. Response: ${errorText}`);
+      }
+      const rawCoefficients: any[] = await response.json();
+      return rawCoefficients.map(cc => ({
+        id: cc.id,
+        matiere_id: cc.matiere?.id || cc.matiere_id,
+        classe_id: cc.classe?.id || cc.classe_id,
+        coefficient: parseFloat(cc.coefficient),
+      }));
+    } catch (error) {
+      toast({
+        title: t.gradeManagement.errorLoadingCoefficients,
+        description: `${t.gradeManagement.errorLoadingCoefficientsDesc} ${error instanceof Error ? error.message : String(error)}`,
+        variant: "destructive",
+      });
+      return [];
+    }
+  };
+
+  const fetchActiveAcademicYearId = async (): Promise<number | null> => {
+    try {
+      const response = await fetch(`${API_URL}/api/configuration`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status} for configuration. Response: ${errorText}`);
+      }
+      const configData: Configuration | Configuration[] = await response.json();
+
+      let activeAnneeScolaireId: number | undefined;
+      if (Array.isArray(configData) && configData.length > 0) {
+        activeAnneeScolaireId = configData[0].annee_academique_active_id || configData[0].annee_scolaire?.id;
+      } else if (configData && !Array.isArray(configData)) {
+        activeAnneeScolaireId = configData.annee_academique_active_id || configData.annee_scolaire?.id;
+      }
+
+      return activeAnneeScolaireId !== undefined ? activeAnneeScolaireId : null;
+    } catch (error) {
+      toast({
+        title: t.settings.errorLoadingCurrentYear,
+        description: `${t.settings.errorFetchingCurrentYear} ${error instanceof Error ? error.message : String(error)}`,
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
+  const fetchUserInscriptionAndClassInfo = async (userId: number, activeAnneeAcademiqueId: number): Promise<{ studentName: string; className: string; classId: number; anneeScolaireId: number; eleveId: number } | null> => {
+    try {
+      const userResponse = await fetch(`${API_URL}/api/users/${userId}`);
+      if (!userResponse.ok) {
+        throw new Error(`HTTP error! status: ${userResponse.status} for user ${userId}`);
+      }
+      const user: AuthUser = await userResponse.json();
+      const inscriptionResponse = await fetch(`${API_URL}/api/inscriptions?utilisateurId=${userId}&anneeAcademiqueId=${activeAnneeAcademiqueId}&_expand=classe&_expand=annee_scolaire&_expand=utilisateur`);
+      if (!inscriptionResponse.ok) {
+        throw new Error(`HTTP error! status: ${inscriptionResponse.status} for inscription`);
+      }
+      const inscriptions: Inscription[] = await inscriptionResponse.json();
+
+      if (inscriptions.length === 0) {
+        toast({
+          title: t.userManagement.noActiveRegistration,
+          description: t.userManagement.noActiveRegistrationDesc,
+          variant: "destructive",
+        });
+        return null;
+      }
+
+      const currentInscription = inscriptions[0];
+      const classId = currentInscription.classe?.id;
+      const anneeScolaireId = currentInscription.annee_scolaire?.id;
+      const eleveId = currentInscription.utilisateur?.id;
+
+      if (classId === undefined || anneeScolaireId === undefined || eleveId === undefined) {
+        toast({
+          title: t.userManagement.errorLoadingEnrollments,
+          description: t.userManagement.incompleteRegistration,
+          variant: "destructive",
+        });
+        return null;
+      }
+      return {
+        studentName: user.nom || t.common.unknown,
+        className: currentInscription.classe?.nom || t.common.unknownClass,
+        classId: classId,
+        anneeScolaireId: anneeScolaireId,
+        eleveId: eleveId,
+      };
+    } catch (error) {
+      toast({
+        title: t.common.errorLoading,
+        description: `${t.studentMaterials.errorLoadingStudents} ${error instanceof Error ? error.message : String(error)}`,
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
+  const fetchNotesForEleve = async (eleveId: number): Promise<Note[]> => {
+    try {
+      const response = await fetch(`${API_URL}/api/notes?_expand=evaluation&_expand=evaluation.matiere&_cacheBust=${Date.now()}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
+      }
+      const allNotesFromApi: any[] = await response.json();
+      
+      const studentApiNotes = allNotesFromApi.filter(note => {
+        if (note.etudiant && typeof note.etudiant.id !== 'undefined') {
+          return String(note.etudiant.id) === String(eleveId);
+        }
+        if (typeof note.etudiant_id !== 'undefined') {
+          return String(note.etudiant_id) === String(eleveId);
+        }
+        return false;
+      });
+
+      return studentApiNotes.map(apiNote => ({
+        id: parseInt(apiNote.id, 10),
+        eleveId: eleveId,
+        evaluationId: parseInt(apiNote.evaluation?.id, 10),
+        evaluation: apiNote.evaluation,
+        note: parseFloat(apiNote.note),
+      }));
+    } catch (error) {
+      toast({
+        title: t.common.errorLoading,
+        description: `${t.gradeManagement.errorLoadingGrades} ${error instanceof Error ? error.message : String(error)}`,
+        variant: "destructive",
+      });
+      return [];
+    }
+  };
+
+  const fetchAllMatiere = async (): Promise<Matiere[]> => {
+    try {
+      const response = await fetch(`${API_URL}/api/matieres`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
+      }
+      return await response.json();
+    } catch (error) {
+      toast({
+        title: t.common.errorLoading,
+        description: `${t.gradeManagement.errorLoadingSubjects} ${error instanceof Error ? error.message : String(error)}`,
+        variant: "destructive",
+      });
+      return [];
+    }
+  };
+
+  const fetchAllTrimestresNames = async (): Promise<string[]> => {
+    try {
+      const response = await fetch(`${API_URL}/api/trimestres`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
+      }
+      const trimestres: TrimestreData[] = await response.json();
+      const terms = Array.from(new Set(trimestres.map(t => t.nom))).filter(Boolean) as string[];
+
+      terms.sort((a, b) => {
+        const numA = parseInt(a.replace('Trimestre ', '') || '0');
+        const numB = parseInt(b.replace('Trimestre ', '') || '0');
+        if (numA !== 0 && numB !== 0) {
+          return numA - numB;
+        }
+        return a.localeCompare(b);
+      });
+      return terms;
+    } catch (error) {
+      toast({
+        title: t.common.errorLoading,
+        description: `${t.reports.errorLoadingTerms} ${error instanceof Error ? error.message : String(error)}`,
+        variant: "destructive",
+      });
+      return [];
+    }
+  };
+
+  const fetchAllTrimestreObjects = async (): Promise<TrimestreData[]> => {
+    try {
+      const response = await fetch(`${API_URL}/api/trimestres`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
+      }
+      return await response.json();
+    } catch (error) {
+      toast({
+        title: t.common.errorLoading,
+        description: `${t.reports.errorLoadingTerms} ${error instanceof Error ? error.message : String(error)}`,
+        variant: "destructive",
+      });
+      return [];
+    }
+  };
+
+  const fetchAllStudentsInClass = async (classId: number, anneeScolaireId: number): Promise<Inscription[]> => {
+    try {
+      const response = await fetch(`${API_URL}/api/inscriptions?classeId=${classId}&anneeAcademiqueId=${anneeScolaireId}&_expand=utilisateur`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
+      }
+      return await response.json();
+    } catch (error) {
+      toast({
+        title: t.common.errorLoading,
+        description: `${t.userManagement.errorLoadingEnrollments} ${error instanceof Error ? error.message : String(error)}`,
+        variant: "destructive",
+      });
+      return [];
+    }
+  };
+
+  const fetchAllNotesForClass = async (classId: number, anneeScolaireId: number): Promise<Note[]> => {
+    try {
+      const response = await fetch(`${API_URL}/api/notes?_expand=evaluation&_expand=evaluation.matiere&_expand=evaluation.classe&_cacheBust=${Date.now()}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
+      }
+      const allNotesFromApi: any[] = await response.json();
+
+      const classNotesFromApi = allNotesFromApi.filter((apiNote: any) => {
+        const apiEvalClasseId = apiNote.evaluation?.classe?.id;
+        const apiEvalAnneeScolaireId = apiNote.evaluation?.classe?.annee_scolaire_id;
+        return apiEvalClasseId === classId && apiEvalAnneeScolaireId === anneeScolaireId;
+      });    
+      
+      return classNotesFromApi.map((apiNote: any) => {
+        let studentIdVal: number | undefined;
+        if (apiNote.etudiant && typeof apiNote.etudiant.id !== 'undefined') {
+          studentIdVal = parseInt(String(apiNote.etudiant.id), 10);
+        } else if (typeof apiNote.etudiant_id !== 'undefined') {
+          studentIdVal = parseInt(String(apiNote.etudiant_id), 10);
+        }
+
+        const feEvaluation: Evaluation | undefined = apiNote.evaluation ? {
+          id: parseInt(apiNote.evaluation.id, 10),
+          type: apiNote.evaluation.type,
+          matiere: apiNote.evaluation.matiere,
+          classeId: apiNote.evaluation.classe?.id ? parseInt(apiNote.evaluation.classe.id, 10) : undefined,
+          professeur_id: parseInt(apiNote.evaluation.professeur_id, 10),
+          professeur: apiNote.evaluation.professeur,
+          date_eval: apiNote.evaluation.date_eval,
+          trimestreId: apiNote.evaluation.trimestreId || apiNote.evaluation.trimestre_id ? 
+                        parseInt(apiNote.evaluation.trimestreId || apiNote.evaluation.trimestre_id, 10) : undefined,
+          annee_scolaire_id: apiNote.evaluation.classe?.annee_scolaire_id ?
+                              parseInt(apiNote.evaluation.classe.annee_scolaire_id, 10) :
+                              (apiNote.evaluation.annee_scolaire_id ? parseInt(apiNote.evaluation.annee_scolaire_id, 10) : undefined),
+          anneeScolaire: apiNote.evaluation.anneeScolaire,
+        } : undefined;
+
+        return {
+          id: parseInt(apiNote.id, 10),
+          eleveId: studentIdVal as number, 
+          evaluationId: feEvaluation ? feEvaluation.id : parseInt(apiNote.evaluation?.id, 10),
+          evaluation: feEvaluation,
+          note: parseFloat(apiNote.note),
+        };
+      }).filter(note =>
+        typeof note.eleveId === 'number' && !isNaN(note.eleveId) &&
+        note.evaluation !== undefined &&
+        typeof note.evaluation.classeId === 'number' && !isNaN(note.evaluation.classeId) &&
+        typeof note.evaluation.annee_scolaire_id === 'number' && !isNaN(note.evaluation.annee_scolaire_id)
+      );
+    } catch (error) {
+      toast({
+        title: t.common.errorLoading,
+        description: `${t.gradeManagement.errorLoadingGrades} ${error instanceof Error ? error.message : String(error)}`,
+        variant: "destructive",
+      });
+      return [];
+    }
+  };
+
   useEffect(() => {
-    setStudentName('Chargement...');
-    setClassName('Chargement...');
+    setStudentName(t.common.loading);
+    setClassName(t.common.loading);
     setStudentClassId(null);
     setStudentAnneeScolaireId(null);
     setEleveId(null);
@@ -486,7 +452,7 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     setClassAverages({});
     setProgressData([]);
     setSubjectComparisonData([]);
-  }, [userId]);
+  }, [userId, t]);
 
   useEffect(() => {
     const loadInitialAppConfig = async () => {
@@ -507,15 +473,20 @@ export function StudentGrades({ userId }: StudentGradesProps) {
         if (termsNames.length > 0) {
           setSelectedTerm(termsNames[termsNames.length - 1]);
         } else {
-          setSelectedTerm('Aucun trimestre');
+          setSelectedTerm(t.common.noDataAvailable);
         }
       } catch (error) {
+        toast({
+          title: t.common.errorLoadingInitialData,
+          description: t.common.errorLoadingInitialDataDesc,
+          variant: "destructive",
+        });
       } finally {
         setLoading(false);
       }
     };
     loadInitialAppConfig();
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const loadStudentInfo = async () => {
@@ -534,7 +505,6 @@ export function StudentGrades({ userId }: StudentGradesProps) {
           setStudentAnneeScolaireId(info.anneeScolaireId);
           setEleveId(userId);
           
-          // Load class data (students and coefficients)
           const [coeffs, students] = await Promise.all([
             fetchCoefficientsForClass(info.classId),
             fetchAllStudentsInClass(info.classId, info.anneeScolaireId)
@@ -542,14 +512,13 @@ export function StudentGrades({ userId }: StudentGradesProps) {
           setClassCoefficients(coeffs);
           setClassStudents(students);
           
-          // Load all notes for the class
           const notes = await fetchAllNotesForClass(info.classId, info.anneeScolaireId);
           setClassNotes(notes);
         } else {
           setAllStudentNotes([]);
           setEleveId(null);
-          setStudentName('N/A');
-          setClassName('N/A');
+          setStudentName(t.common.na);
+          setClassName(t.common.na);
           setStudentClassId(null);
           setStudentAnneeScolaireId(null);
           setClassCoefficients([]);
@@ -557,8 +526,8 @@ export function StudentGrades({ userId }: StudentGradesProps) {
           setClassNotes([]);
           
           toast({
-            title: "Informations d'inscription introuvables",
-            description: "Impossible de récupérer les détails d'inscription pour afficher les notes.",
+            title: t.userManagement.noActiveRegistration,
+            description: t.userManagement.noActiveRegistrationDesc,
             variant: "default",
           });
         }
@@ -573,7 +542,7 @@ export function StudentGrades({ userId }: StudentGradesProps) {
       }
     };
     loadStudentInfo();
-  }, [userId, activeAcademicYearId]);
+  }, [userId, activeAcademicYearId, t]);
 
   useEffect(() => {
     const getStudentNotes = async () => {
@@ -596,13 +565,25 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     } else {
       setAllStudentNotes([]);
     }
-  }, [eleveId, activeAcademicYearId, userId]);
+  }, [eleveId, activeAcademicYearId, userId, t]);
 
   useEffect(() => {
     const termEvaluationMap: { [key: string]: { devoir1: string, devoir2: string, composition: string } } = {
-      'Trimestre 1': { devoir1: 'Devoir 1', devoir2: 'Devoir 2', composition: 'Composition 1' },
-      'Trimestre 2': { devoir1: 'Devoir 3', devoir2: 'Devoir 4', composition: 'Composition 2' },
-      'Trimestre 3': { devoir1: 'Devoir 5', devoir2: 'Devoir 6', composition: 'Composition 3' },
+      'Trimestre 1': {
+        devoir1: 'Devoir 1',
+        devoir2: 'Devoir 2',
+        composition: 'Composition 1',
+      },
+      'Trimestre 2': {
+        devoir1: 'Devoir 3',
+        devoir2: 'Devoir 4',
+        composition: 'Composition 2',
+      },
+      'Trimestre 3': {
+        devoir1: 'Devoir 5',
+        devoir2: 'Devoir 6',
+        composition: 'Composition 3',
+      },
     };
 
     if (!studentClassId || !studentAnneeScolaireId || allMatiere.length === 0 || 
@@ -632,16 +613,13 @@ export function StudentGrades({ userId }: StudentGradesProps) {
           continue;
         }
 
-        // Initialize class averages for this term
         classAveragesCalc[term] = {};
 
-        // For each subject, calculate the class average
         for (const matiereInfo of allMatiere) {
           const matiereId = matiereInfo.id;
           let totalMatiereAverage = 0;
           let studentCountWithMatiere = 0;
 
-          // Calculate average for each student in this subject and term
           for (const student of classStudents) {
             if (!student.utilisateur?.id) {
               continue;
@@ -653,9 +631,6 @@ export function StudentGrades({ userId }: StudentGradesProps) {
               note.evaluation?.matiere?.id === matiereId
             );
 
-
-            // if (studentNotesForTerm.length === 0) continue; // Don't skip yet, might have notes but not all 3
-            // Calculate student's average for this subject and term
             let devoir1Note: number | null = null;
             let devoir2Note: number | null = null;
             let compositionNote: number | null = null;
@@ -682,7 +657,6 @@ export function StudentGrades({ userId }: StudentGradesProps) {
               if (currentTrimestreNumero === 1) {
                 subjectAverage = (avgDevoirs * 3 + compositionNote) / 4;
               } else if (currentTrimestreNumero === 2) {
-                // For term 2, we need composition from term 1
                 const term1Obj = allTrimestreObjects.find(t => 
                   t.nom === "Trimestre 1" && t.anneeScolaire?.id === studentAnneeScolaireId
                 );
@@ -701,7 +675,6 @@ export function StudentGrades({ userId }: StudentGradesProps) {
                   }
                 }
               } else if (currentTrimestreNumero === 3) {
-                // For term 3, we need compositions from terms 1 and 2
                 const term1Obj = allTrimestreObjects.find(t => 
                   t.nom === "Trimestre 1" && t.anneeScolaire?.id === studentAnneeScolaireId
                 );
@@ -742,11 +715,10 @@ export function StudentGrades({ userId }: StudentGradesProps) {
             }
           }
 
-          // Calculate class average for this subject and term
           if (studentCountWithMatiere > 0) {
             classAveragesCalc[term][matiereId] = parseFloat((totalMatiereAverage / studentCountWithMatiere).toFixed(2));
           } else {
-            classAveragesCalc[term][matiereId] = null; // Explicitement null si aucune moyenne
+            classAveragesCalc[term][matiereId] = null;
           }
         }
       }
@@ -885,18 +857,17 @@ export function StudentGrades({ userId }: StudentGradesProps) {
 
       // Prepare progress data
       const newProgressData: ProgressData[] = allPossibleTerms.map(term => {
-        // Calculate class general average for the term
         let classGeneralAverage = 0;
         let totalCoefficient = 0;
         
         if (classAveragesCalc[term]) {
-          for (const matiereId in classAveragesCalc[term]) {
-            const coeff = classCoefficients.find(c => 
-              c.matiere_id === parseInt(matiereId) && c.classe_id === studentClassId
-            )?.coefficient || 1;
-            
-            classGeneralAverage += classAveragesCalc[term][matiereId] * coeff;
-            totalCoefficient += coeff;
+          for (const matiereIdStr in classAveragesCalc[term]) {
+            const classAverageForSubject = classAveragesCalc[term][parseInt(matiereIdStr)];
+            if (classAverageForSubject !== null) {
+              const coeff = classCoefficients.find(c => c.matiere_id === parseInt(matiereIdStr))?.coefficient || 1;
+              classGeneralAverage += classAverageForSubject * coeff;
+              totalCoefficient += coeff;
+            }
           }
           
           if (totalCoefficient > 0 && !isNaN(classGeneralAverage / totalCoefficient)) {
@@ -907,7 +878,7 @@ export function StudentGrades({ userId }: StudentGradesProps) {
         return {
           name: term,
           moyenne: generalAveragesCalc[term] || 0,
-          moyenneClasse: classGeneralAverage > 0 && !isNaN(classGeneralAverage) ? classGeneralAverage : 0, // Assurer un nombre pour le graphique
+          moyenneClasse: classGeneralAverage > 0 && !isNaN(classGeneralAverage) ? classGeneralAverage : 0,
         };
       });
       setProgressData(newProgressData);
@@ -916,7 +887,7 @@ export function StudentGrades({ userId }: StudentGradesProps) {
       const currentTermGrades = gradesByTerm[selectedTerm];
       if (currentTermGrades) {
         setSubjectComparisonData(currentTermGrades.map(subject => ({
-          name: subject.subject.substring(0, Math.min(subject.subject.length, 5)),
+          name: subject.subject,
           moyenne: subject.average !== null ? subject.average : 0,
           moyenneClasse: subject.classAvg !== null ? subject.classAvg : 0,
         })));
@@ -936,289 +907,254 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     allTrimestreObjects, 
     classCoefficients,
     classStudents,
-    classNotes
+    classNotes,
+    t
   ]);
-
 
   const currentSelectedGrades = processedGrades[selectedTerm] || [];
   const currentSelectedAverage = generalAverages[selectedTerm] || 0;
 
- 
+  const getEvaluationHeaders = (term: string) => {
+    switch (term) {
+      case 'Trimestre 1':
+        return {
+          devoir1: t.gradeInput.test1,
+          devoir2: t.gradeInput.test2,
+          composition: t.gradeInput.exam1,
+        };
+      case 'Trimestre 2':
+        return {
+          devoir1: t.gradeInput.test3,
+          devoir2: t.gradeInput.test4,
+          composition: t.gradeInput.exam2,
+        };
+      case 'Trimestre 3':
+        return {
+          devoir1: t.gradeInput.test5,
+          devoir2: t.gradeInput.test6,
+          composition: t.gradeInput.exam3,
+        };
+      default:
+        return {
+          devoir1: t.gradeInput.test1,
+          devoir2: t.gradeInput.test2,
+          composition: t.gradeInput.exam1,
+        };
+    }
+  };
 
-const downloadReport = () => {
-  toast({
-    title: "Téléchargement",
-    description: `Le bulletin de ${selectedTerm} est en cours de téléchargement.`,
-  });
-};
+  const { devoir1, devoir2, composition } = getEvaluationHeaders(selectedTerm);
 
-const printReport = () => {
-  toast({
-    title: "Impression",
-    description: `Le bulletin de ${selectedTerm} est envoyé à l'imprimante.`,
-  });
-};
-
-const getEvaluationHeaders = (term: string) => {
-  switch (term) {
-    case 'Trimestre 1':
-      return {
-        devoir1: 'Devoir 1',
-        devoir2: 'Devoir 2',
-        composition: 'Composition 1',
-      };
-    case 'Trimestre 2':
-      return {
-        devoir1: 'Devoir 3',
-        devoir2: 'Devoir 4',
-        composition: 'Composition 2',
-      };
-    case 'Trimestre 3':
-      return {
-        devoir1: 'Devoir 5',
-        devoir2: 'Devoir 6',
-        composition: 'Composition 3',
-      };
-    default:
-      return {
-        devoir1: 'Devoir 1',
-        devoir2: 'Devoir 2',
-        composition: 'Composition',
-      };
-  }
-};
-
-const { devoir1, devoir2, composition } = getEvaluationHeaders(selectedTerm);
-
-if (loading || activeAcademicYearId === null) {
-  return (
-    <div className="p-6 text-center text-gray-500">
-      Chargement des informations de l'élève et des notes...
-    </div>
-  );
-}
-
-if (eleveId === null) {
-  return (
-    <div className="p-6 text-center text-red-500">
-      <h2 className="text-xl font-semibold mb-2">Impossible de charger les notes.</h2>
-      <p>Aucune inscription trouvée pour cet élève pour l'année scolaire active.</p>
-    </div>
-  );
-}
-
-return (
-  <div className="p-6">
-    <h1 className="text-2xl font-bold mb-6">Mes Notes</h1>
-
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-      <Card>
-        <CardContent className="p-6">
-          <h3 className="font-semibold text-lg mb-2">Moyenne Générale ({selectedTerm})</h3>
-          <p className="text-3xl font-bold text-blue-600">{currentSelectedAverage.toFixed(2)}</p>
-          <p className="text-sm text-gray-600">/20</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-6">
-          <h3 className="font-semibold text-lg mb-2">Rang dans la classe</h3>
-          <p className="text-3xl font-bold text-green-600">N/A</p>
-          <p className="text-sm text-gray-600">sur - élèves</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-6">
-          <h3 className="font-semibold text-lg mb-2">Appréciation générale</h3>
-          <p className="text-md text-gray-600">
-            Aucune appréciation disponible pour le moment.
-          </p>
-        </CardContent>
-      </Card>
-    </div>
-
-    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-      <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-        <Select
-          value={selectedTerm}
-          onValueChange={setSelectedTerm}
-          disabled={allPossibleTerms.length === 0 && selectedTerm === 'Aucun trimestre'}
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Sélectionner un trimestre" />
-          </SelectTrigger>
-          <SelectContent>
-            {allPossibleTerms.length > 0 ? (
-              allPossibleTerms.map((term) => (
-                <SelectItem key={term} value={term}>
-                  {term}
-                </SelectItem>
-              ))
-            ) : (
-              <SelectItem value="Aucun trimestre" disabled>Aucun trimestre disponible</SelectItem>
-            )}
-          </SelectContent>
-        </Select>
-
-        <h2 className="text-lg font-semibold">
-          Notes {selectedTerm}
-        </h2>
+  if (loading || activeAcademicYearId === null) {
+    return (
+      <div className={`p-6 text-center text-gray-500 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+        {t.common.loadingData}
       </div>
-    </div>
+    );
+  }
 
-    <Tabs defaultValue="grades" className="space-y-4">
-      <TabsList>
-        <TabsTrigger value="grades">Détail des notes</TabsTrigger>
-        <TabsTrigger value="charts">Graphiques</TabsTrigger>
-      </TabsList>
+  if (eleveId === null) {
+    return (
+      <div className={`p-6 text-center text-red-500 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+        <h2 className="text-xl font-semibold mb-2">{t.common.errorLoading}</h2>
+        <p>{t.userManagement.noActiveRegistrationDesc}</p>
+      </div>
+    );
+  }
 
-      <TabsContent value="grades">
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Matière</TableHead>
-                    <TableHead className="text-center">Coef.</TableHead>
-                    <TableHead className="text-center">{devoir1}</TableHead>
-                    <TableHead className="text-center">{devoir2}</TableHead>
-                    <TableHead className="text-center">{composition}</TableHead>
-                    <TableHead className="text-center">Moyenne</TableHead>
-                    <TableHead className="text-center">Moyenne classe</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {currentSelectedGrades.length === 0 && allMatiere.length === 0 ? (
+  return (
+    <div className={`p-6 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+      <h1 className={`text-2xl font-bold mb-6 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+        {t.studentGrades.title}
+      </h1>
+
+      <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex flex-col md:flex-row items-start md:items-center gap-4 ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
+          <Select
+            value={selectedTerm}
+            onValueChange={setSelectedTerm}
+            disabled={allPossibleTerms.length === 0 && selectedTerm === t.common.noDataAvailable}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder={t.common.selectATrimester} />
+            </SelectTrigger>
+            <SelectContent>
+              {allPossibleTerms.length > 0 ? (
+                allPossibleTerms.map((term) => (
+                  <SelectItem key={term} value={term}>
+                    {term}
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value={t.common.noDataAvailable} disabled>
+                  {t.common.noDataAvailable}
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+
+          <h2 className="text-lg font-semibold">
+            {t.studentGrades.gradesFor} {selectedTerm}
+          </h2>
+        </div>
+
+      </div>
+
+      <Tabs defaultValue="grades" className="space-y-4">
+        <TabsList className={`w-full ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
+          <TabsTrigger value="grades">{t.studentGrades.gradeDetails}</TabsTrigger>
+          <TabsTrigger value="charts">{t.studentGrades.charts}</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="grades">
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-gray-500 py-8">
-                        {selectedTerm === 'Aucun trimestre'
-                          ? "Aucun trimestre disponible. Veuillez vérifier les données d'évaluation."
-                          : `Aucune matière ni note disponible pour le ${selectedTerm}.`}
-                      </TableCell>
+                      <TableHead>{t.reportManagement.subject}</TableHead>
+                      <TableHead className="text-center">{t.reportManagement.coefficient}</TableHead>
+                      <TableHead className="text-center">{devoir1}</TableHead>
+                      <TableHead className="text-center">{devoir2}</TableHead>
+                      <TableHead className="text-center">{composition}</TableHead>
+                      <TableHead className="text-center">{t.reportManagement.subjectAvg}</TableHead>
+                      <TableHead className="text-center">{t.studentGrades.classAverage}</TableHead>
                     </TableRow>
-                  ) : (
-                    currentSelectedGrades.map((grade, index) => (
-                      <TableRow key={index}>
-                        <TableCell className="font-medium">{grade.subject}</TableCell>
-                        <TableCell className="text-center">{grade.coefficient}</TableCell>
-                        <TableCell className="text-center">
-                          {grade.devoir1Note !== null ? `${grade.devoir1Note}/20` : '-'}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {grade.devoir2Note !== null ? `${grade.devoir2Note}/20` : '-'}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {grade.compositionNote !== null ? `${grade.compositionNote}/20` : '-'}
-                        </TableCell>
-                        <TableCell className="text-center font-semibold">
-                          {grade.average !== null ? `${grade.average.toFixed(2)}/20` : '-'}
-                        </TableCell>
-                        <TableCell className="text-center text-gray-600">
-                          {grade.classAvg !== null ? `${grade.classAvg.toFixed(2)}/20` : '-'}
+                  </TableHeader>
+                  <TableBody>
+                    {currentSelectedGrades.length === 0 && allMatiere.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                          {selectedTerm === t.common.noDataAvailable
+                            ? t.reports.noStudentOrGradeHint
+                            : `${t.reports.noStudentOrGrade} ${selectedTerm}.`}
                         </TableCell>
                       </TableRow>
-                    ))
+                    ) : (
+                      currentSelectedGrades.map((grade, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">{grade.subject}</TableCell>
+                          <TableCell className="text-center">{grade.coefficient}</TableCell>
+                          <TableCell className="text-center">
+                            {grade.devoir1Note !== null ? `${grade.devoir1Note}/20` : '-'}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {grade.devoir2Note !== null ? `${grade.devoir2Note}/20` : '-'}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {grade.compositionNote !== null ? `${grade.compositionNote}/20` : '-'}
+                          </TableCell>
+                          <TableCell className="text-center font-semibold">
+                            {grade.average !== null ? `${grade.average.toFixed(2)}/20` : '-'}
+                          </TableCell>
+                          <TableCell className="text-center text-gray-600">
+                            {grade.classAvg !== null ? `${grade.classAvg.toFixed(2)}/20` : '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+        </TabsContent>
+
+        <TabsContent value="charts">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>{t.studentGrades.averageEvolutionTitle}</CardTitle>
+                <CardDescription>{t.studentGrades.averageEvolutionDesc}</CardDescription>
+              </CardHeader>
+              <CardContent className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  {progressData.length > 0 ? (
+                    <LineChart
+                      data={progressData}
+                      margin={{
+                        top: 20,
+                        right: 30,
+                        left: 20,
+                        bottom: 10,
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis domain={[0, 20]} />
+                      <Tooltip />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="moyenne"
+                        name={t.studentGrades.myAverage}
+                        stroke="#3b82f6"
+                        activeDot={{ r: 8 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="moyenneClasse"
+                        name={t.studentGrades.classAverage}
+                        stroke="#9ca3af"
+                      />
+                    </LineChart>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-gray-500">
+                      {t.studentGrades.noDataForEvolution}
+                    </div>
                   )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      </TabsContent>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
 
-      <TabsContent value="charts">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Évolution des moyennes</CardTitle>
-              <CardDescription>Progression sur les trimestres</CardDescription>
-            </CardHeader>
-            <CardContent className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                {progressData.length > 0 ? (
-                  <LineChart
-                    data={progressData}
-                    margin={{
-                      top: 20,
-                      right: 30,
-                      left: 20,
-                      bottom: 10,
-                    }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis domain={[0, 20]} />
-                    <Tooltip />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="moyenne"
-                      name="Ma moyenne"
-                      stroke="#3b82f6"
-                      activeDot={{ r: 8 }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="moyenneClasse"
-                      name="Moyenne classe"
-                      stroke="#9ca3af"
-                    />
-                  </LineChart>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-gray-500">
-                    Pas assez de données pour afficher l'évolution des moyennes.
-                  </div>
-                )}
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Comparaison par matière</CardTitle>
-              <CardDescription>Trimestre actuel</CardDescription>
-            </CardHeader>
-            <CardContent className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                {subjectComparisonData.length > 0 ? (
-                  <BarChart
-                    data={subjectComparisonData}
-                    margin={{
-                      top: 20,
-                      right: 30,
-                      left: 20,
-                      bottom: 10,
-                    }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis domain={[0, 20]} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar
-                      dataKey="moyenne"
-                      name="Ma moyenne"
-                      fill="#3b82f6"
-                    />
-                    <Bar
-                      dataKey="moyenneClasse"
-                      name="Moyenne classe"
-                      fill="#9ca3af"
-                    />
-                  </BarChart>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-gray-500">
-                    Aucune donnée de matière pour ce trimestre pour la comparaison.
-                  </div>
-                )}
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
-      </TabsContent>
-    </Tabs>
-  </div>
-);
+            <Card>
+              <CardHeader>
+                <CardTitle>{t.studentGrades.subjectComparisonTitle}</CardTitle>
+                <CardDescription>{t.studentGrades.subjectComparisonDesc}</CardDescription>
+              </CardHeader>
+              <CardContent className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  {subjectComparisonData.length > 0 ? (
+                    <BarChart
+                      data={subjectComparisonData}
+                      margin={{
+                        top: 20,
+                        right: 30,
+                        left: 20,
+                        bottom: 10,
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis domain={[0, 20]} />
+                      <Tooltip />
+                      <Legend />
+                      <Bar
+                        dataKey="moyenne"
+                        name={t.studentGrades.myAverage}
+                        fill="#3b82f6"
+                      />
+                      <Bar
+                        dataKey="moyenneClasse"
+                        name={t.studentGrades.classAverage}
+                        fill="#9ca3af"
+                      />
+                    </BarChart>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-gray-500">
+                      {t.studentGrades.noDataForComparison}
+                    </div>
+                  )}
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
 }
+
+export default StudentGrades;
