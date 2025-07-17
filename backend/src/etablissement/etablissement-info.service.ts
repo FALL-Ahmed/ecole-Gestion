@@ -22,7 +22,35 @@ export class EtablissementInfoService {
     }
     return info;
   }
+async getSchoolName(): Promise<string> {
+    try {
+      // On suppose qu'il n'y a qu'une seule ligne pour les informations de l'établissement.
+      const info = await this.findOne();
 
+      if (info?.schoolName) {
+        return info.schoolName;
+      }
+      
+      console.warn("Le nom de l'établissement n'a pas été trouvé. Utilisation d'une valeur par défaut.");
+      return "L'Administration Scolaire"; // Valeur par défaut
+    } catch (error) {
+      console.error("Erreur lors de la récupération du nom de l'établissement:", error);
+      return "L'Administration Scolaire"; // Valeur par défaut en cas d'erreur
+    }
+  }
+ 
+   /**
+   * Récupère le nom et le numéro de téléphone de l'école, optimisé pour les notifications.
+   * @returns Un objet contenant `schoolName` et `schoolPhone`.
+   */
+  async getNotificationDetails(): Promise<{ schoolName: string; schoolPhone: string | null }> {
+    const info = await this.findOne();
+    return {
+      schoolName: info?.schoolName || "L'Administration Scolaire",
+      schoolPhone: info?.phone || null,
+    };
+  }
+  
   async createOrUpdate(
     dto: CreateOrUpdateEtablissementInfoDto,
   ): Promise<EtablissementInfo> {

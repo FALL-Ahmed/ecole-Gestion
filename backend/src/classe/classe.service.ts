@@ -1,4 +1,3 @@
-// classe.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -39,6 +38,7 @@ export class ClasseService {
     niveau: Niveau;
     description?: string;
     anneeScolaireId: number;
+    frais_scolarite: number;
   }): Promise<Classe> {
     // Vérifier si l'année scolaire existe
     const anneeScolaire = await this.anneeScolaireRepository.findOneBy({ id: data.anneeScolaireId });
@@ -54,11 +54,22 @@ export class ClasseService {
     return this.classeRepository.save(newClasse);
   }
 
-  
+  async updateClasse(id: number, data: Partial<Classe>): Promise<Classe> {
+    await this.classeRepository.update(id, data);
+    return this.findById(id);
+  }
+
   async deleteClasse(id: number): Promise<void> {
     const result = await this.classeRepository.delete(id);
     if (result.affected === 0) {
       throw new NotFoundException(`Classe avec l'ID ${id} non trouvée pour suppression`);
     }
+  }
+
+  async findByAnneeScolaire(anneeScolaireId: number): Promise<Classe[]> {
+    return this.classeRepository.find({
+      where: { anneeScolaire: { id: anneeScolaireId } },
+      relations: ['anneeScolaire']
+    });
   }
 }

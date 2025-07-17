@@ -139,7 +139,204 @@ export default function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
   const [classes, setClasses] = useState<Classe[]>([]);
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
+const handlePrintClassStudents = async (classeId: number) => {
+  try {
+    // Récupération des informations de l'établissement
+    const establishmentResponse = await fetch(`${API_URL}/api/establishment-info`);
+    let schoolName = "Nom de l'École";
+    let schoolLogo = "";
 
+    if (establishmentResponse.ok) {
+      const establishmentData = await establishmentResponse.json();
+      schoolName = establishmentData.schoolName || schoolName;
+      schoolLogo = establishmentData.logoUrl || schoolLogo;
+    }
+
+    const selectedClass = classes.find(c => c.id === classeId);
+    const studentsInClass = inscriptions
+      .filter(insc => insc.classe.id === classeId && insc.utilisateur.role === 'eleve')
+      .sort((a, b) => a.utilisateur.nom.localeCompare(b.utilisateur.nom))
+      .map(insc => `${insc.utilisateur.nom} ${insc.utilisateur.prenom}`);
+
+    if (studentsInClass.length === 0) {
+      toast({
+        title: t.common.warning,
+        description: t.userManagement.noStudentsInClass,
+        variant: "default",
+      });
+      return;
+    }
+
+    const printWindow = window.open('', '', 'width=800,height=600');
+    if (printWindow) {
+      const currentDate = new Date();
+      const formattedDate = currentDate.toLocaleDateString('fr-FR', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Liste des Élèves - ${selectedClass?.nom}</title>
+            <style>
+              @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap');
+              
+              body { 
+                font-family: 'Montserrat', sans-serif; 
+                margin: 0;
+                padding: 0;
+                color: #333;
+                background-color: #f9f9f9;
+              }
+              
+              .page-container {
+                max-width: 800px;
+                margin: 40px auto;
+                padding: 30px;
+                background: white;
+                box-shadow: 0 0 20px rgba(0,0,0,0.05);
+                border-radius: 8px;
+              }
+              
+              .header {
+                text-align: center;
+                margin-bottom: 30px;
+                border-bottom: 2px solid #f0f0f0;
+                padding-bottom: 20px;
+              }
+              
+              .school-name {
+                font-size: 24px;
+                font-weight: 700;
+                color: #2c3e50;
+                margin-bottom: 5px;
+              }
+              
+              .document-title {
+                font-size: 20px;
+                font-weight: 600;
+                color: #3498db;
+                margin: 10px 0;
+              }
+              
+              .class-info {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 20px;
+                font-size: 14px;
+                color: #7f8c8d;
+              }
+              
+              .student-list {
+                width: 100%;
+                margin-top: 20px;
+                counter-reset: student-counter;
+              }
+              
+              .student-item {
+                padding: 12px 15px;
+                border-bottom: 1px solid #ecf0f1;
+                display: flex;
+                align-items: center;
+              }
+              
+              .student-item::before {
+                counter-increment: student-counter;
+                content: counter(student-counter) ".";
+                margin-right: 15px;
+                font-weight: 500;
+                color: #3498db;
+                min-width: 30px;
+              }
+              
+              .student-item:nth-child(even) {
+                background-color: #f8f9fa;
+              }
+              
+              .footer {
+                margin-top: 30px;
+                text-align: right;
+                font-size: 12px;
+                color: #95a5a6;
+                border-top: 1px solid #ecf0f1;
+                padding-top: 15px;
+              }
+              
+              .logo {
+                height: 60px;
+                margin-bottom: 15px;
+              }
+              
+              @media print {
+                body { 
+                  background: none;
+                  -webkit-print-color-adjust: exact;
+                }
+                
+                .page-container {
+                  box-shadow: none;
+                  margin: 0;
+                  padding: 10px;
+                }
+                
+                .no-print {
+                  display: none;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="page-container">
+              <div class="header">
+                ${schoolLogo ? `<img src="${schoolLogo}" alt="Logo" class="logo">` : ''}
+                <div class="school-name">${schoolName}</div>
+                <div class="document-title">Liste des Élèves</div>
+              </div>
+              
+              <div class="class-info">
+                <div><strong>Classe:</strong> ${selectedClass?.nom} (${selectedClass?.niveau})</div>
+                <div><strong>Date:</strong> ${formattedDate}</div>
+              </div>
+              
+              <div class="student-list">
+                ${studentsInClass.map(student => `
+                  <div class="student-item">${student}</div>
+                `).join('')}
+              </div>
+              
+              <div class="footer">
+                <div>Total élèves: ${studentsInClass.length}</div>
+                <div>Document généré le ${currentDate.toLocaleString()}</div>
+              </div>
+              
+              <button onclick="window.print()" class="no-print" style="
+                background: #3498db;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 4px;
+                cursor: pointer;
+                margin-top: 20px;
+                font-family: inherit;
+              ">Imprimer</button>
+            </div>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  } catch (error) {
+    console.error("Erreur lors de la génération du document:", error);
+    toast({
+      title: t.common.error,
+      description: t.userManagement.printError,
+      variant: "destructive",
+    });
+  }
+};
   useEffect(() => {
     const handleResize = () => {
       setWindowHeight(window.innerHeight);
@@ -217,7 +414,7 @@ export default function UserManagement() {
     actif: true,
   });
 
-  const [sortConfigUsers, setSortConfigUsers] = useState<{ key: keyof User; direction: 'ascending' | 'descending' } | null>(null);
+  const [sortConfigUsers, setSortConfigUsers] = useState<{ key: SortKey; direction: 'ascending' | 'descending' } | null>(null);
   const [sortConfigInscriptions, setSortConfigInscriptions] = useState<{ key: 'utilisateur' | 'classe' | 'annee_scolaire' | 'actif'; direction: 'ascending' | 'descending' } | null>(null);
 
   const { toast } = useToast();
@@ -490,7 +687,7 @@ export default function UserManagement() {
     }
   };
 
-  const requestSortUsers = (key: keyof User) => {
+  const requestSortUsers = (key: SortKey) => {
     let direction: 'ascending' | 'descending' = 'ascending';
     if (sortConfigUsers && sortConfigUsers.key === key && sortConfigUsers.direction === 'ascending') {
       direction = 'descending';
@@ -571,8 +768,10 @@ export default function UserManagement() {
     return sortableInscriptions;
   }, [inscriptions, sortConfigInscriptions]);
 
-  const [filterClasseId, setFilterClasseId] = useState<string>('');
-  const [filterAnneeId, setFilterAnneeId] = useState<string>('');
+  const [filterClasseId, setFilterClasseId] = useState<string>('all');
+  const [filterAnneeId, setFilterAnneeId] = useState<string>('all');
+
+
 
   const availableClassesForSelectedYear = useMemo(() => {
     if (!userFormData.annee_scolaire_id) {
@@ -1437,55 +1636,79 @@ onClick={() => setFilterRole(key as "all" | UserRole)}
 
           <Card className="border border-gray-200 dark:border-gray-700 shadow-sm">
             <CardHeader className="border-b border-gray-200 dark:border-gray-700">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <CardTitle className="text-lg text-gray-900 dark:text-white">
-                  {t.userManagement.registrationList}
-                </CardTitle>
-                <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-                  <div className="relative w-full sm:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
-                    <Input
-                      placeholder={t.userManagement.searchRegistrationPlaceholder}
-                      value={searchTermInscriptions}
-                      onChange={(e) => setSearchTermInscriptions(e.target.value)}
-                      className="pl-10 w-full focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                    />
-                  </div>
-                  <Select
-                    value={filterAnneeId}
-                    onValueChange={setFilterAnneeId}
-                  >
-                    <SelectTrigger className="w-44">
-                      <SelectValue placeholder={t.common.allYears} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t.common.allYears}</SelectItem>
-                      {academicYears.map((annee) => (
-                        <SelectItem key={annee.id} value={String(annee.id)}>
-                          {annee.libelle}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={filterClasseId}
-                    onValueChange={setFilterClasseId}
-                  >
-                    <SelectTrigger className="w-44">
-                      <SelectValue placeholder={t.common.allClasses} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t.common.allClasses}</SelectItem>
-                      {availableClassesForInscriptionFilter.map((classe) => (
-                        <SelectItem key={classe.id} value={String(classe.id)}>
-                          {classe.nom}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardHeader>
+  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <CardTitle className="text-lg text-gray-900 dark:text-white">
+      {t.userManagement.registrationList}
+    </CardTitle>
+    <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+      {/* Bouton d'impression ajouté ici */}
+      <Button
+  variant="outline"
+  onClick={() => {
+    if (filterClasseId && filterClasseId !== 'all') {
+      handlePrintClassStudents(parseInt(filterClasseId));
+    } else {
+      toast({
+        title: t.common.warning,
+        description: t.userManagement.selectClassFirst,
+        variant: "default",
+      });
+    }
+  }}
+  className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 dark:from-gray-700 dark:to-gray-800 dark:hover:from-gray-600 dark:hover:to-gray-700 border border-blue-200 dark:border-gray-600 text-blue-600 dark:text-blue-300 hover:text-blue-700 dark:hover:text-blue-200 shadow-sm"
+>
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+  </svg>
+  {t.userManagement.printClassList}
+</Button>
+      
+      <div className="relative w-full sm:w-64">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
+        <Input
+          placeholder={t.userManagement.searchRegistrationPlaceholder}
+          value={searchTermInscriptions}
+          onChange={(e) => setSearchTermInscriptions(e.target.value)}
+          className="pl-10 w-full focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+        />
+      </div>
+      <Select
+        value={filterAnneeId}
+        onValueChange={setFilterAnneeId}
+      >
+        <SelectTrigger className="w-44">
+          <SelectValue placeholder={t.common.allYears} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">{t.common.allYears}</SelectItem>
+          {academicYears.map((annee) => (
+            <SelectItem key={annee.id} value={String(annee.id)}>
+              {annee.libelle}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={filterClasseId}
+        onValueChange={setFilterClasseId}
+                disabled={filterAnneeId === 'all'}
+
+      >
+        <SelectTrigger className="w-44">
+          <SelectValue placeholder={t.common.allClasses} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">{t.common.allClasses}</SelectItem>
+          {availableClassesForInscriptionFilter.map((classe) => (
+            <SelectItem key={classe.id} value={String(classe.id)}>
+              {classe.nom}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  </div>
+</CardHeader>
             <CardContent className="p-0 max-h-[60vh] overflow-y-auto">
               {isLoadingInscriptions ? (
                 <div className="space-y-4 p-6">

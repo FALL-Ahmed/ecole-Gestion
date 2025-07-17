@@ -147,6 +147,7 @@
     outline-offset: 2px;
   }
 
+
   /* Sidebar */
   .sidebar {
     background-color: hsl(var(--sidebar-background));
@@ -244,6 +245,8 @@
   direction: rtl;
   text-align: right;
 }
+
+
 
 
 .ltr {

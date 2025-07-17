@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import {
+import { PrintableReport } from '@/components/PrintableReport';import {
   Card,
   CardContent,
   CardDescription,
@@ -14,6 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useLanguage } from '@/contexts/LanguageContext';
+
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -24,7 +26,11 @@ import { toast } from '@/hooks/use-toast';
 import { useEstablishmentInfo } from '@/contexts/EstablishmentInfoContext';
 import { useDebounce } from 'use-debounce';
 import ReactDOMServer from 'react-dom/server';
-import { useLanguage } from '@/contexts/LanguageContext';
+
+import {
+  calculateGeneralAverage,
+  termEvaluationMap
+} from '../../lib/grades';
 
 // Interfaces
 interface AnneeAcademique {
@@ -97,9 +103,25 @@ interface AbsenceAPI {
 
 interface Note {
   id: number;
-  evaluation: { id: number; matiere?: Matiere };
-  etudiant: { id: number; nom?: string; prenom?: string };
   note: number;
+  evaluation: {
+    id: number;
+    matiere_id: number;
+    matiere?: {
+      id: number;
+      nom: string;
+    };
+    type: 'Devoir' | 'Composition';
+    classe_id: number;
+    date_eval: string;
+    trimestre: number;
+    libelle?: string;
+  };
+  etudiant: {
+    id: number;
+    nom?: string;
+    prenom?: string;
+  };
 }
 
 interface EvaluationDetailBulletin {
@@ -114,7 +136,7 @@ interface MatiereDetailBulletin {
   coefficient: number;
   notesEvaluations: EvaluationDetailBulletin[];
   moyenneMatiere: number;
-  moyenneDevoirsPonderee?: number;
+  moyenneDevoirsPonderee?: number | null;
   appreciation: string;
 }
 
@@ -137,14 +159,12 @@ interface PrintableReportProps {
   selectedYear: string;
   dynamicEvaluationHeaders: string[];
   getMention: (m: number) => string;
-  t: (key: string) => string; // Ajoutez cette ligne
-
+  t: (key: string) => string;
 }
-// Configuration API
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const API_BASE_URL = `${API_URL}/api`;
 
-// Fonctions API optimisées
 const fetchData = async (url: string) => {
   try {
     const response = await fetch(url);
@@ -152,7 +172,7 @@ const fetchData = async (url: string) => {
     return await response.json();
   } catch (error) {
     console.error(`Error fetching data from ${url}:`, error);
-    throw error; // Laissez le composant gérer l'erreur et la traduction
+    throw error;
   }
 };
 
@@ -174,7 +194,6 @@ const fetchApiData = async (endpoint: string, params?: Record<string, string>) =
   }
 };
 
-// Fonctions API spécifiques
 const fetchAnneesAcademiques = () => fetchApiData('annees-academiques');
 
 const fetchClasses = async (anneeAcademiqueId: number) => {
@@ -184,8 +203,9 @@ const fetchClasses = async (anneeAcademiqueId: number) => {
 
 const fetchElevesByClasse = async (classeId: number, anneeScolaireId: number) => {
   const inscriptions = await fetchApiData('inscriptions', {
-    classeId: classeId.toString(),
-    anneeScolaireId: anneeScolaireId.toString()
+        classe_id: classeId.toString(),
+    annee_scolaire_id: anneeScolaireId.toString()
+  
   });
   return inscriptions
     .filter((inscription: any) => inscription.utilisateur?.role === 'eleve')
@@ -200,10 +220,9 @@ const fetchElevesByClasse = async (classeId: number, anneeScolaireId: number) =>
 
 const fetchMatieresAndCoefficientsByClasse = async (classeId: number) => {
   const coefficientClasses = await fetchData(
-    `${API_BASE_URL}/coefficientclasse?classeId=${classeId}`,
+    `${API_BASE_URL}/coefficientclasse?classe_id=${classeId}`,
   );
-  
-  // Utilisez un Set pour éliminer les doublons
+
   const uniqueMatieres = Array.from(new Set(
     coefficientClasses
       .map((cc: any) => cc.matiere?.id || cc.matiere_id)
@@ -212,7 +231,7 @@ const fetchMatieresAndCoefficientsByClasse = async (classeId: number) => {
 
   return {
     matieres: uniqueMatieres.map(id => {
-      const found = coefficientClasses.find((cc: any) => 
+      const found = coefficientClasses.find((cc: any) =>
         (cc.matiere?.id || cc.matiere_id) === id
       );
       return found?.matiere || { id, nom: 'Matière inconnue' };
@@ -226,17 +245,18 @@ const fetchMatieresAndCoefficientsByClasse = async (classeId: number) => {
   };
 };
 
-const fetchTrimestresByAnneeAcademique = (anneeAcademiqueId: number) => 
+const fetchTrimestresByAnneeAcademique = (anneeAcademiqueId: number) =>
   fetchApiData('trimestres', {
     anneeScolaireId: anneeAcademiqueId.toString()
   });
 
-const fetchEvaluationsForClassAndTerm = async (classeId: number, trimestreId: number, anneeScolaireId: number) => {
-  const data = await fetchApiData('evaluations', {
-    classeId: classeId.toString(),
-    trimestre: trimestreId.toString(),
-    anneeScolaireId: anneeScolaireId.toString()
-  });
+const fetchEvaluationsForClassAndYear = async (classeId: number, anneeScolaireId: number) => {
+  const params = {
+    classe_id: classeId.toString(),
+    annee_scolaire_id: anneeScolaireId.toString()
+  };
+
+  const data = await fetchApiData('evaluations', params);
   return data.map((evalItem: any) => ({
     id: evalItem.id,
     matiere_id: evalItem.matiere?.id || evalItem.matiere_id,
@@ -251,15 +271,58 @@ const fetchEvaluationsForClassAndTerm = async (classeId: number, trimestreId: nu
   }));
 };
 
-const fetchNotesForEvaluations = async (evaluationIds: number[], etudiantId?: number) => {
+const fetchNotesForEvaluations = async (evaluationIds: number[], etudiantId?: number): Promise<Note[]> => {
   if (evaluationIds.length === 0) return [];
-  const params: Record<string, string> = {
-    evaluationIds: evaluationIds.join(',')
-  };
-  if (etudiantId) {
-    params.etudiant_id = etudiantId.toString();
+
+  try {
+    const params = new URLSearchParams();
+    evaluationIds.forEach(id => params.append('evaluation_id', id.toString()));
+
+    if (etudiantId) {
+      params.append('etudiant_id', etudiantId.toString());
+    }
+
+    params.append('_expand', 'evaluation');
+    params.append('_expand', 'etudiant');
+
+    const url = `${API_BASE_URL}/notes?${params.toString()}`;
+    const response = await fetch(url);
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+    const data = await response.json();
+
+    return data.map((item: any) => {
+      const evalData = item.evaluation || {};
+      const studentData = item.etudiant || {};
+
+      return {
+        id: item.id,
+        note: parseFloat(item.note) || 0,
+        evaluation: {
+          id: evalData.id || item.evaluationId,
+          matiere_id: evalData.matiere_id || evalData.matiereId,
+          matiere: evalData.matiere ? {
+            id: evalData.matiere.id || evalData.matiere_id,
+            nom: evalData.matiere.nom || 'Inconnue'
+          } : undefined,
+          type: (evalData.type === 'Composition' ? 'Composition' : 'Devoir'),
+          classe_id: evalData.classe_id || evalData.classeId,
+          date_eval: evalData.date_eval || '',
+          trimestre: parseInt(evalData.trimestre) || 1,
+          libelle: evalData.libelle || `${evalData.type || 'Evaluation'} ${evalData.id || ''}`.trim()
+        },
+        etudiant: {
+          id: studentData.id || item.etudiantId,
+          nom: studentData.nom || 'Inconnu',
+          prenom: studentData.prenom || ''
+        }
+      };
+    });
+  } catch (error) {
+    console.error("Erreur lors de la récupération des notes:", error);
+    throw error;
   }
-  return fetchApiData('notes', params);
 };
 
 const fetchAbsencesForStudent = async (etudiantId: number, anneeScolaireId: number, dateDebut: string, dateFin: string) => {
@@ -271,287 +334,19 @@ const fetchAbsencesForStudent = async (etudiantId: number, anneeScolaireId: numb
     date_fin: dateFin
   });
 };
-const PrintableReport = React.forwardRef<
-  HTMLDivElement,
-  {
-    report: BulletinEleve | null,
-    establishmentInfo: { schoolName: string, address: string, phone?: string, website?: string },
-    selectedClass: string,
-    selectedTerm: string,
-    selectedYear: string,
-    dynamicEvaluationHeaders: string[],
-    getMention: (m: number) => string
+
+const calculateDurationInHours = (heureDebut?: string, heureFin?: string): number => {
+  if (!heureDebut || !heureFin) return 0;
+  try {
+    const [hD, mD] = heureDebut.split(':').map(Number);
+    const [hF, mF] = heureFin.split(':').map(Number);
+    const debutMinutes = hD * 60 + mD;
+    const finMinutes = hF * 60 + mF;
+    return finMinutes < debutMinutes ? 0 : (finMinutes - debutMinutes) / 60;
+  } catch {
+    return 0;
   }
->(({ report, establishmentInfo, selectedClass, selectedTerm, selectedYear, dynamicEvaluationHeaders, getMention }, ref) => {
-  if (!report) return null;
-
-  // Styles pour le mode paysage
-  const pageStyle: React.CSSProperties = {
-    width: '297mm', // Largeur de page A4 en paysage
-    height: '210mm', // Hauteur de page A4 en paysage
-    margin: '0 auto',
-    padding: '4mm',
-    boxSizing: 'border-box',
-    fontFamily: "'Times New Roman', serif",
-    fontSize: '10pt',
-    lineHeight: 1.3,
-    backgroundColor: 'white',
-    display: 'flex',
-    flexDirection: 'column'
-  };
-
-  const headerStyle: React.CSSProperties = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '10pt',
-    borderBottom: '1pt solid #000',
-    paddingBottom: '8pt'
-  };
-
-  const tableStyle: React.CSSProperties = {
-    width: '100%',
-    borderCollapse: 'collapse',
-    margin: '10pt 0',
-    fontSize: '9pt'
-  };
-
-  const cellStyle: React.CSSProperties = {
-    border: '1pt solid #000',
-    padding: '3pt',
-    textAlign: 'center'
-  };
-
-  const headerCellStyle: React.CSSProperties = {
-    ...cellStyle,
-    backgroundColor: '#f2f2f2',
-    fontWeight: 'bold'
-  };
-
-  return (
-    <div ref={ref} style={pageStyle}>
-      {/* En-tête */}
-      <div style={headerStyle}>
-        <div style={{ textAlign: 'left', width: '25%' }}>
-          <div style={{ fontWeight: 'bold' }}>République Islamique de Mauritanie</div>
-          <div>Ministère de l'Éducation Nationale</div>
-          <div>Direction des Examens et Concours</div>
-        </div>
-        
-        <div style={{ textAlign: 'center', width: '50%' }}>
-          <div style={{ 
-            fontWeight: 'bold', 
-            fontSize: '14pt', 
-            textDecoration: 'underline',
-            marginBottom: '4pt'
-          }}>
-            BULLETIN DE NOTES
-          </div>
-          <div>Année Scolaire: <strong>{selectedYear}</strong></div>
-          <div>Trimestre: <strong>{selectedTerm}</strong></div>
-        </div>
-        
-        <div style={{ textAlign: 'right', width: '25%', direction: 'rtl' }}>
-          <div style={{ fontWeight: 'bold' }}>الجمهورية الإسلامية الموريتانية</div>
-          <div>وزارة التهذيب الوطني</div>
-          <div>مديرية الامتحانات والمباريات</div>
-        </div>
-      </div>
-
-      {/* Informations élève - version compacte pour paysage */}
-      <div style={{ 
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '10pt',
-        marginBottom: '10pt',
-        fontSize: '10pt'
-      }}>
-        <div>
-          <div><strong>Établissement:</strong> {establishmentInfo.schoolName}</div>
-          <div><strong>Élève:</strong> {report.name}</div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div><strong>Classe:</strong> {selectedClass}</div>
-          <div>
-            <strong>Absences:</strong>{" "}
-            <span style={{ color: 'red' }}>{report.absencesNonJustifieesHeures ?? 0} h</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Tableau des notes - version compacte */}
-      <div style={{ overflow: 'hidden' }}>
-        <table style={tableStyle}>
-          <thead>
-            <tr>
-              <th style={{ ...headerCellStyle, width: '15%' }}>Matière</th>
-              <th style={{ ...headerCellStyle, width: '5%' }}>Coef</th>
-              
-              {/* En-têtes dynamiques plus compacts */}
-              {dynamicEvaluationHeaders
-                .filter(header => header.toLowerCase().includes('devoir'))
-                .map(header => (
-                  <th key={header} style={{ ...headerCellStyle, width: '6%' }}>
-                    {header.replace('Devoir', 'Devoir')}
-                  </th>
-                ))}
-              
-              {dynamicEvaluationHeaders.some(header => header.toLowerCase().includes('devoir')) && (
-                <th style={{ ...headerCellStyle, width: '6%' }}>Moy.Devoir*3</th>
-              )}
-              
-              {dynamicEvaluationHeaders
-                .filter(header => header.toLowerCase().includes('compo'))
-                .map(header => (
-                  <th key={header} style={{ ...headerCellStyle, width: '6%' }}>
-                    {header.replace('Composition', 'Comp')}
-                  </th>
-                ))}
-              
-              <th style={{ ...headerCellStyle, width: '7%' }}>M.Matière</th>
-              <th style={{ ...headerCellStyle, width: '15%' }}>Observation</th>
-            </tr>
-          </thead>
-          <tbody>
-            {report.notesParMatiere.map(matiere => (
-              <tr key={matiere.matiere}>
-                <td style={{ ...cellStyle, textAlign: 'left' }}>{matiere.matiere}</td>
-                <td style={cellStyle}>{matiere.coefficient}</td>
-                
-                {dynamicEvaluationHeaders
-                  .filter(header => header.toLowerCase().includes('devoir'))
-                  .map(header => {
-                    const note = matiere.notesEvaluations.find(n => n.libelle === header);
-                    return (
-                      <td key={`${matiere.matiere}-${header}`} style={cellStyle}>
-                        {note ? note.note : "-"}
-                      </td>
-                    );
-                  })}
-                
-                {dynamicEvaluationHeaders.some(header => header.toLowerCase().includes('devoir')) && (
-                  <td style={cellStyle}>
-                    {matiere.moyenneDevoirsPonderee?.toFixed(2) || '-'}
-                  </td>
-                )}
-                
-                {dynamicEvaluationHeaders
-                  .filter(header => header.toLowerCase().includes('compo'))
-                  .map(header => {
-                    const note = matiere.notesEvaluations.find(n => n.libelle === header);
-                    return (
-                      <td key={`${matiere.matiere}-${header}`} style={cellStyle}>
-                        {note ? note.note : "-"}
-                      </td>
-                    );
-                  })}
-                
-                <td style={{ ...cellStyle, fontWeight: 'bold' }}>
-                  {matiere.moyenneMatiere.toFixed(2)}
-                </td>
-                <td style={cellStyle}></td>
-              </tr>
-            ))}
-            
-            {/* Ligne des totaux */}
-            <tr style={{ fontWeight: 'bold' }}>
-              <td style={cellStyle}>Totaux</td>
-              <td style={cellStyle}>
-                {report.notesParMatiere.reduce((sum, matiere) => sum + matiere.coefficient, 0)}
-              </td>
-              <td style={cellStyle} colSpan={dynamicEvaluationHeaders.length + 1}></td>
-              <td style={cellStyle}>
-                {report.notesParMatiere
-                  .reduce((sum, matiere) => sum + (matiere.moyenneMatiere * matiere.coefficient), 0)
-                  .toFixed(2)}
-              </td>
-              <td style={cellStyle}></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      {/* Section inférieure avec appréciations et résultats */}
-      <div style={{ 
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '10pt',
-        marginTop: '20pt',
-        alignItems: 'start'
-      }}>
-        {/* Appréciations */}
-        <div style={{ 
-          display: 'grid',
-          gridTemplateRows: 'auto 1fr auto',
-          border: '1pt solid #000',
-          padding: '8pt',
-                    height: '80%'
-
-        }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '4pt' }}>
-            Appréciation du Conseil de Classe:
-          </div>
-          <div style={{ fontStyle: 'italic' }}>{report.teacherComment}</div>
-          <div style={{ textAlign: 'right', marginTop: '4pt', fontSize: '9pt' }}>
-            Signature du Professeur Principal
-          </div>
-        </div>
-
-        {/* Résultats finaux compacts */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          rowGap: '10pt',
-          columnGap: '8pt'
-        }}>
-          {[
-            { label: "Moyenne", value: `${report.avg}/20`, color: "blue" },
-            { label: "Rang", value: report.rank, color: "black" },
-            { label: "Mention", value: getMention(parseFloat(report.avg)), color: "darkblue" },
-            { 
-              label: "Décision", 
-              value: parseFloat(report.avg) >= 10 ? "Admis(e)" : "Non Admis(e)", 
-              color: parseFloat(report.avg) >= 10 ? "green" : "red" 
-            }
-          ].map((item, index) => (
-            <div key={index} style={{ 
-              border: '1pt solid #ddd',
-              borderRadius: '4pt',
-              padding: '6pt',
-              textAlign: 'center'
-            }}>
-              <div style={{ fontWeight: 'bold', marginBottom: '2pt', fontSize: '9pt' }}>{item.label}</div>
-              <div style={{ 
-                fontWeight: 'bold', 
-                fontSize: '11pt', 
-                color: item.color 
-              }}>
-                {item.value}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Pied de page compact */}
-      <div style={{ 
-        textAlign: 'center', 
-        fontSize: '8pt',
-        borderTop: '1pt solid #000',
-        paddingTop: '6pt',
-        marginTop: '30pt'
-      }}>
-        <div>Cachet et Signature de l'Administration</div>
-        <div style={{ marginTop: '2pt' }}>
-          {establishmentInfo.schoolName} - {establishmentInfo.address}
-          {establishmentInfo.phone && ` - Tél: ${establishmentInfo.phone}`}
-        </div>
-      </div>
-    </div>
-  );
-});
-
-PrintableReport.displayName = 'PrintableReport';
+};
 
 // Composant principal
 export function ReportManagement() {
@@ -559,13 +354,14 @@ export function ReportManagement() {
   const isRTL = language === 'ar';
   const { schoolName, address, phone, website } = useEstablishmentInfo();
   const getTranslatedTerm = (termName: string) => {
-  switch(termName) {
-    case 'Trimestre 1': return t.gradeManagement.term1;
-    case 'Trimestre 2': return t.gradeManagement.term2;
-    case 'Trimestre 3': return t.gradeManagement.term3;
-    default: return termName;
-  }
-};
+    switch (termName) {
+      case 'Trimestre 1': return t.gradeManagement.term1;
+      case 'Trimestre 2': return t.gradeManagement.term2;
+      case 'Trimestre 3': return t.gradeManagement.term3;
+      default: return termName;
+    }
+  };
+
   // États
   const [anneesAcademiques, setAnneesAcademiques] = useState<AnneeAcademique[]>([]);
   const [selectedAnneeAcademiqueId, setSelectedAnneeAcademiqueId] = useState<string>('');
@@ -586,7 +382,25 @@ export function ReportManagement() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [dynamicEvaluationHeaders, setDynamicEvaluationHeaders] = useState<string[]>([]);
 
-  // Chargement initial des années académiques
+  const getAppreciation = useCallback((moyenne: number): string => {
+    if (moyenne >= 16) return t.reportManagement.appreciations.excellent;
+    if (moyenne >= 14) return t.reportManagement.appreciations.veryGood;
+    if (moyenne >= 12) return t.reportManagement.appreciations.good;
+    if (moyenne >= 10) return t.reportManagement.appreciations.fair;
+    if (moyenne >= 8) return t.reportManagement.appreciations.encouragement;
+    return t.reportManagement.appreciations.warning;
+  }, [t]);
+
+  const getTeacherComment = useCallback((moyenne: number): string => {
+    if (moyenne >= 16) return t.reportManagement.comments.excellent;
+    if (moyenne >= 14) return t.reportManagement.comments.veryGood;
+    if (moyenne >= 12) return t.reportManagement.comments.good;
+    if (moyenne >= 10) return t.reportManagement.comments.fair;
+    if (moyenne >= 8) return t.reportManagement.comments.encouragement;
+    return t.reportManagement.comments.warning;
+  }, [t]);
+
+
   useEffect(() => {
     const loadAnneesAcademiques = async () => {
       const data = await fetchAnneesAcademiques();
@@ -595,7 +409,6 @@ export function ReportManagement() {
     loadAnneesAcademiques();
   }, []);
 
-  // Chargement des classes et trimestres quand l'année change
   useEffect(() => {
     const loadClassesAndTrimestres = async () => {
       const anneeId = parseInt(selectedAnneeAcademiqueId);
@@ -610,7 +423,7 @@ export function ReportManagement() {
 
         setTrimestres(trimestresData);
         setClasses(classesData);
-        
+
         if (!trimestresData.some(t => t.id.toString() === selectedTermId)) {
           setSelectedTermId('');
         }
@@ -627,7 +440,6 @@ export function ReportManagement() {
     loadClassesAndTrimestres();
   }, [selectedAnneeAcademiqueId]);
 
-  // Chargement des élèves et matières quand la classe change
   useEffect(() => {
     const loadElevesAndMatieres = async () => {
       const classIdNum = parseInt(selectedClassId);
@@ -654,194 +466,291 @@ export function ReportManagement() {
     loadElevesAndMatieres();
   }, [selectedClassId, selectedAnneeAcademiqueId]);
 
-  // Chargement des évaluations et notes quand le trimestre change
   useEffect(() => {
-    const loadEvaluationsAndNotes = async () => {
-      const classIdNum = parseInt(selectedClassId);
-      const anneeIdNum = parseInt(selectedAnneeAcademiqueId);
-      const termIdNum = parseInt(selectedTermId);
-      if (!classIdNum || !anneeIdNum || !termIdNum) return;
+  const loadEvaluationsAndNotes = async () => {
+    const classIdNum = parseInt(selectedClassId);
+    const anneeIdNum = parseInt(selectedAnneeAcademiqueId);
+    const currentTermId = parseInt(selectedTermId);
+    if (!classIdNum || !anneeIdNum || !currentTermId) return;
 
-      setIsLoading(true);
-      try {
-        const evaluationsData = await fetchEvaluationsForClassAndTerm(classIdNum, termIdNum, anneeIdNum);
-        setAllEvaluations(evaluationsData);
+    setIsLoading(true);
+    try {
+      // 1. Récupère toutes les évaluations de l'année
+      const allEvaluationsForYear = await fetchEvaluationsForClassAndYear(classIdNum, anneeIdNum);
 
-        // Générer les en-têtes dynamiques
-        const devoirLabels = Array.from(
-          new Set(
-            evaluationsData
-              .filter(e => e.type === 'Devoir')
-              .map(e => e.libelle)
-          )
-        ) as string[];
+      // 2. Filtre celles du trimestre sélectionné pour l'affichage et la génération des headers
+const currentTerm = trimestres.find(t => t.id === parseInt(selectedTermId));
+if (!currentTerm) return;
 
-        devoirLabels.sort((a, b) => {
-          const numA = parseInt(String(a).replace(/Devoir\s*/i, '')) || 0;
-          const numB = parseInt(String(b).replace(/Devoir\s*/i, '')) || 0;
-          return numA - numB;
-        });
+// Trouver le numéro du trimestre (1, 2 ou 3)
+const termNumber = parseInt(currentTerm.nom.replace('Trimestre ', ''));
 
-        const compositionLabels = Array.from(
-          new Set(
-            evaluationsData
-              .filter(e => e.type === 'Composition')
-              .map(e => e.libelle)
-          )
-        ) as string[];
+// Filtrer les évaluations pour le trimestre courant
+const evaluationsForCurrentTerm = allEvaluationsForYear.filter(e => {
+  return new Date(e.date_eval) >= new Date(currentTerm.date_debut) && 
+         new Date(e.date_eval) <= new Date(currentTerm.date_fin);
+});
+    setAllEvaluations(evaluationsForCurrentTerm);
 
-        compositionLabels.sort((a, b) => {
-          const numA = parseInt(String(a).replace(/Composition\s*/i, '')) || 0;
-          const numB = parseInt(String(b).replace(/Composition\s*/i, '')) || 0;
-          return numA - numB;
-        });
+      // 3. Récupère les notes pour TOUTES les évaluations de l'année pour permettre les calculs cumulatifs
+      const allEvaluationIdsForYear = allEvaluationsForYear.map(e => e.id);
+      const notesData = await fetchNotesForEvaluations(allEvaluationIdsForYear);
+      setAllNotes(notesData);
 
-        setDynamicEvaluationHeaders([...devoirLabels, ...compositionLabels]);
-
-        // Charger les notes
-        const evaluationIds = evaluationsData.map(e => e.id);
-        const notesData = await fetchNotesForEvaluations(evaluationIds);
-        setAllNotes(notesData);
-      } catch (error) {
-        console.error("Failed to load evaluations or notes:", error);
-      } finally {
-        setIsLoading(false);
+      // Mets à jour les headers dynamiques
+      const termConfig = termEvaluationMap[trimestres.find(t => t.id === currentTermId)?.nom as keyof typeof termEvaluationMap];
+      if (termConfig) {
+        setDynamicEvaluationHeaders([
+          termConfig.devoir1,
+          termConfig.devoir2,
+          termConfig.composition
+        ]);
       }
-    };
+    } catch (error) {
+      console.error("Failed to load evaluations or notes:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    loadEvaluationsAndNotes();
-  }, [selectedClassId, selectedTermId, selectedAnneeAcademiqueId]);
-
-  // Génération des bulletins
+  loadEvaluationsAndNotes();
+}, [selectedClassId, selectedAnneeAcademiqueId, selectedTermId, trimestres]);
+  // Nouvelle logique de calcul de moyenne inspirée de StudentGrades
   const generateBulletins = useCallback(async () => {
     const classIdNum = parseInt(selectedClassId);
     const anneeIdNum = parseInt(selectedAnneeAcademiqueId);
     const termIdNum = parseInt(selectedTermId);
+    // Trouver le trimestre actuellement sélectionné (T1, T2, T3)
+const currentTerm = trimestres.find(t => t.id === parseInt(selectedTermId));
+if (!currentTerm) return;
+
+// Obtenir l'année scolaire à partir du trimestre courant
+const currentYearId = currentTerm.anneeScolaire?.id || parseInt(selectedAnneeAcademiqueId);
+
+// Retrouver les 3 trimestres de la même année scolaire
+const term1 = trimestres.find(t =>
+  t.nom === 'Trimestre 1' && t.anneeScolaire?.id === currentYearId
+);
+const term2 = trimestres.find(t =>
+  t.nom === 'Trimestre 2' && t.anneeScolaire?.id === currentYearId
+);
+const term3 = trimestres.find(t =>
+  t.nom === 'Trimestre 3' && t.anneeScolaire?.id === currentYearId
+);
+
+
     if (!classIdNum || !anneeIdNum || !termIdNum) return;
 
     setIsLoading(true);
-    try {
-      const currentTrimestre = trimestres.find(t => t.id === termIdNum);
-      if (!currentTrimestre) return;
 
-      const calculateDurationInHours = (heureDebutStr?: string, heureFinStr?: string): number => {
-        if (!heureDebutStr || !heureFinStr) return 0;
-        try {
-          const [hD, mD] = heureDebutStr.split(':').map(Number);
-          const [hF, mF] = heureFinStr.split(':').map(Number);
-          const debutMinutes = hD * 60 + mD;
-          const finMinutes = hF * 60 + mF;
-          return finMinutes < debutMinutes ? 0 : (finMinutes - debutMinutes) / 60;
-        } catch {
-          return 0;
-        }
-      };
+    try {
+      const currentTerm = trimestres.find(t => t.id === termIdNum);
+      if (!currentTerm) return;
+
+      const termConfig = termEvaluationMap[currentTerm.nom as keyof typeof termEvaluationMap];
+      if (!termConfig) return;
 
       const bulletinsPromises = eleves.map(async (eleve) => {
         let totalHeuresAbsenceNonJustifiees = 0;
 
-        // Calculer les absences
-        const absencesEleve = await fetchAbsencesForStudent(
-          eleve.id, 
-          anneeIdNum, 
-          currentTrimestre.date_debut, 
-          currentTrimestre.date_fin
-        );
-        
-        absencesEleve.forEach(absence => {
-          if (!absence.justification) {
-            totalHeuresAbsenceNonJustifiees += calculateDurationInHours(absence.heure_debut, absence.heure_fin);
-          }
-        });
-
-        // Générer les détails par matière
-        const matieresDetails = await Promise.all(matieres.map(async (matiere) => {
-          const coefficient = coefficients.find(c => c.matiere_id === matiere.id)?.coefficient || 1;
-          const evaluationsForMatiere = allEvaluations.filter(e => e.matiere_id === matiere.id);
-          const eleveNotesForMatiere = allNotes.filter(note =>
-            note.etudiant.id === eleve.id &&
-            evaluationsForMatiere.some(evalItem => evalItem.id === note.evaluation.id)
+        try {
+          const absencesEleve = await fetchAbsencesForStudent(
+            eleve.id,
+            anneeIdNum,
+            currentTerm.date_debut,
+            currentTerm.date_fin
           );
 
-          // Récupérer les notes pour chaque évaluation
-          const notesEvaluations: EvaluationDetailBulletin[] = dynamicEvaluationHeaders.map(header => {
-            const evalItem = evaluationsForMatiere.find(e => e.libelle === header);
-            const note = eleveNotesForMatiere.find(n => n.evaluation.id === evalItem?.id);
-            return {
-              id: evalItem?.id || 0,
-              type: evalItem?.type || (header.toLowerCase().includes('compo') ? 'Composition' : 'Devoir'),
-              libelle: header,
-              note: note ? note.note : '00'
-            };
+          absencesEleve.forEach(absence => {
+            if (!absence.justifie) {
+              const heures = calculateDurationInHours(absence.heure_debut, absence.heure_fin);
+              totalHeuresAbsenceNonJustifiees += heures;
+            }
           });
+        } catch (error) {
+          console.error(`Error fetching absences for student ${eleve.id}:`, error);
+        }
 
-          // Calculer la moyenne
-          const devoirNotes = notesEvaluations
-            .filter(n => n.type === 'Devoir' && typeof n.note === 'number')
-            .map(n => n.note as number);
-          
-          const compositionNote = notesEvaluations
-            .find(n => n.type === 'Composition' && typeof n.note === 'number')?.note as number | undefined;
+        // Moyennes par matière, logique inspirée de StudentGrades
+        const matieresDetails = matieres.map((matiere) => {
+          const coefficient = coefficients.find(c => c.matiere_id === matiere.id)?.coefficient || 1;
 
-          const avgDevoirs = devoirNotes.length > 0 ? 
-            devoirNotes.reduce((sum, note) => sum + note, 0) / devoirNotes.length : 0;
-          
-          let moyenneMatiere = 0;
-          if (devoirNotes.length > 0 && compositionNote !== undefined) {
-            moyenneMatiere = (avgDevoirs * 3 + compositionNote) / 4;
-          } else if (devoirNotes.length > 0) {
-            moyenneMatiere = avgDevoirs;
-          } else if (compositionNote !== undefined) {
-            moyenneMatiere = compositionNote;
+          // Filtrer toutes les notes de l'élève, pour la matière et le trimestre courant
+         // Pour chaque matière...
+// Pour chaque matière...
+const notesForSubject = allNotes.filter(note =>
+  note.etudiant.id === eleve.id &&
+  note.evaluation.matiere_id === matiere.id
+);
+
+let devoir1Note: number | null = null;
+let devoir2Note: number | null = null;
+let compositionNote: number | null = null;
+
+notesForSubject.forEach(note => {
+  const evalType = note.evaluation.type.toLowerCase();
+  const evalLibelle = (note.evaluation.libelle || '').toLowerCase();
+  
+  // Matching flexible comme dans StudentGrades
+  if (evalType.includes('devoir')) {
+    if (evalLibelle.includes('1') || evalLibelle.includes(termConfig.devoir1.toLowerCase())) {
+      devoir1Note = note.note;
+    } else if (evalLibelle.includes('2') || evalLibelle.includes(termConfig.devoir2.toLowerCase())) {
+      devoir2Note = note.note;
+    }
+  } else if (evalType.includes('composition') || evalType.includes('compo')) {
+    compositionNote = note.note;
+  }
+});
+
+         // Fallback si pas trouvé par libellé
+if (devoir1Note === null) {
+  const devoirNotes = notesForSubject
+    .filter(n => n.evaluation.type.toLowerCase().includes('devoir'))
+    .map(n => n.note);
+  if (devoirNotes.length >= 2) {
+    devoir1Note = devoirNotes[0];
+    devoir2Note = devoirNotes[1];
+  }
+}
+
+if (compositionNote === null) {
+  const compoNote = notesForSubject
+    .find(n => n.evaluation.type.toLowerCase().includes('composition'));
+  if (compoNote) compositionNote = compoNote.note;
+}
+
+          // Calcul de la moyenne comme dans StudentGrades
+          let subjectAverage: number | null = null;
+          let weightedHomeworkAverage: number | null = null;
+
+          if (devoir1Note !== null && devoir2Note !== null && compositionNote !== null) {
+            const avgDevoirs = (devoir1Note + devoir2Note) / 2;
+            weightedHomeworkAverage = parseFloat(avgDevoirs.toFixed(2));
+
+            const currentTrimestreNumero = parseInt(currentTerm.nom.replace('Trimestre ', ''), 10);
+            if (currentTrimestreNumero === 1) {
+              subjectAverage = (avgDevoirs * 3 + compositionNote) / 4;
+            } else if (currentTrimestreNumero === 2) {
+              // Cherche la note de compo du T1
+            
+              let compoT1Note = null;
+              if (term1) {
+                const compoT1Note = allNotes.find(n =>
+  n.etudiant.id === eleve.id &&
+  n.evaluation.matiere_id === matiere.id &&
+  n.evaluation.trimestre === term1?.id &&
+  (n.evaluation.libelle || '').toLowerCase().includes(termEvaluationMap["Trimestre 1"].composition.toLowerCase())
+)?.note ?? null;
+
+               
+              }
+              if (compoT1Note !== null) {
+                subjectAverage = (avgDevoirs * 3 + compositionNote + compoT1Note) / 5;
+              }
+            } else if (currentTrimestreNumero === 3) {
+              // Cherche compo T1 et T2
+              
+              let compoT1Note = null, compoT2Note = null;
+              if (term1) {
+               const compoT1Note = allNotes.find(n =>
+  n.etudiant.id === eleve.id &&
+  n.evaluation.matiere_id === matiere.id &&
+  n.evaluation.trimestre === term1?.id &&
+  (n.evaluation.libelle || '').toLowerCase().includes(termEvaluationMap["Trimestre 1"].composition.toLowerCase())
+)?.note ?? null;
+
+              }
+              if (term2) {
+                const compoT2Eval = allNotes.find(n =>
+                  n.etudiant.id === eleve.id &&
+                  n.evaluation.matiere_id === matiere.id &&
+                  n.evaluation.trimestre === term2.id &&
+                  ((n.evaluation.libelle || '').toLowerCase() === termEvaluationMap["Trimestre 2"].composition.toLowerCase())
+                );
+                compoT2Note = compoT2Eval?.note ?? null;
+              }
+              if (compoT1Note !== null && compoT2Note !== null) {
+                subjectAverage = (avgDevoirs * 3 + compositionNote + compoT1Note + compoT2Note) / 6;
+              }
+            }
           }
 
           return {
             matiere: matiere.nom,
             coefficient,
-            notesEvaluations,
-            moyenneMatiere: parseFloat(moyenneMatiere.toFixed(2)),
-            moyenneDevoirsPonderee: parseFloat((avgDevoirs * 3).toFixed(2)),
-            appreciation: ""
+            notesEvaluations: [
+              {
+                id: 0,
+                type: 'Devoir',
+                libelle: termConfig.devoir1,
+                note: devoir1Note !== null ? devoir1Note : '00'
+              },
+              {
+                id: 0,
+                type: 'Devoir',
+                libelle: termConfig.devoir2,
+                note: devoir2Note !== null ? devoir2Note : '00'
+              },
+              {
+                id: 0,
+                type: 'Composition',
+                libelle: termConfig.composition,
+                note: compositionNote !== null ? compositionNote : '00'
+              }
+            ],
+            moyenneMatiere: subjectAverage !== null ? parseFloat(subjectAverage.toFixed(2)) : 0,
+            moyenneDevoirsPonderee: weightedHomeworkAverage, // This can be null
+            appreciation: getAppreciation(subjectAverage !== null ? subjectAverage : 0)
           };
-        }));
+        });
 
-        // Calculer la moyenne générale
-        const totalPoints = matieresDetails.reduce((sum, matiere) => 
-          sum + (matiere.moyenneMatiere * matiere.coefficient), 0);
-        const totalCoefficients = matieresDetails.reduce((sum, matiere) => 
-          sum + matiere.coefficient, 0);
-        const overallAvg = totalCoefficients > 0 ? totalPoints / totalCoefficients : 0;
+        // Moyenne générale pondérée
+        const overallAvg = calculateGeneralAverage(
+          matieresDetails.map(m => ({
+            finalAverage: m.moyenneMatiere,
+            coefficient: m.coefficient,
+            subjectName: m.matiere
+          }))
+        );
 
         return {
           id: eleve.id,
           name: `${eleve.prenom} ${eleve.nom}`,
-          avg: parseFloat(overallAvg.toFixed(2)).toString(),
-          rank: '', // Le classement sera calculé plus tard
-          teacherComment: "",
+          avg: overallAvg.toFixed(2),
+          rank: '',
+          teacherComment: getTeacherComment(overallAvg),
           principalComment: "",
           notesParMatiere: matieresDetails,
           absencesNonJustifieesHeures: parseFloat(totalHeuresAbsenceNonJustifiees.toFixed(1)),
           totalElevesClasse: eleves.length
-        };
+        } as BulletinEleve;
       });
 
       const generatedBulletins = await Promise.all(bulletinsPromises);
-      
-      // Calculer le classement
-      generatedBulletins.sort((a, b) => parseFloat(b.avg) - parseFloat(a.avg));
-      generatedBulletins.forEach((bulletin, index) => {
-        bulletin.rank = `${index + 1}/${generatedBulletins.length}`;
-      });
+      const validBulletins = generatedBulletins.filter(b => !isNaN(parseFloat(b.avg)));
 
-      setBulletins(generatedBulletins);
+      if (validBulletins.length > 0) {
+        validBulletins.sort((a, b) => parseFloat(b.avg) - parseFloat(a.avg));
+        validBulletins.forEach((bulletin, index) => {
+          bulletin.rank = `${index + 1}/${validBulletins.length}`;
+        });
+        setBulletins(validBulletins);
+      } else {
+        setBulletins([]);
+      }
     } catch (error) {
       console.error("Error generating bulletins:", error);
+      toast({
+        title: t.common.error,
+        description: t.reports.generationError,
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
-  }, [selectedClassId, selectedAnneeAcademiqueId, selectedTermId, eleves, matieres, coefficients, allEvaluations, allNotes, dynamicEvaluationHeaders, trimestres]);
+  }, [selectedClassId, selectedAnneeAcademiqueId, selectedTermId, eleves, matieres, coefficients, allNotes, trimestres, t]);
 
-  // Déclencher la génération des bulletins quand les données nécessaires sont disponibles
   useEffect(() => {
     generateBulletins();
   }, [generateBulletins]);
@@ -876,7 +785,7 @@ export function ReportManagement() {
             report={bulletin}
             establishmentInfo={{ schoolName, address, phone, website }}
             selectedClass={classes.find(c => c.id === parseInt(selectedClassId))?.nom || ''}
-  selectedTerm={getTranslatedTerm(trimestres.find(t => t.id === parseInt(selectedTermId))?.nom || '')}
+            selectedTerm={getTranslatedTerm(trimestres.find(t => t.id === parseInt(selectedTermId))?.nom || '')}
             selectedYear={anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId))?.libelle || ''}
             dynamicEvaluationHeaders={dynamicEvaluationHeaders}
             getMention={getMention}
@@ -942,59 +851,65 @@ export function ReportManagement() {
 
   const isFormComplete = selectedAnneeAcademiqueId && selectedClassId && selectedTermId;
 
- const printReportFromRow = (bulletin: BulletinEleve) => {
-  const printWindow = window.open('', '_blank');
-  if (printWindow) {
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Bulletin scolaire - ${bulletin.name}</title>
-        <meta charset="UTF-8">
-        <style>
-          @page {
-            size: A4 landscape;
-            margin: 15mm;
-          }
-          body {
-            font-family: 'Times New Roman', serif;
-            margin: 0;
-            padding: 0;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          .print-container {
-            width: 297mm;
-            height: 210mm;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="print-container">
-          ${ReactDOMServer.renderToString(
-            <PrintableReport
-              report={bulletin}
-              establishmentInfo={{ schoolName, address, phone, website }}
-              selectedClass={classes.find(c => c.id === parseInt(selectedClassId))?.nom || ''}
-              selectedTerm={trimestres.find(t => t.id === parseInt(selectedTermId))?.nom || ''}
-              selectedYear={anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId))?.libelle || ''}
-              dynamicEvaluationHeaders={dynamicEvaluationHeaders}
-              getMention={getMention}
-            />
-          )}
-        </div>
-        <script>
-          setTimeout(() => {
-            window.print();
-            window.close();
-          }, 300);
-        </script>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
-  }
-};
+  const printReportFromRow = (bulletin: BulletinEleve) => {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Bulletin scolaire - ${bulletin.name}</title>
+          <meta charset="UTF-8">
+          <style>
+            @page {
+              size: A4 landscape;
+              margin: 15mm;
+            }
+            body {
+              font-family: 'Times New Roman', serif;
+              margin: 0;
+              padding: 0;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .print-container {
+              width: 297mm;
+              height: 210mm;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-container">
+            ${ReactDOMServer.renderToString(
+              <PrintableReport
+                report={bulletin}
+                establishmentInfo={{ schoolName, address, phone, website }}
+                selectedClass={classes.find(c => c.id === parseInt(selectedClassId))?.nom || ''}
+                selectedTerm={trimestres.find(t => t.id === parseInt(selectedTermId))?.nom || ''}
+                selectedYear={anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId))?.libelle || ''}
+                dynamicEvaluationHeaders={dynamicEvaluationHeaders}
+                getMention={getMention}
+              />
+            )}
+          </div>
+          <script>
+            setTimeout(() => {
+              window.print();
+              window.close();
+            }, 300);
+          </script>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  };
+
+  // ... tout le code JSX du composant inchangé ...
+
+  // Place ici ton rendu (le code JSX principal) inchangé
+
+  
  return (
   <div className="p-6 bg-gray-50 dark:bg-gray-900" dir={isRTL ? 'rtl' : 'ltr'}>
     <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 border-b pb-4">
@@ -1323,7 +1238,7 @@ export function ReportManagement() {
                     <p><strong>{t.reportManagement.studentsCount}:</strong> {selectedReport.totalElevesClasse}</p>
                     <p>
                       <strong>{t.reportManagement.unjustifiedAbsences}:</strong>{" "}
-                      <span className="text-red-600">{selectedReport.absencesNonJustifieesHeures ?? 0} {t.common.hours}</span>
+                      <span className="text-red-600">{selectedReport.absencesNonJustifieesHeures ?? 0} {t.common.hourse}</span>
                     </p>
                   </div>
                 </div>
@@ -1407,7 +1322,7 @@ export function ReportManagement() {
                         
                         {dynamicEvaluationHeaders.some(header => header.toLowerCase().includes('devoir')) && (
                           <TableCell key={`${matiere.matiere}-moy-dev-pond`} className="text-center">
-                            {matiere.moyenneDevoirsPonderee !== undefined ? matiere.moyenneDevoirsPonderee.toFixed(2) : '-'}
+                            {matiere.moyenneDevoirsPonderee != null ? matiere.moyenneDevoirsPonderee.toFixed(2) : '-'}
                           </TableCell>
                         )}
                         

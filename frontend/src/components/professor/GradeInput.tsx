@@ -496,7 +496,7 @@ console.log('ERROR:', t.gradeInput.errorFetchingTerm(String(error)));
       };
 
       const token = localStorage.getItem('token');
-      const evalRes = await fetch(`${API_URL}/api/evaluation`, {
+      const evalRes = await fetch(`${API_URL}/api/evaluations`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

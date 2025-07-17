@@ -15,6 +15,7 @@ import { Statistics } from './admin/Statistics';
 import { Settings } from './admin/Settings';
 import { ChapterProgressMonitoring } from './admin/ChapterProgressMonitoring';
 import { AuditTrail } from './admin/AuditTrail';
+import { AccountingManagement } from './admin/comptability';
 
 // Importations des composants Professeur
 import { CourseMaterials } from './professor/CourseMaterials';
@@ -22,12 +23,14 @@ import { ProfessorAttendance } from './professor/ProfessorAttendance';
 import { ProfessorSchedule } from './professor/ProfessorSchedule';
 import { GradeInput } from './professor/GradeInput';
 import { ChapterPlanning } from './professor/ChapterPlanning';
+import { ProfessorGradeView } from './professor/ProfessorGradeView';
 
 // Importations des composants Élève
 import { StudentSchedule } from './student/StudentSchedule';
 import { StudentCourses } from './student/StudentCourse';
 import { StudentGrades } from './student/StudentGrades';
 import { StudentAttendance } from './student/StudentAttendance';
+import { SecuritySettings } from './professor/SecuritySettings';
 
 interface MainContentProps {
   activeSection: string;
@@ -62,6 +65,7 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
       case 'schedule': return <ScheduleManagement />;
       case 'attendance': return <AttendanceManagement />;
       case 'reports': return <ReportManagement />;
+      case 'comptabilite': return <AccountingManagement />;
       case 'stats': return <Statistics />;
       case 'historique': return <AuditTrail />;
       case 'settings': return <Settings />;
@@ -76,8 +80,9 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
       case 'dashboard': return <Dashboard />;
       case 'course-materials': return <CourseMaterials />;
       case 'schedule-view': return <ProfessorSchedule />;
-      case 'grades-input': return <GradeInput />;
+      case 'grades-input': return       <ProfessorGradeView />;
       case 'chapter-planning': return <ChapterPlanning />;
+      case 'settings': return <SecuritySettings />;
       default: return <Dashboard />;
     }
   };
@@ -90,6 +95,7 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
       case 'my-courses': return <StudentCourses />;
       case 'my-grades': return <StudentGrades key={user.id} userId={user.id} />;
       case 'my-attendance': return <StudentAttendance />;
+      case 'settings': return <SecuritySettings />;
       default: return <Dashboard />;
     }
   };

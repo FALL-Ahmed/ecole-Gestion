@@ -1,10 +1,13 @@
-import React, { useState, useEffect, ReactNode, useMemo } from "react";
+import React, { useState, useEffect, ReactNode, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, Users, Award, Calendar, User, ArrowRightIcon, SaveIcon, ClipboardListIcon, Pencil, Trash2 } from "lucide-react";
+import { Plus, Users, Award, Calendar, User, ArrowRightIcon, SaveIcon, ClipboardListIcon, Pencil, Trash2, Landmark, ChevronDown, Book } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { Input } from "@/components/ui/input";
+import { CheckedState } from "@radix-ui/react-checkbox";
+
+import { Eye, EyeOff } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,25 +17,76 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"; 
 import { useLanguage } from '@/contexts/LanguageContext';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 interface SchoolManagementProps {
   onNavigate: (sectionId: string) => void;
+}
+interface Classe {
+  id: string;
+  nom: string;
+  niveau?: string;
+  annee_scolaire_id: string;
+  frais_scolarite?: number;
+}
+
+interface Matiere {
+  id: string;
+  nom: string;
+}
+
+interface AnneeScolaire {
+  id: string;
+  libelle: string;
+  date_debut: string;
+  date_fin: string;
+}
+
+interface Coefficient {
+  id: number;
+  coefficient: number;
+  classe: Classe;
+  matiere: Matiere;
+}
+
+interface Affectation {
+  id: string;
+  professeur: { id: string; nom: string; prenom: string };
+  matiere: Matiere;
+  classe: Classe;
+  annee_scolaire: AnneeScolaire;
 }
 
 export default function SchoolManagement({ onNavigate }: SchoolManagementProps) {
   const { t, language } = useLanguage();
   const isRTL = language === 'ar';
   
+  const translateNiveau = useCallback((niveauToTranslate: string) => {
+    if (!niveauToTranslate) return t.common.unknown;
+    const lowerNiveau = niveauToTranslate.toLowerCase();
+    switch (lowerNiveau) {
+      case 'primaire': return t.schoolManagement.levels.primary;
+      case 'collège':
+      case 'college': return t.schoolManagement.levels.middle;
+      case 'lycée':
+      case 'lycee': return t.schoolManagement.levels.high;
+      default: return niveauToTranslate;
+    }
+  }, [t]);
+  
   const [activeTab, setActiveTab] = useState("annees");
   const [isAddClasseOpen, setIsAddClasseOpen] = useState(false);
   const [isAddCoeffOpen, setIsAddCoeffOpen] = useState(false);
   const [isAffectProfOpen, setIsAffectProfOpen] = useState(false);
   const [isAddAnneeOpen, setIsAddAnneeOpen] = useState(false);
-  const [affectations, setAffectations] = useState([]);
   const [filterProf, setFilterProf] = useState("");
   const [filterClasse, setFilterClasse] = useState("");
   const [filterAnnee, setFilterAnnee] = useState("");
-  const [coefficients, setCoefficients] = useState([]);
+    const [useActiveYearForCoeff, setUseActiveYearForCoeff] = useState(false);
+
+  const [coeffAnneeFilter, setCoeffAnneeFilter] = useState("");
   const [openAnnee, setOpenAnnee] = useState<string | null>(null);
   const [loadingTrimestres, setLoadingTrimestres] = useState(false);
   const [coeffData, setCoeffData] = useState<{ [matiereId: string]: number | '' }>({});
@@ -47,6 +101,7 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
   const [isDeleteAnneeDialogOpen, setIsDeleteAnneeDialogOpen] = useState(false);
   const [anneeToDelete, setAnneeToDelete] = useState<{ id: string; libelle: string } | null>(null);
   const [isEditCoeffDialogOpen, setIsEditCoeffDialogOpen] = useState(false);
+
   const [currentEditingCoeff, setCurrentEditingCoeff] = useState<{
     id: number;
     classeNom: string;
@@ -58,13 +113,22 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
 
   // Form states
   const [classeNom, setClasseNom] = useState("");
-  const [classeNiveau, setClasseNiveau] = useState("Primaire");
+  const [classeNiveau, setClasseNiveau] = useState("Collège");
+    const [fraisScolarite, setFraisScolarite] = useState<number | ''>('');
+
   const [coeffClasse, setCoeffClasse] = useState("");
   const [selectedMatieres, setSelectedMatieres] = useState<{ [id: string]: number }>({});
   const [coeffError, setCoeffError] = useState("");
   const [coeffMatiere, setCoeffMatiere] = useState("");
   const [coefficient, setCoefficient] = useState(1);
+  const [openClasses, setOpenClasses] = useState<Record<string, boolean>>({});
   const [affectProf, setAffectProf] = useState("");
+  const [classes, setClasses] = useState<Classe[]>([]);
+const [matieres, setMatieres] = useState<Matiere[]>([]);
+const [annees, setAnnees] = useState<AnneeScolaire[]>([]);
+const [profs, setProfs] = useState<{ id: string; nom: string; prenom: string; role: string }[]>([]);
+const [coefficients, setCoefficients] = useState<Coefficient[]>([]);
+const [affectations, setAffectations] = useState<Affectation[]>([]);
   const [affectMatiere, setAffectMatiere] = useState("");
   const [affectClasses, setAffectClasses] = useState<string[]>([]);
   const [affectAnnee, setAffectAnnee] = useState("");
@@ -79,6 +143,8 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
   const [trimestre2Fin, setTrimestre2Fin] = useState("");
   const [trimestre3Debut, setTrimestre3Debut] = useState("");
   const [trimestre3Fin, setTrimestre3Fin] = useState("");
+  const [openNiveaux, setOpenNiveaux] = useState<Record<string, boolean>>({});
+  
   const [openAnneeTrimestresId, setOpenAnneeTrimestresId] = useState<string | null>(null);
   const [trimestres, setTrimestres] = useState<{
     id: string;
@@ -93,10 +159,7 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
     };
   }[]>([]);
   const [successMsg, setSuccessMsg] = useState("");
-  const [classes, setClasses] = useState<{ id: string; nom: string; annee_scolaire_id: string }[]>([]);
-  const [matieres, setMatieres] = useState<{ id: string, nom: string }[]>([]);
-  const [annees, setAnnees] = useState<{ nom: ReactNode; date_fin: string; date_debut: string; id: string, libelle: string }[]>([]);
-  const [profs, setProfs] = useState<{ id: string, nom: string, prenom: string }[]>([]);
+ 
   const getRTLStyles = (isRTL: boolean) => ({
     direction: isRTL ? 'rtl' : 'ltr',
     textAlign: isRTL ? 'right' : 'left' as const,
@@ -129,10 +192,39 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
   useEffect(() => {
     if (isAddClasseOpen) {
       setClasseNom("");
-      setClasseNiveau("Primaire");
+      setClasseNiveau(t.schoolManagement.levels.middle);
       setAnneeScolaireId("");
+            setFraisScolarite('');
+
     }
-  }, [isAddClasseOpen]);
+  }, [isAddClasseOpen, t.schoolManagement.levels.middle]);
+ useEffect(() => {
+    if (useActiveYearForCoeff && currentConfiguredAcademicYearId) {
+      setCoeffAnneeFilter(currentConfiguredAcademicYearId);
+    } else if (!useActiveYearForCoeff) {
+      // When unchecking, clear the filter to force a manual selection
+      setCoeffAnneeFilter("");
+    }
+  }, [useActiveYearForCoeff, currentConfiguredAcademicYearId]);
+
+  const filteredClassesForCoeff = useMemo(() => {
+    if (!coeffAnneeFilter) {
+      // Retourne un tableau vide si aucune année n'est sélectionnée pour éviter d'afficher toutes les classes
+      return [];
+    }
+    return classes.filter(c => 
+      c.annee_scolaire_id?.toString() === coeffAnneeFilter
+    );
+  }, [classes, coeffAnneeFilter]);
+
+  const filteredCoefficients = useMemo(() => {
+    if (!coeffAnneeFilter) {
+      return coefficients;
+    }
+    return coefficients.filter(c => 
+      c.classe?.annee_scolaire_id?.toString() === coeffAnneeFilter
+    );
+  }, [coefficients, coeffAnneeFilter]);
 
   const classesForCoeffDialog = useMemo(() => {
     if (!currentConfiguredAcademicYearId) {
@@ -153,21 +245,29 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
     return `${startYear}-${endYear}`;
   };
 
-  const refreshCoefficients = () => {
-    fetch(`${API_URL}/api/coefficientclasse`)
-      .then(res => res.json())
-      .then(data => setCoefficients(data));
-  };
+const refreshCoefficients = useCallback(() => {
+  fetch(`${API_URL}/api/coefficientclasse?distinct=matiere_id,classe_id`)
+    .then(res => res.json())
+    .then(data => setCoefficients(data))
+    .catch(error => toast.error(error.message));
+}, [API_URL]);
+  const refreshClasses = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/classes`);
+      if (!res.ok) throw new Error(t.common.errorLoading as string);
+      const data = await res.json();
+      setClasses(data);
+    } catch (error: any) {
+      toast.error(error.message || t.common.errorLoading);
+    }
+  }, [API_URL, t]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         let res, data;
 
-        res = await fetch(`${API_URL}/api/classes`);
-        if (!res.ok) throw new Error(t.common.errorLoading);
-        data = await res.json();
-        setClasses(data);
+        await refreshClasses();
 
         res = await fetch(`${API_URL}/api/matieres`);
         if (!res.ok) throw new Error(t.common.errorLoading);
@@ -189,7 +289,7 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
         data = await res.json();
         setTrimestres(data);
 
-        res = await fetch(`${API_URL}/api/affectations`);
+        res = await fetch(`${API_URL}/api/affectations?_expand=professeur&_expand=matiere&_expand=classe&_expand=annee_scolaire`);
         if (!res.ok) throw new Error(t.common.errorLoading);
         data = await res.json();
         setAffectations(data);
@@ -217,7 +317,7 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
     };
 
     fetchData();
-  }, [t]);
+  }, [t, refreshCoefficients, refreshClasses]);
 
   function sortAnnees(annees) {
   const order = (annee) => {
@@ -232,32 +332,28 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
  function groupClassesByNiveauAndAnnee(classes: { id: string, nom: string, niveau?: string }[]) {
   const grouped: { [niveau: string]: { [annee: string]: { id: string, nom: string }[] } } = {};
 
-  const translateNiveau = (niveauToTranslate: string) => {
-    if (!niveauToTranslate) return t.common.unknown;
-    const lowerNiveau = niveauToTranslate.toLowerCase();
-    switch (lowerNiveau) {
-      case 'primaire': return t.schoolManagement.levels.primary;
-      case 'collège':
-      case 'college': return t.schoolManagement.levels.middle;
-      case 'lycée':
-      case 'lycee': return t.schoolManagement.levels.high;
-      default: return niveauToTranslate;
-    }
-  };
-
   classes.forEach(classe => {
     const niveau = translateNiveau(classe.niveau || t.common.unknown);
 
-    // Détermine l'affichage de l'année en arabe
     const match = classe.nom.match(/^(\d+)/);
     let annee = t.common.unknown;
     if (match) {
-      if (match[1] === "4") {
-        annee = "شهادة التعليم المتوسط";
-      } else if (match[1] === "7") {
-        annee = "بكالوريا";
+      if (isRTL) {
+        if (match[1] === "4") {
+          annee = "شهادة التعليم المتوسط";
+        } else if (match[1] === "7") {
+          annee = "بكالوريا";
+        } else {
+          annee = `السنة ${match[1]}`;
+        }
       } else {
-        annee = `السنة ${match[1]}`;
+        if (match[1] === "4") {
+          annee = "Brevet";
+        } else if (match[1] === "7") {
+          annee = "Terminale";
+        } else {
+          annee = `${match[1]}ème année`;
+        }
       }
     }
 
@@ -267,49 +363,38 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
   });
   return grouped;
 }
-  function groupCoefficientsByNiveauEtAnnee() {
-    const grouped = {};
-    coefficients.forEach(c => {
-      const nomClasse = c.classe?.nom || "";
-      const niveau = c.classe?.niveau || t.common.unknown;
-      const match = nomClasse.match(/^(\d+)/);
-      let annee = t.common.unknown;
-      if (match) {
-        if (match[1] === "4") {
-          annee = t.schoolManagement.classes.levelOptions[1];
-        } else if (match[1] === "7") {
-          annee = t.schoolManagement.classes.levelOptions[2];
-        } else {
-          annee = `${match[1]}ème année`;
-        }
-      }
-      if (!grouped[niveau]) grouped[niveau] = {};
-      if (!grouped[niveau][annee]) grouped[niveau][annee] = [];
-      grouped[niveau][annee].push(c);
-    });
-    return grouped;
-  }
+const groupCoefficientsByNiveauEtAnnee = () => {
+  const grouped: Record<string, Record<string, Coefficient[]>> = {};
+  
+  // Utiliser un Map pour suivre les combinaisons uniques matiere-coefficient par classe
+  const uniqueCoefficients = new Map<string, Coefficient>();
 
-  function groupCoefficientsByAnnee() {
-    const grouped = {};
-    coefficients.forEach(c => {
-      const nomClasse = c.classe?.nom || "";
-      const match = nomClasse.match(/^(\d+)/);
-      let annee = t.common.unknown;
-      if (match) {
-        if (match[1] === "4") {
-          annee = t.schoolManagement.classes.levelOptions[1];
-        } else if (match[1] === "7") {
-          annee = t.schoolManagement.classes.levelOptions[2];
-        } else {
-          annee = `${match[1]}ème année`;
-        }
-      }
-      if (!grouped[annee]) grouped[annee] = [];
-      grouped[annee].push(c);
-    });
-    return grouped;
-  }
+  filteredCoefficients.forEach(coeff => {
+    const key = `${coeff.classe.id}_${coeff.matiere.id}_${coeff.coefficient}`;
+    
+    // Si cette combinaison existe déjà, on passe au suivant
+    if (uniqueCoefficients.has(key)) return;
+    uniqueCoefficients.set(key, coeff);
+
+    const niveau = translateNiveau(coeff.classe?.niveau || t.common.unknown);
+    const match = coeff.classe.nom.match(/^(\d+)/);
+    let annee = t.common.unknown;
+    
+    if (match) {
+      annee = isRTL ? 
+        (match[1] === "4" ? "شهادة التعليم المتوسط" : 
+         match[1] === "7" ? "بكالوريا" : `السنة ${match[1]}`) :
+        (match[1] === "4" ? "Brevet" : 
+         match[1] === "7" ? "Terminale" : `${match[1]}ème année`);
+    }
+
+    if (!grouped[niveau]) grouped[niveau] = {};
+    if (!grouped[niveau][annee]) grouped[niveau][annee] = [];
+    grouped[niveau][annee].push(coeff);
+  });
+
+  return grouped;
+};
 
   const handleOpenEditCoefficientDialog = (coeffEntry: any) => {
     setCurrentEditingCoeff({
@@ -651,7 +736,7 @@ headers: {
           </TabsContent>
 
           {/* Coefficients Tab */}
-         <TabsContent value="coefficients">
+<TabsContent value="coefficients">
   <Card className="bg-white/90 dark:bg-gray-900/90 rounded-3xl shadow-xl border-2 border-blue-100 dark:border-blue-900">
     <CardHeader>
       <div className={`flex flex-col ${isRTL ? 'items-end' : 'items-start'} gap-2`}>
@@ -664,99 +749,155 @@ headers: {
         </p>
       </div>
     </CardHeader>
-              <CardContent>
-                <Button
-                  className="mb-8 bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg hover:scale-105 transition"
-                  onClick={() => setIsAddCoeffOpen(true)}
+    <CardContent>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+        <div className="w-full sm:w-auto space-y-2">
+          <div>
+            <Label htmlFor="coeff-annee-select" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t.schoolManagement.coefficients.filterByYear}
+            </Label>
+            <Select onValueChange={setCoeffAnneeFilter} value={coeffAnneeFilter}>
+              <SelectTrigger id="coeff-annee-select" className="mt-1 w-full sm:w-[250px]">
+                <SelectValue placeholder={t.schoolManagement.coefficients.selectYearPrompt} />
+              </SelectTrigger>
+              <SelectContent>
+                {annees.map((annee) => (
+                  <SelectItem key={annee.id} value={String(annee.id)}>
+                    {formatAcademicYearDisplay(annee)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center space-x-2">
+  <Checkbox 
+    id="use-active-year" 
+    checked={useActiveYearForCoeff}
+    onCheckedChange={(checked) => setUseActiveYearForCoeff(checked === true)}
+  />
+  <Label htmlFor="use-active-year">
+    {t.schoolManagement.coefficients.useActiveYear}
+  </Label>
+</div>
+        </div>
+
+        <Button
+          className="w-full sm:w-auto bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold shadow-lg hover:scale-105 transition"
+          onClick={() => setIsAddCoeffOpen(true)}
+          disabled={!currentConfiguredAcademicYearId}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          {t.schoolManagement.coefficients.addButton}
+        </Button>
+      </div>
+
+      {filteredCoefficients.length === 0 ? (
+        <div className="text-center py-10 text-gray-500 dark:text-gray-400 italic">
+          {coeffAnneeFilter 
+            ? t.schoolManagement.coefficients.noCoefficientsForYear
+            : t.schoolManagement.coefficients.selectYearPrompt}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {Object.entries(groupCoefficientsByNiveauEtAnnee()).map(([niveau, anneesData]) => {
+            const niveauxClasses = Object.entries(anneesData);
+            
+            return (
+              <div key={niveau} className="border rounded-lg overflow-hidden dark:border-gray-700">
+                <button
+                  className="w-full flex justify-between items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  onClick={() => setOpenNiveaux(prev => ({
+                    ...prev,
+                    [niveau]: !prev[niveau]
+                  }))}
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  {t.schoolManagement.coefficients.addButton}
-                </Button>
-                <div>
-                  {Object.keys(groupCoefficientsByNiveauEtAnnee()).length === 0 ? (
-                    <div className="text-gray-500 italic">{t.schoolManagement.coefficients.noCoefficients}</div>
-                  ) : (
-                    Object.entries(groupCoefficientsByNiveauEtAnnee()).map(([niveau, annees]) => (
-                      <div key={niveau} className="mb-10">
-                        <h3 className="text-xl font-bold text-blue-700 mb-4 capitalize flex items-center gap-2">
-                          <Users className="h-6 w-6" /> {niveau}
-                        </h3>
-                        {sortAnnees(annees).map(annee => (
-                          <div
-                            key={annee}
-                            className="mb-6 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 border border-blue-200 dark:border-blue-800 rounded-2xl shadow p-6 transition-all duration-300 hover:shadow-xl"
+                  <div className="flex items-center gap-3">
+                    <Users className="h-5 w-5 text-blue-500 dark:text-blue-400" />
+                    <span className="font-bold text-lg dark:text-white">{niveau}</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                      ({niveauxClasses.length} classes)
+                    </span>
+                  </div>
+                  <ChevronDown className={`h-5 w-5 transition-transform ${openNiveaux[niveau] ? 'rotate-180' : ''} text-gray-500`} />
+                </button>
+
+                {openNiveaux[niveau] && (
+                  <div className="p-4 pt-0 space-y-4">
+                    {niveauxClasses.map(([annee, coefficients]) => {
+                      // Créer un Map pour éliminer les doublons (même matière dans la même classe)
+                      const uniqueCoefficients = new Map<string, Coefficient>();
+                      coefficients.forEach(coeff => {
+                        const key = `${coeff.classe.id}_${coeff.matiere.id}`;
+                        if (!uniqueCoefficients.has(key)) {
+                          uniqueCoefficients.set(key, coeff);
+                        }
+                      });
+
+                      return (
+                        <div key={annee} className="border rounded-lg overflow-hidden dark:border-gray-600">
+                          <button
+                            className="w-full flex justify-between items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                            onClick={() => setOpenClasses(prev => ({
+                              ...prev,
+                              [annee]: !prev[annee]
+                            }))}
                           >
-                            <div className="flex items-center gap-3 mb-4">
-                              <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-200 text-lg font-bold shadow">
-                                <Calendar className="h-6 w-6" />
+                            <div className="flex items-center gap-3">
+                              <Book className="h-5 w-5 text-blue-400 dark:text-blue-300" />
+                              <span className="font-medium dark:text-gray-200">
+                                {annee} - {coefficients[0]?.classe?.nom}
                               </span>
-                              <span className="text-lg font-bold text-blue-900 dark:text-blue-100">
-                                {annee}
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                ({uniqueCoefficients.size} matières)
                               </span>
                             </div>
-                            <div>
-                              <button
-                                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-100 dark:bg-blue-800 text-blue-900 dark:text-blue-100 font-semibold shadow hover:bg-blue-200 dark:hover:bg-blue-900 transition mb-2"
-                                onClick={() => setOpenAnnee(openAnnee === niveau + annee ? null : niveau + annee)}
-                              >
-                                <Award className="h-5 w-5" />
-                                {openAnnee === niveau + annee ? t.common.hide : t.common.show}
-                                <span className="ml-2">{openAnnee === niveau + annee ? "▲" : "▼"}</span>
-                              </button>
-                              {openAnnee === niveau + annee && (
-                                <ul className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-2">
-                                  {(() => {
-                                    const classesForNiveauAnnee = groupClassesByNiveauAndAnnee(classes)[niveau]?.[annee] ?? [];
-                                    if (classesForNiveauAnnee.length === 0) return <span className="text-xs text-gray-400 italic">{t.common.noDataAvailable}</span>;
+                            <ChevronDown className={`h-5 w-5 transition-transform ${openClasses[annee] ? 'rotate-180' : ''} text-gray-500`} />
+                          </button>
 
-                                    const coefs = coefficients.filter(c =>
-                                      classesForNiveauAnnee.some(classe => classe.id === c.classe?.id)
-                                    );
-                                    if (coefs.length === 0) return <span className="text-xs text-gray-400 italic">{t.schoolManagement.coefficients.noCoefficients}</span>;
-
-                                    const matieresUniques = Array.from(
-                                      new Map(coefs.map(item => [item.matiere.id, item])).values()
-                                    );
-
-                                    return matieresUniques.map(c => (
-                                      <li
-                                        key={c.matiere.id}
-  className="flex flex-col items-start gap-2 px-4 py-3 rounded-2xl bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-700 shadow transition-all duration-300 hover:bg-blue-50 dark:hover:bg-blue-800 hover:shadow-lg"
->
-  <div className="flex items-center gap-2 mb-1 w-full"> {/* Ajout de w-full */}
-    <Award className="h-5 w-5 text-indigo-500 dark:text-indigo-300" />
-    <span className="font-semibold text-blue-900 dark:text-blue-100 text-base truncate flex-1"> {/* Ajout de truncate et flex-1 */}
-      {c.matiere.nom}
-    </span>
-  </div>
-                                        <span className="px-3 py-1 rounded-full bg-yellow-200 dark:bg-yellow-700 text-yellow-900 dark:text-yellow-100 text-xs font-bold shadow">
-                                          {t.schoolManagement.coefficients.coefficient}&nbsp;{c.coefficient}
+                          {openClasses[annee] && (
+                            <div className="p-3">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {Array.from(uniqueCoefficients.values()).map((coeff) => (
+                                  <div key={`${coeff.classe.id}_${coeff.matiere.id}`} className="p-3 border rounded-lg dark:border-gray-500">
+                                    <div className="flex justify-between items-start gap-2">
+                                      <div className="flex items-center gap-2 truncate">
+                                        <Award className="h-5 w-5 text-indigo-500 dark:text-indigo-400 flex-shrink-0" />
+                                        <span className="truncate dark:text-gray-300" title={coeff.matiere.nom}>
+                                          {coeff.matiere.nom}
                                         </span>
-                                        <div className="ml-auto flex items-center gap-1">
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="p-1 h-7 w-7 text-blue-600 hover:bg-blue-100 dark:text-blue-300 dark:hover:bg-blue-700"
-                                            onClick={(e) => { e.stopPropagation(); handleOpenEditCoefficientDialog(c); }}
-                                          >
-                                            <Pencil className="h-4 w-4" />
-                                          </Button>
-                                        </div>
-                                      </li>
-                                    ));
-                                  })()}
-                                </ul>
-                              )}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900 rounded-full text-xs font-bold whitespace-nowrap">
+                                          {coeff.coefficient}
+                                        </span>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-8 w-8 p-0"
+                                          onClick={() => handleOpenEditCoefficientDialog(coeff)}
+                                        >
+                                          <Pencil className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </CardContent>
+  </Card>
+</TabsContent>
 
           {/* Teacher Assignments Tab */}
           <TabsContent value="affectations">
@@ -842,29 +983,45 @@ headers: {
           );
         }
 
-        function groupAffectationsByProf(affectations) {
-          const grouped = {};
-          affectations.forEach(aff => {
-            const profId = aff.professeur?.id;
-          
-            if (!grouped[profId]) {
-              grouped[profId] = {
-                professeur: aff.professeur,
-                matieres: {},
-              };
-            }
-            const matiereId = aff.matiere?.id;
-            if (!grouped[profId].matieres[matiereId]) {
-              grouped[profId].matieres[matiereId] = {
-                matiere: aff.matiere,
-                classes: [],
-                annee: aff.annee_scolaire,
-              };
-            }
-            grouped[profId].matieres[matiereId].classes.push(aff.classe);
-          });
-          return grouped;
-        }
+        function groupAffectationsByProf(affectations: Affectation[]) {
+  const grouped: Record<string, {
+    professeur: { id: string; nom: string; prenom: string };
+    matieres: Record<string, {
+      matiere: Matiere;
+      classes: Classe[];
+      annee: AnneeScolaire;
+    }>;
+  }> = {};
+
+  affectations.forEach(aff => {
+    const profId = aff.professeur?.id;
+    if (!profId) return;
+
+    if (!grouped[profId]) {
+      grouped[profId] = {
+        professeur: aff.professeur,
+        matieres: {},
+      };
+    }
+
+    const matiereId = aff.matiere?.id;
+    if (!matiereId) return;
+
+    if (!grouped[profId].matieres[matiereId]) {
+      grouped[profId].matieres[matiereId] = {
+        matiere: aff.matiere,
+        classes: [],
+        annee: aff.annee_scolaire,
+      };
+    }
+
+    if (aff.classe) {
+      grouped[profId].matieres[matiereId].classes.push(aff.classe);
+    }
+  });
+
+  return grouped;
+}
 
         const filteredAffectations = affectations.filter(aff =>
           (!filterProf || aff.professeur?.id == filterProf) &&
@@ -1115,8 +1272,20 @@ headers: {
                   "Content-Type": "application/json",
                   Authorization: `Bearer ${token}`,
                 },
-                                body: JSON.stringify({ nom: classeNom, niveau: classeNiveau, anneeScolaireId }),
+                                             body: JSON.stringify({ 
+                  nom: classeNom, 
+                  niveau: classeNiveau, 
+                  anneeScolaireId,
+                  frais_scolarite: Number(fraisScolarite) 
+                }),
               });
+
+              if (!res.ok) {
+                const errorData = await res.json().catch(() => ({ message: t.schoolManagement.classes.addDialog.errorAdd }));
+                toast.error(`${t.schoolManagement.classes.addDialog.errorAdd}: ${errorData.message || res.statusText}`);
+                return;
+              }
+
 
               const nouvelleClasse = await res.json();
 
@@ -1126,30 +1295,47 @@ headers: {
                 const prefixe = classeNom.match(/^\d+/)?.[0];
 
                 if (prefixe) {
-                  const classeExistante = classes.find(
-                    (c) => c.nom.startsWith(prefixe) && c.nom !== classeNom && c.annee_scolaire_id === anneeScolaireId
-                  );
+                 const classeExistante = classes.find(
+      (c) => 
+        c.nom.startsWith(prefixe) && 
+        c.nom !== classeNom && 
+        String(c.annee_scolaire_id) === String(anneeScolaireId)
+    );
 
                   if (classeExistante) {
-                    await fetch(`${API_URL}/api/coefficientclasse/clone`, {
+                    const cloneRes = await fetch(`${API_URL}/api/coefficientclasse/clone`, {
                       method: "POST",
-   headers: {
+                      headers: {
                         "Content-Type": "application/json",
                         Authorization: `Bearer ${token}`,
-                      },                      body: JSON.stringify({
-                        fromClasseId: classeExistante.id,
-                        toClasseId: nouvelleClasse.id,
+                      },
+                      body: JSON.stringify({
+                        fromClasseId: String(classeExistante.id),
+                        toClasseId: String(nouvelleClasse.id),
                       }),
                     });
 
-                    message = t.schoolManagement.classes.successAddWithCoefficients;
+                    if (cloneRes.ok) {
+                      message = t.schoolManagement.classes.successAddWithCoefficients;
+                      // Rafraîchir la liste des coefficients après le clonage réussi
+                      refreshCoefficients();
+                    } else {
+                      // Le clonage a échoué, mais la classe a été créée.
+                      // On informe l'utilisateur de l'échec partiel.
+                      const cloneError = await cloneRes.json().catch(() => ({ message: t.schoolManagement.coefficients.errorCloningUnknown }));
+                      toast.warning(`${t.schoolManagement.classes.successAdd} ${t.schoolManagement.coefficients.errorCloning}: ${cloneError.message}`);
+                      // Le message de succès reste celui de la création simple.
+                    }
                   }
                 }
               }
 
-              setClasses([...classes, nouvelleClasse]);
+              // Rafraîchit la liste complète des classes depuis le serveur pour refléter les changements.
+              await refreshClasses();
               setClasseNom("");
               setClasseNiveau("Primaire");
+                            setFraisScolarite('');
+
               setIsAddClasseOpen(false);
               
               toast.success(message);
@@ -1206,13 +1392,33 @@ headers: {
                   ))}
                 </select>
               </div>
+              <div className="space-y-3">
+                <label htmlFor="fraisScolarite" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                  Frais de scolarité (MRU) <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    id="fraisScolarite"
+                    type="number"
+                    value={fraisScolarite}
+                    onChange={(e) => setFraisScolarite(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white pl-11"
+                    placeholder="5000"
+                    required
+                    min="0"
+                  />
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Landmark className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+                  </div>
+                </div>
+              </div>
 
               <div className="space-y-3">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
                   {t.schoolManagement.classes.addDialog.levelLabel} <span className="text-red-500">*</span>
                 </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {t.schoolManagement.classes.levelOptions.map((niveau) => (
+                <div className="grid grid-cols-2 gap-3">
+                  {t.schoolManagement.classes.levelOptions.filter(niveau => niveau !== t.schoolManagement.levels.primary).map((niveau) => (
                     <button
                       key={niveau}
                       type="button"

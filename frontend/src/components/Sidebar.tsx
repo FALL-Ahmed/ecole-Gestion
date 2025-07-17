@@ -11,6 +11,7 @@ import {
   Settings,
   FileSpreadsheet,
   Upload,
+  Landmark,
   Clock,
   CheckSquare,
   School,
@@ -77,6 +78,7 @@ export function Sidebar({
           { id: "schedule", label: t.sidebar.schedule, icon: Calendar },
           { id: "attendance", label: t.sidebar.attendance, icon: UserCheck },
           { id: "reports", label: t.sidebar.reports, icon: FileSpreadsheet },
+          { id: "comptabilite", label: t.sidebar.accounting, icon: Landmark },
           { id: "chapter-monitoring", label: t.sidebar.chapterMonitoring, icon: CheckSquare },
           { id: "stats", label: t.sidebar.statistics, icon: BarChart3 },
           { id: "historique", label: "Historique", icon: History },
@@ -89,6 +91,8 @@ export function Sidebar({
           { id: "grades-input", label: t.sidebar.gradeEntry, icon: GraduationCap },
           { id: "course-materials", label: t.sidebar.courseMaterials, icon: Upload },
           { id: "chapter-planning", label: t.sidebar.chapterPlanning, icon: FileText },
+                    { id: "settings", label: t.sidebar.settings, icon: Settings },
+
         ];
       case "eleve":
         return [
@@ -97,6 +101,8 @@ export function Sidebar({
           { id: "my-courses", label: t.sidebar.myCourses, icon: BookOpen },
           { id: "my-grades", label: t.sidebar.myGrades, icon: GraduationCap },
           { id: "my-attendance", label: t.sidebar.myAttendance, icon: Clock },
+                    { id: "settings", label: t.sidebar.settings, icon: Settings },
+
         ];
       default:
         return commonItems;

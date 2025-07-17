@@ -772,66 +772,86 @@ export function StudentGrades({ userId }: StudentGradesProps) {
           });
 
           let subjectAverage: number | null = null;
-          if (devoir1Note !== null && devoir2Note !== null && compositionNote !== null) {
-            const avgDevoirs = (devoir1Note + devoir2Note) / 2;
-            const currentTrimestreNumero = parseInt(term.replace('Trimestre ', ''));
+          const devoirs = [devoir1Note, devoir2Note].filter(n => n !== null) as number[];
+          const avgDevoirs = devoirs.length > 0 ? devoirs.reduce((sum, note) => sum + note, 0) / devoirs.length : null;
 
-            if (currentTrimestreNumero === 1) {
-              subjectAverage = (avgDevoirs * 3 + compositionNote) / 4;
-            } else if (currentTrimestreNumero === 2) {
-              const term1Obj = allTrimestreObjects.find(t => 
-                t.nom === "Trimestre 1" && t.anneeScolaire?.id === studentAnneeScolaireId
+          const currentTrimestreNumero = parseInt(term.replace('Trimestre ', ''));
+
+          if (currentTrimestreNumero === 1) {
+            let somme = 0;
+            let poids = 0;
+            if (avgDevoirs !== null) {
+              somme += avgDevoirs * 3;
+              poids += 3;
+            }
+            if (compositionNote !== null) {
+              somme += compositionNote;
+              poids += 1;
+            }
+            subjectAverage = poids > 0 ? somme / poids : null;
+          } else if (currentTrimestreNumero === 2) {
+            const term1Obj = allTrimestreObjects.find(t =>
+              t.nom === "Trimestre 1" && t.anneeScolaire?.id === studentAnneeScolaireId
+            );
+            let compoT1Note: number | null = null;
+            if (term1Obj) {
+              const compoT1EvalType = termEvaluationMap["Trimestre 1"]?.composition;
+              const noteObj = allStudentNotes.find(n =>
+                n.evaluation?.matiere?.id === matiereId &&
+                n.evaluation?.trimestreId === term1Obj.id &&
+                n.evaluation?.type === compoT1EvalType
               );
-              if (term1Obj) {
-                const compoT1EvalType = termEvaluationMap["Trimestre 1"]?.composition;
-                const noteObj = allStudentNotes.find(n =>
-                  n.evaluation?.matiere?.id === matiereId &&
-                  n.evaluation?.trimestreId === term1Obj.id &&
-                  n.evaluation?.type === compoT1EvalType
-                );
-                const compoT1Note = noteObj ? noteObj.note : null;
-                
-                if (compoT1Note !== null) {
-                  subjectAverage = (avgDevoirs * 3 + compositionNote + compoT1Note) / 5;
-                }
-              }
-            } else if (currentTrimestreNumero === 3) {
-              const term1Obj = allTrimestreObjects.find(t => 
-                t.nom === "Trimestre 1" && t.anneeScolaire?.id === studentAnneeScolaireId
-              );
-              const term2Obj = allTrimestreObjects.find(t => 
-                t.nom === "Trimestre 2" && t.anneeScolaire?.id === studentAnneeScolaireId
-              );
-              
-              if (term1Obj && term2Obj) {
-                const compoT1EvalType = termEvaluationMap["Trimestre 1"]?.composition;
-                const compoT2EvalType = termEvaluationMap["Trimestre 2"]?.composition;
-                
-                const compoT1NoteObj = allStudentNotes.find(n =>
-                  n.evaluation?.matiere?.id === matiereId &&
-                  n.evaluation?.trimestreId === term1Obj.id &&
-                  n.evaluation?.type === compoT1EvalType
-                );
-                const compoT2NoteObj = allStudentNotes.find(n =>
-                  n.evaluation?.matiere?.id === matiereId &&
-                  n.evaluation?.trimestreId === term2Obj.id &&
-                  n.evaluation?.type === compoT2EvalType
-                );
-                
-                const compoT1Note = compoT1NoteObj ? compoT1NoteObj.note : null;
-                const compoT2Note = compoT2NoteObj ? compoT2NoteObj.note : null;
-                
-                if (compoT1Note !== null && compoT2Note !== null) {
-                  subjectAverage = (avgDevoirs * 3 + compositionNote + compoT1Note + compoT2Note) / 6;
-                }
-              }
+              compoT1Note = noteObj ? noteObj.note : null;
             }
 
-            if (subjectAverage !== null) {
-              subjectAverage = parseFloat(subjectAverage.toFixed(2));
-              totalWeightedTermScore += subjectAverage * subjectCoefficient;
-              totalCoefficientTerm += subjectCoefficient;
+            let somme = 0;
+            let poids = 0;
+            if (avgDevoirs !== null) { somme += avgDevoirs * 3; poids += 3; }
+            if (compositionNote !== null) { somme += compositionNote; poids += 1; }
+            if (compoT1Note !== null) { somme += compoT1Note; poids += 1; }
+            subjectAverage = poids > 0 ? somme / poids : null;
+
+          } else if (currentTrimestreNumero === 3) {
+            const term1Obj = allTrimestreObjects.find(t =>
+              t.nom === "Trimestre 1" && t.anneeScolaire?.id === studentAnneeScolaireId
+            );
+            const term2Obj = allTrimestreObjects.find(t =>
+              t.nom === "Trimestre 2" && t.anneeScolaire?.id === studentAnneeScolaireId
+            );
+            let compoT1Note: number | null = null, compoT2Note: number | null = null;
+
+            if (term1Obj) {
+              const compoT1EvalType = termEvaluationMap["Trimestre 1"]?.composition;
+              const compoT1NoteObj = allStudentNotes.find(n =>
+                n.evaluation?.matiere?.id === matiereId &&
+                n.evaluation?.trimestreId === term1Obj.id &&
+                n.evaluation?.type === compoT1EvalType
+              );
+              compoT1Note = compoT1NoteObj ? compoT1NoteObj.note : null;
             }
+            if (term2Obj) {
+              const compoT2EvalType = termEvaluationMap["Trimestre 2"]?.composition;
+              const compoT2NoteObj = allStudentNotes.find(n =>
+                n.evaluation?.matiere?.id === matiereId &&
+                n.evaluation?.trimestreId === term2Obj.id &&
+                n.evaluation?.type === compoT2EvalType
+              );
+              compoT2Note = compoT2NoteObj ? compoT2NoteObj.note : null;
+            }
+
+            let somme = 0;
+            let poids = 0;
+            if (avgDevoirs !== null) { somme += avgDevoirs * 3; poids += 3; }
+            if (compositionNote !== null) { somme += compositionNote; poids += 1; }
+            if (compoT1Note !== null) { somme += compoT1Note; poids += 1; }
+            if (compoT2Note !== null) { somme += compoT2Note; poids += 1; }
+            subjectAverage = poids > 0 ? somme / poids : null;
+          }
+
+          if (subjectAverage !== null) {
+            subjectAverage = parseFloat(subjectAverage.toFixed(2));
+            totalWeightedTermScore += subjectAverage * subjectCoefficient;
+            totalCoefficientTerm += subjectCoefficient;
           }
 
           gradesForCurrentTerm.push({

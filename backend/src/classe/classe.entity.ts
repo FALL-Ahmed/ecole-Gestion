@@ -34,6 +34,10 @@ export class Classe {
   @Column()
   annee_scolaire_id: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0.00, name: 'frais_scolarite' })
+  frais_scolarite: number; // CHAMP AJOUTÉ
+
+
   @ManyToOne(() => anneescolaire, (anneeScolaire) => anneeScolaire.classes)
   @JoinColumn({ name: 'annee_scolaire_id' })
   anneeScolaire: anneescolaire;

@@ -7,11 +7,11 @@ export class CoefficientClasse {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => Classe)
+  @ManyToOne(() => Classe, { eager: true })
   @JoinColumn({ name: "classe_id" })
   classe: Classe;
 
-  @ManyToOne(() => Matiere)
+  @ManyToOne(() => Matiere, { eager: true })
   @JoinColumn({ name: "matiere_id" })
   matiere: Matiere;
 

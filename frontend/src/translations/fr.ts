@@ -3,12 +3,21 @@ export default {
         hours: "Les horaires",
         hourse: "h",
         phone: "Tél",
+        loadError: "Erreur de chargement",
+  tutorPhone: "Téléphone du tuteur",
+        saveChanges: "Enregistrer les modifications",
+  professor: "Professeur",
+    studentList: "Liste des élèves",
         website: "Site",
         forLabel: "pour",
             today: "Aujourd'hui",
+            notProvided: "Non fourni",
+            currency: "MRU",
+
                 activeYearNotFound: "Aucune année active trouvée",
   isRTL: false,
-
+month: "Mois",
+  selectAMonth: "Sélectionnez un mois",
               subjectNotFound: "Matière non trouvée",
     tryAgainLater: "Veuillez réessayer ou contacter l'administrateur",
 teachersOnly: "Réservé aux professeurs",
@@ -178,11 +187,114 @@ missingFields: "Champs manquants",
     selectYearPrompt: "Veuillez sélectionner une année scolaire pour commencer"
   
     },
+    months: {
+  october: "Octobre",
+  november: "Novembre",
+  december: "Décembre",
+  january: "Janvier",
+  february: "Février",
+  march: "Mars",
+  april: "Avril",
+  may: "Mai",
+  june: "Juin",
+},
+
+    apiErrors: {
+  default: "Une erreur est survenue. Veuillez réessayer.",
+  status: {
+    400: "Requête invalide.",
+    401: "Non autorisé. Veuillez vous connecter.",
+    403: "Accès refusé.",
+    404: "Ressource non trouvée.",
+    500: "Erreur interne du serveur.",
+  },
+},
+accounting: {
+  management: "Gestion Comptable",
+  notify: "Notifier",
+  notificationSent: "Notification envoyée au tuteur de",
+
+  form: {
+    title: "Formulaire de paiement",
+    submit: "Enregistrer",
+    cancel: "Annuler",
+    paymentFor: "Paiement pour",
+    montant: "Montant payé",
+    mois: "Mois",
+    eleve: "Élève",
+    statut: "Statut",
+    total: "Total attendu",
+    paid: "Montant payé",
+    remaining: "Reste à payer"
+  },
+  addPayment: "Ajouter un paiement",
+  inDevelopment: "Cette section est en cours de développement.",
+  soonAvailable: "La fonctionnalité de comptabilité sera bientôt disponible ici.",
+  title: "Gestion des Paiements",
+  filters: {
+    title: "Filtres de recherche",
+    description: "Sélectionnez une année et une classe pour afficher les paiements",
+    selectYear: "Sélectionnez une année scolaire",
+    selectClass: "Sélectionnez une classe",
+    searchStudent: "Rechercher un élève..."
+  },
+  // --- NOUVEAUX ÉLÉMENTS DU TABLEAU DE BORD ---
+  dashboard: {
+    totalExpected: "Total Attendu",
+    totalPaid: "Total Payé",
+    remainingToPay: "Reste à Payer",
+    overduePayments: "Paiements en Retard"
+  },
+  paymentTracking: "Suivi des Paiements Mensuels",
+  status: {
+    paid: "Payé",
+    partial: "Partiel",
+    unpaid: "Non Payé"
+  },
+  errors: {
+    loadYears: "Impossible de charger les années scolaires",
+    loadClasses: "Impossible de charger les classes",
+    loadPayments: "Impossible de charger les paiements",
+    sendReminder: "Échec de l'envoi de la notification au tuteur",
+    sendNotificationFailed: "Échec de l'envoi de la notification",
+
+    studentNotFound: "Élève introuvable", // Existing, but good to confirm
+    sendReminderFailed: "Échec de l'envoi de la notification au tuteur", // Existing, but good to confirm
+    tutorNotFoundOrNoPhone: "Tuteur introuvable ou numéro de téléphone manquant.", // Added for specific reminder error
+    loadStudents: "Une erreur est survenue lors du chargement des données des élèves. Veuillez réessayer plus tard.",
+    updatePayment: "Échec de la mise à jour du paiement"
+  },
+  success: {
+    paymentUpdated: "Paiement mis à jour avec succès",
+    notificationSent: (prenom: string, nom: string) => `Notification envoyée au tuteur de ${prenom} ${nom}.`, // Changed to notificationSent for clarity
+  },
+  tooltips: {
+    managePayment: "Gérer les paiements de l'élève",
+    sendReminder: "Envoyer un rappel de paiement via WhatsApp",
+  },
+  noStudentsFound: "Aucun élève trouvé",
+  noStudentsInClass: "Aucun élève dans cette classe",
+  selectClassPrompt: "Veuillez sélectionner une classe pour afficher les paiements",
+  months: {
+    october: "Octobre",
+    november: "Novembre",
+    december: "Décembre",
+    january: "Janvier",
+    february: "Février",
+    march: "Mars",
+    april: "Avril",
+    may: "Mai",
+    june: "Juin"
+  }
+},
+
     sidebar: {
         dashboard: "Tableau de bord",
         userManagement: "Gestion des Utilisateurs",
         schoolManagement: "Gestion Scolaire",
         gradeManagement: "Gestion des Notes",
+            accounting: "Comptabilité",
+
         schedule: "Emploi du Temps", // Moved here from the error context for schedule
         attendance: "Gestion des Absences",
         reports: "Bulletins Scolaires",
@@ -349,6 +461,12 @@ missingFields: "Champs manquants",
     userManagement: {
         active: "Actif",
         inactive: "Inactif",
+            printError: "Erreur lors de la génération du document",
+
+         printClassList: "Imprimer la liste",
+    selectClassFirst: "Veuillez d'abord sélectionner une classe spécifique",
+    studentList: "Liste des élèves",
+    noStudentsInClass: "Aucun élève trouvé dans cette classe",
   noActiveRegistrationDesc: "L'élève n'est pas inscrit pour l'année scolaire active ou l'inscription n'a pas été trouvée",
   errorLoadingEnrollments: "Erreur lors du chargement des inscriptions",
   incompleteRegistration: "Les informations essentielles (classe, année, élève) sont manquantes dans l'inscription",
@@ -581,9 +699,25 @@ studentAttendance: {
             newAbsenceNotification: "Nouvelle absence enregistrée le {date} en {subject} ({time}).",
         },
     },
-    attendance: {
+attendance: {
         successSave: "La feuille de présence a été enregistrée avec succès.",
-
+professorAbsenceTitle: "Absences des Professeurs",
+professorAbsenceDescription: "Consultez et gérez les absences déclarées des membres du personnel enseignant.",
+selectUserType: "Sélectionnez le type d'utilisateur",
+  selectUserTypeDesc: "Choisissez entre la gestion des professeurs ou des élèves",
+  professorSection: "Gestion des professeurs",
+  studentSection: "Gestion des élèves",
+  professorAbsenceManagement: "Gestion des absences des professeurs",
+  professorAbsenceTracking: "Suivi des absences des professeurs",
+   markAbsencesHere: "Marquez les absences ici",
+  noCoursesToday: "Aucun cours prévu aujourd’hui",
+  selectClassPrompt: "Veuillez sélectionner une classe",
+  noChanges: "Aucune modification à enregistrer",
+  errorSave: "Une erreur est survenue lors de l'enregistrement des absences",
+  absenceTitle: "Absences",
+  disciplineTitle: "Réclamations/Renvois",
+  recordComplaint: "Enregistrer une réclamation",
+  recordDismissal: "Enregistrer un renvoi",
         title: "Gestion des Présences et Absences",
         description: "Gérez les présences quotidiennes des élèves et suivez leurs absences.",
         tabs: {
@@ -625,6 +759,42 @@ studentAttendance: {
         noAbsenceFound: "Aucune absence trouvée pour les critères de recherche et l'année scolaire {year}.",
         pleaseSelectFilters: "Veuillez sélectionner une classe, une date de début et une date de fin pour visualiser les absences.",
     },
+    disciplinary: {
+      title: "Renvois & Réclamations",
+      description: "Gérer les renvois et les réclamations des élèves par classe.",
+      actionButton: "Renvoi / Réclamation",
+      modalTitle: "Nouvelle Réclamation/Renvoi",
+        noRecordsThisMonth: "Aucun incident disciplinaire enregistré ce mois-ci.",
+
+      modalDescription: "Veuillez saisir le motif pour l'élève sélectionné. Cette action sera enregistrée.",
+      reasonLabel: "Motif",
+      reasonPlaceholder: "Saisissez ici le motif détaillé...",
+      errorForm: "Veuillez sélectionner un élève et saisir un motif.",
+      errorSave: "Erreur lors de l'enregistrement.",
+      errorLoadYears: "Échec du chargement des années académiques.",
+  errorLoadClasses: "Échec du chargement des classes.",
+  errorLoadStudents: "Échec du chargement des élèves.",
+whatsappMessage: "🔔 Notification disciplinaire 🔔\n\nÉlève: {student}\nMotif: {reason}\n\nVeuillez contacter l'administration.",
+  whatsappWarning: "Le message sera envoyé via WhatsApp au tuteur de l'élève.",
+  studentList: "Liste des élèves",
+  tutor: "Tuteur",
+  whatsappError: "Erreur lors de l'envoi du message WhatsApp.",
+  records: "Historique disciplinaire",
+  noRecords: "Aucun historique disciplinaire trouvé.",
+  recordsCount: "incident(s) disciplinaire(s)",
+  errorNoYear: "Aucune année académique sélectionnée.",
+  noClasses: "Aucune classe disponible pour cette année.",
+  noPhoneWarning: "Le numéro de téléphone du tuteur n'est pas disponible.",
+  notificationWillBeSent: "Une notification sera envoyée via WhatsApp au tuteur.",
+  reportButton: "Signaler",
+  noStudents: "Aucun élève trouvé pour la classe sélectionnée.",
+  reportFor: "Signaler pour",
+  notificationSentTo: "Notification envoyée à",
+      successSave: "L'enregistrement a été effectué avec succès, et une notification sera envoyée via WhatsApp au tuteur",
+      selectClassPrompt: "Veuillez sélectionner une classe pour voir la liste des élèves."
+    },
+
+    language: "Langue",
 
     audit: {
   title: "Historique des Actions",
@@ -643,6 +813,22 @@ studentAttendance: {
 },
      reportManagement: {
          exam: "Composition",
+         appreciations: {
+        excellent: "Excellent",
+        veryGood: "Très bien",
+        good: "Bien",
+        fair: "Assez bien",
+        encouragement: "Encouragements",
+        warning: "Avertissement"
+      },
+      comments: {
+        excellent: "Élève excellent, continuez ainsi !",
+        veryGood: "Très bon travail, peut encore progresser",
+        good: "Bon travail, quelques efforts supplémentaires",
+        fair: "Résultats corrects mais peut mieux faire",
+        encouragement: "Quelques difficultés mais capable de progresser",
+        warning: "Résultats insuffisants, besoin de travailler davantage"
+      },
         republic: "République Islamique de Mauritanie",
         educationMinistry: "Ministère de l'Éducation Nationale",
         examsDirection: "Direction des Examens et Concours",
@@ -696,6 +882,11 @@ studentAttendance: {
       printAllReports: "Imprimer tous les bulletins",
     noStudentFound: "Aucun élève correspondant à votre recherche",
         title: "Gestion des Bulletins Scolaires",
+         generationError: "Erreur lors de la génération des bulletins",
+      missingParameters: "Paramètres manquants pour générer les bulletins",
+      termNotFound: "Trimestre introuvable",
+      invalidTermConfig: "Configuration du trimestre invalide",
+      noValidReports: "Aucun bulletin valide généré",
         selectionTitle: "Sélection des Critères",
         noStudentsForClass: "Aucun élève n'a été trouvé pour la classe et l'année scolaire sélectionnées.",
     checkEnrollmentsHint: "Veuillez vérifier les inscriptions des élèves.",
@@ -1072,6 +1263,8 @@ checkOtherDays: "Vérifiez les autres jours",
                 description: "Remplissez les informations requises pour créer une nouvelle classe",
                 personalInfo: "INFORMATIONS PERSONNELLES",
                 nameLabel: "Nom de la classe",
+                      errorAdd: "Une erreur est survenue lors de l'ajout de la classe.",
+
                 namePlaceholder: "Ex: 3AS1, 4ème B, CP2...",
                 levelLabel: "Niveau scolaire",
                 selectYear: "Sélectionner une année scolaire",
@@ -1092,7 +1285,14 @@ checkOtherDays: "Vérifiez les autres jours",
             description: "Cliquez sur une classe pour voir ses matières et coefficients",
             addButton: "Ajouter un coefficient",
             coefficient: "Coefficient",
+            filterByYear: "Filtrer par année scolaire",
+    selectYearPrompt: "Veuillez sélectionner une année scolaire",
+     useActiveYear: "Utiliser l'année scolaire active",
+    noCoefficientsForYear: "Aucun coefficient trouvé pour cette année scolaire",
             noCoefficients: "Aucun coefficient",
+                errorLoading: "Une erreur est survenue lors du chargement des coefficients.",
+errorCloning: "Échec de la duplication des coefficients.",
+    errorCloningUnknown: "Une erreur inconnue est survenue lors de la duplication.",
             dialogTitle: "Gestion des Coefficients",
             dialogDescription: "Attribuez les coefficients par matière pour une classe",
             selectClassTitle: "Sélection de la classe",
@@ -1144,6 +1344,22 @@ checkOtherDays: "Vérifiez les autres jours",
             }
         }
     },
+
+  professorGradeView: {
+    title: "Gestion des Notes",
+    enterGrades: "Saisie des Notes",
+    modifyGrades: "Modification des Notes",
+    modifyGradesDescription: "Vous pouvez ajuster les notes ci-dessous, puis enregistrer les modifications une fois terminé.",
+
+    errors: {
+      updateFailed: "mises à jour de notes ont échoué."
+    },
+    success: {
+      gradesUpdated: "Notes mises à jour avec succès."
+    },
+    noEvaluations: "Aucune évaluation trouvée pour cette sélection. Veuillez d'abord saisir des notes via l'onglet 'Saisie'.",
+    selectFilters: "Veuillez sélectionner une classe, une matière et un trimestre pour voir et modifier les notes."
+  },
     settings: {
   title: "Paramètres",
   establishment: "Etablissement",

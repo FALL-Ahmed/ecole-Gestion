@@ -127,16 +127,16 @@ export function calculateSubjectAverage(
   let compositionNote: number | null = null;
 
   // Trouver les notes pour chaque type d'évaluation
-  studentNotes.forEach(note => {
-    const evaluationType = note.evaluation.type;
-    if (evaluationType === currentTermConfig.devoir1) {
-      devoir1Note = note.note;
-    } else if (evaluationType === currentTermConfig.devoir2) {
-      devoir2Note = note.note;
-    } else if (evaluationType === currentTermConfig.composition) {
-      compositionNote = note.note;
-    }
-  });
+ studentNotes.forEach(note => {
+  const evaluationLibelle = note.evaluation.libelle || note.evaluation.type;
+  if (evaluationLibelle === currentTermConfig.devoir1) {
+    devoir1Note = note.note;
+  } else if (evaluationLibelle === currentTermConfig.devoir2) {
+    devoir2Note = note.note;
+  } else if (evaluationLibelle === currentTermConfig.composition) {
+    compositionNote = note.note;
+  }
+});
 
   // Si toutes les notes ne sont pas disponibles, retourner 0
   if (devoir1Note === null || devoir2Note === null || compositionNote === null) {
