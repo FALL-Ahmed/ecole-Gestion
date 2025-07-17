@@ -494,7 +494,7 @@ export function AccountingManagement() {
             </motion.div>
           )}
         </AnimatePresence>
-        <DialogContent className="dark:bg-gray-800 dark:text-white">
+        <DialogContent className="dark:bg-gray-900 dark:text-white">
           {currentPayment && (
             <PaymentForm
               payment={currentPayment}
