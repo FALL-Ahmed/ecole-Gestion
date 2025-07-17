@@ -11,9 +11,11 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useApi } from '@/hooks/use-api';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { PaymentForm } from '../PaymentForm';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = `${API_URL}/api`;
 
 // Types
 interface AnneeScolaire {
@@ -77,7 +79,6 @@ interface PaiementResponse {
 
 export function AccountingManagement() {
   const { t, language } = useLanguage();
-  const api = useApi();
   const [anneesScolaires, setAnneesScolaires] = useState<AnneeScolaire[]>([]);
   const [classes, setClasses] = useState<Classe[]>([]);
   const [eleves, setEleves] = useState<Eleve[]>([]);
@@ -90,6 +91,35 @@ export function AccountingManagement() {
   const [reminderLoading, setReminderLoading] = useState<{ [key: string]: boolean }>({});
   const [remindersSent, setRemindersSent] = useState<{ [key: string]: boolean }>({});
   const [currentDate, setCurrentDate] = useState('');
+  const [isLoading, setIsLoading] = useState({
+    annees: false,
+    classes: false,
+    eleves: false,
+    paiements: false
+  });
+
+  // Helper function for API calls
+  const fetchData = async (url: string, options?: RequestInit) => {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Fetch error:', error);
+      throw error;
+    }
+  };
 
   useEffect(() => {
     const today = new Date();
@@ -97,7 +127,6 @@ export function AccountingManagement() {
     const formattedDate = format(today, 'EEEE, d MMMM yyyy', { locale });
     setCurrentDate(formattedDate);
 
-    // Load reminders from localStorage
     const savedReminders = localStorage.getItem('remindersSent');
     if (savedReminders) {
       setRemindersSent(JSON.parse(savedReminders));
@@ -116,7 +145,9 @@ export function AccountingManagement() {
         });
         return;
       }
-      await api.get(`paiements/envoyer-rappel?eleveId=${eleveId}&mois=${mois}`);
+      
+      await fetchData(`${API_BASE_URL}/paiements/envoyer-rappel?eleveId=${eleveId}&mois=${mois}`);
+      
       toast({
         title: t.common.success,
         description: `${t.accounting.notificationSent} ${eleve.prenom} ${eleve.nom}`,
@@ -158,19 +189,23 @@ export function AccountingManagement() {
 
   useEffect(() => {
     const fetchAnnees = async () => {
+      setIsLoading(prev => ({ ...prev, annees: true }));
       try {
-        const data = await api.get<AnneeScolaire[]>('annees-academiques');
+        const data = await fetchData(`${API_BASE_URL}/annees-academiques`);
         setAnneesScolaires(data);
       } catch (error) {
+        console.error("Error fetching academic years:", error);
         toast({
           title: t.common.error,
           description: t.accounting.errors.loadYears,
           variant: "destructive"
         });
+      } finally {
+        setIsLoading(prev => ({ ...prev, annees: false }));
       }
     };
     fetchAnnees();
-  }, [api, t]);
+  }, [t]);
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -179,31 +214,39 @@ export function AccountingManagement() {
         setSelectedClasseId('');
         return;
       }
+      setIsLoading(prev => ({ ...prev, classes: true }));
       try {
-        const data = await api.get<Classe[]>(`classes?anneeScolaireId=${selectedAnneeId}`);
+        const data = await fetchData(`${API_BASE_URL}/classes?anneeScolaireId=${selectedAnneeId}`);
         setClasses(data);
       } catch (error) {
+        console.error("Error fetching classes:", error);
         toast({
           title: t.common.error,
           description: t.accounting.errors.loadClasses,
           variant: "destructive"
         });
+      } finally {
+        setIsLoading(prev => ({ ...prev, classes: false }));
       }
     };
     fetchClasses();
-  }, [selectedAnneeId, api, t]);
+  }, [selectedAnneeId, t]);
 
-  const fetchData = useCallback(async () => {
+  const fetchStudentsAndPayments = useCallback(async () => {
     if (!selectedClasseId || !selectedAnneeId) {
       setEleves([]);
       setPaiements([]);
       return;
     }
+    setIsLoading(prev => ({ ...prev, eleves: true, paiements: true }));
     try {
-      const inscriptionsRes = await api.get<InscriptionResponse[]>(`inscriptions?classeId=${selectedClasseId}&anneeScolaireId=${selectedAnneeId}`);
+      const inscriptionsRes = await fetchData(
+        `${API_BASE_URL}/inscriptions?classeId=${selectedClasseId}&anneeScolaireId=${selectedAnneeId}`
+      );
+      
       const formattedElevesPromises = Array.isArray(inscriptionsRes)
         ? inscriptionsRes.map(async (ins: InscriptionResponse) => {
-          const userDetails = await api.get<any>(`users/${ins.utilisateur.id}`);
+          const userDetails = await fetchData(`${API_BASE_URL}/users/${ins.utilisateur.id}`);
           return {
             id: ins.utilisateur.id,
             nom: ins.utilisateur.nom,
@@ -216,11 +259,16 @@ export function AccountingManagement() {
           };
         })
         : [];
+      
       const formattedEleves = await Promise.all(formattedElevesPromises);
       setEleves(formattedEleves);
+      
       if (formattedEleves.length > 0) {
         try {
-          const paiementsRes = await api.get<PaiementResponse[]>(`paiements?classeId=${selectedClasseId}&anneeScolaireId=${selectedAnneeId}`);
+          const paiementsRes = await fetchData(
+            `${API_BASE_URL}/paiements?classeId=${selectedClasseId}&anneeScolaireId=${selectedAnneeId}`
+          );
+          
           const formattedPaiements: Paiement[] = Array.isArray(paiementsRes)
             ? paiementsRes.map((p: PaiementResponse) => ({
               ...p,
@@ -241,14 +289,21 @@ export function AccountingManagement() {
         setPaiements([]);
       }
     } catch (error) {
-      toast({ title: t.common.error, description: t.accounting.errors.loadStudents, variant: "destructive" });
+      console.error("Error fetching students:", error);
+      toast({ 
+        title: t.common.error, 
+        description: t.accounting.errors.loadStudents, 
+        variant: "destructive" 
+      });
       setEleves([]);
+    } finally {
+      setIsLoading(prev => ({ ...prev, eleves: false, paiements: false }));
     }
-  }, [selectedClasseId, selectedAnneeId, api, t]);
+  }, [selectedClasseId, selectedAnneeId, t]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchStudentsAndPayments();
+  }, [fetchStudentsAndPayments]);
 
   const handleOpenForm = (paiement?: Paiement, eleveId?: number, mois?: string) => {
     if (paiement) {
@@ -297,18 +352,27 @@ export function AccountingManagement() {
         montantVerse: parseFloat(String(formData.montantPaye)) || 0,
         montantOfficiel: parseFloat(String(formData.montantAttendu)) || 0,
       };
+      
       if (formData.id === 0) {
-        await api.post<PaiementResponse>('paiements/enregistrer', payload);
+        await fetchData(`${API_BASE_URL}/paiements/enregistrer`, {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
       } else {
-        await api.put<PaiementResponse>(`paiements/${formData.id}`, payload);
+        await fetchData(`${API_BASE_URL}/paiements/${formData.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload)
+        });
       }
+      
       toast({
         title: t.common.success,
         description: t.accounting.success.paymentUpdated
       });
       setIsFormOpen(false);
-      fetchData();
+      fetchStudentsAndPayments();
     } catch (error) {
+      console.error("Error saving payment:", error);
       toast({
         title: t.common.error,
         description: t.accounting.errors.updatePayment,
@@ -353,6 +417,7 @@ export function AccountingManagement() {
             <span>{currentDate}</span>
           </div>
         </motion.div>
+        
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -370,26 +435,40 @@ export function AccountingManagement() {
                   <SelectValue placeholder={t.accounting.filters.selectYear} />
                 </SelectTrigger>
                 <SelectContent className="dark:bg-gray-700 dark:text-white">
-                  {anneesScolaires.map(a => (
-                    <SelectItem key={a.id} value={String(a.id)}>{a.libelle}</SelectItem>
-                  ))}
+                  {isLoading.annees ? (
+                    <div className="flex justify-center p-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    </div>
+                  ) : (
+                    anneesScolaires.map(a => (
+                      <SelectItem key={a.id} value={String(a.id)}>{a.libelle}</SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
+              
               <Select
                 onValueChange={setSelectedClasseId}
                 value={selectedClasseId}
-                disabled={!selectedAnneeId}
+                disabled={!selectedAnneeId || isLoading.classes}
               >
                 <SelectTrigger className="w-full dark:bg-gray-700 dark:text-white">
                   <School className="h-4 w-4 mr-2" />
                   <SelectValue placeholder={t.accounting.filters.selectClass} />
                 </SelectTrigger>
                 <SelectContent className="dark:bg-gray-700 dark:text-white">
-                  {classes.map(c => (
-                    <SelectItem key={c.id} value={String(c.id)}>{c.nom}</SelectItem>
-                  ))}
+                  {isLoading.classes ? (
+                    <div className="flex justify-center p-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    </div>
+                  ) : (
+                    classes.map(c => (
+                      <SelectItem key={c.id} value={String(c.id)}>{c.nom}</SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
+              
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 dark:text-gray-400" />
                 <Input
@@ -403,6 +482,7 @@ export function AccountingManagement() {
             </CardContent>
           </Card>
         </motion.div>
+        
         <AnimatePresence>
           {selectedClasseId && (
             <motion.div
@@ -416,85 +496,92 @@ export function AccountingManagement() {
                   <CardTitle className="dark:text-white">{t.accounting.paymentTracking}</CardTitle>
                 </CardHeader>
                 <CardContent className="overflow-x-auto">
-                  <div className="w-full overflow-x-auto">
-                    <Table className="w-full">
-                      <TableHeader className="bg-gray-50 dark:bg-gray-700">
-                        <TableRow>
-                          <TableHead className="sticky left-0 bg-gray-50 dark:bg-gray-700 w-48 min-w-[192px] font-semibold dark:text-white">
-                            {t.common.student}
-                          </TableHead>
-                          {moisScolaires.map((mois) => (
-                            <TableHead key={mois.key} className="text-center font-semibold p-2 dark:text-white">
-                              {mois.display}
-                            </TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredEleves.length > 0 ? (
-                          filteredEleves.map((eleve, index) => (
-                            <motion.tr
-                              key={eleve.id}
-                              initial={{ opacity: 0, y: 20 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ duration: 0.3, delay: index * 0.1 }}
-                              className="hover:bg-gray-50 dark:hover:bg-gray-700"
-                            >
-                              <TableCell className="sticky left-0 bg-white dark:bg-gray-800 font-medium whitespace-nowrap w-48 min-w-[192px] dark:text-white">
-                                {`${eleve.prenom} ${eleve.nom}`}
-                              </TableCell>
-                              {moisScolaires.map(({ key: mois }) => {
-                                const paiement = paiements.find(p => p.eleveId === eleve.id && p.mois === mois);
-                                const isLoadingReminder = reminderLoading[`${eleve.id}-${mois}`];
-                                const isReminderSent = remindersSent[`${eleve.id}-${mois}`];
-                                return (
-                                  <TableCell key={mois} className="text-center p-2">
-                                    <div className="flex flex-col items-center justify-center gap-1">
-                                      <div className="cursor-pointer" onClick={() => handleOpenForm(paiement, eleve.id, mois)}>
-                                        {getStatusBadge(paiement?.statut || 'Non Payé')}
-                                      </div>
-                                      {eleve.tuteurTelephone && !isReminderSent && (
-                                        <motion.div whileHover={{ scale: 1.1 }}>
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="text-xs h-8 w-8 p-0 hover:bg-yellow-50 dark:hover:bg-gray-600 rounded-full"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleSendReminder(eleve.id, mois, paiement?.statut || 'Non Payé');
-                                            }}
-                                            disabled={isLoadingReminder}
-                                          >
-                                            {isLoadingReminder ? (
-                                              <Loader2 className="h-4 w-4 animate-spin" />
-                                            ) : (
-                                              <Bell className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-                                            )}
-                                          </Button>
-                                        </motion.div>
-                                      )}
-                                    </div>
-                                  </TableCell>
-                                );
-                              })}
-                            </motion.tr>
-                          ))
-                        ) : (
+                  {isLoading.eleves || isLoading.paiements ? (
+                    <div className="flex justify-center items-center h-64">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                    </div>
+                  ) : (
+                    <div className="w-full overflow-x-auto">
+                      <Table className="w-full">
+                        <TableHeader className="bg-gray-50 dark:bg-gray-700">
                           <TableRow>
-                            <TableCell colSpan={moisScolaires.length + 1} className="text-center py-8 dark:text-gray-400">
-                              {searchQuery ? t.accounting.noStudentsFound : t.accounting.noStudentsInClass}
-                            </TableCell>
+                            <TableHead className="sticky left-0 bg-gray-50 dark:bg-gray-700 w-48 min-w-[192px] font-semibold dark:text-white">
+                              {t.common.student}
+                            </TableHead>
+                            {moisScolaires.map((mois) => (
+                              <TableHead key={mois.key} className="text-center font-semibold p-2 dark:text-white">
+                                {mois.display}
+                              </TableHead>
+                            ))}
                           </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredEleves.length > 0 ? (
+                            filteredEleves.map((eleve, index) => (
+                              <motion.tr
+                                key={eleve.id}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.3, delay: index * 0.1 }}
+                                className="hover:bg-gray-50 dark:hover:bg-gray-700"
+                              >
+                                <TableCell className="sticky left-0 bg-white dark:bg-gray-800 font-medium whitespace-nowrap w-48 min-w-[192px] dark:text-white">
+                                  {`${eleve.prenom} ${eleve.nom}`}
+                                </TableCell>
+                                {moisScolaires.map(({ key: mois }) => {
+                                  const paiement = paiements.find(p => p.eleveId === eleve.id && p.mois === mois);
+                                  const isLoadingReminder = reminderLoading[`${eleve.id}-${mois}`];
+                                  const isReminderSent = remindersSent[`${eleve.id}-${mois}`];
+                                  return (
+                                    <TableCell key={mois} className="text-center p-2">
+                                      <div className="flex flex-col items-center justify-center gap-1">
+                                        <div className="cursor-pointer" onClick={() => handleOpenForm(paiement, eleve.id, mois)}>
+                                          {getStatusBadge(paiement?.statut || 'Non Payé')}
+                                        </div>
+                                        {eleve.tuteurTelephone && !isReminderSent && (
+                                          <motion.div whileHover={{ scale: 1.1 }}>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="text-xs h-8 w-8 p-0 hover:bg-yellow-50 dark:hover:bg-gray-600 rounded-full"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleSendReminder(eleve.id, mois, paiement?.statut || 'Non Payé');
+                                              }}
+                                              disabled={isLoadingReminder}
+                                            >
+                                              {isLoadingReminder ? (
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                              ) : (
+                                                <Bell className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+                                              )}
+                                            </Button>
+                                          </motion.div>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                  );
+                                })}
+                              </motion.tr>
+                            ))
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={moisScolaires.length + 1} className="text-center py-8 dark:text-gray-400">
+                                {searchQuery ? t.accounting.noStudentsFound : t.accounting.noStudentsInClass}
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
           )}
         </AnimatePresence>
-        <DialogContent className="dark:bg-gray-900 dark:text-white">
+        
+        <DialogContent className="dark:bg-gray-800 dark:text-white">
           {currentPayment && (
             <PaymentForm
               payment={currentPayment}
