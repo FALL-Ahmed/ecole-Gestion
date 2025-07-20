@@ -18,7 +18,14 @@ export class UsersController {
 
   @Post()
   async create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.createUser(createUserDto);
+    const { user, plainPassword, motDePasseParent } = await this.usersService.createUser(createUserDto);
+    
+    // Retourner les infos utilisateur + mot de passe en clair
+    return {
+      ...user,
+      plainPassword, // Mot de passe principal (pour tous les utilisateurs)
+      parentPassword: motDePasseParent // Mot de passe du parent (si élève)
+    };
   }
 
   @Patch(':id')

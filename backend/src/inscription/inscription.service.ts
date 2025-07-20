@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Scope } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Inscription } from './inscription.entity';
@@ -7,8 +7,7 @@ import { User } from '../users/user.entity';
 import { Classe } from '../classe/classe.entity';
 import { anneescolaire } from '../annee-academique/annee-academique.entity';
 import { UserRole } from '../users/user.entity'; // Assurez-vous que le chemin et la valeur de UserRole sont corrects
-
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class InscriptionService {
   constructor(
     @InjectRepository(Inscription)
@@ -81,6 +80,48 @@ export class InscriptionService {
         return queryBuilder.getMany();
 
   }
+
+  async update(id: number, updateDto: Partial<CreateInscriptionDto>): Promise<Inscription> {
+  const inscription = await this.inscriptionRepository.findOne({ 
+    where: { id },
+    relations: ['utilisateur', 'classe', 'annee_scolaire']
+  });
+  
+  if (!inscription) {
+    throw new NotFoundException(`Inscription avec l'ID ${id} introuvable.`);
+  }
+
+  // Mettre à jour les relations si elles sont fournies
+  if (updateDto.utilisateur_id) {
+    const utilisateur = await this.userRepository.findOne({ where: { id: updateDto.utilisateur_id } });
+    if (!utilisateur) throw new NotFoundException('Utilisateur non trouvé');
+    inscription.utilisateur = utilisateur;
+    inscription.utilisateurId = utilisateur.id;
+  }
+
+  if (updateDto.classe_id) {
+    const classe = await this.classeRepository.findOne({ where: { id: updateDto.classe_id } });
+    if (!classe) throw new NotFoundException('Classe non trouvée');
+    inscription.classe = classe;
+    inscription.classeId = classe.id;
+  }
+
+  if (updateDto.annee_scolaire_id) {
+    const annee_scolaire = await this.anneeScolaireRepository.findOne({ 
+      where: { id: updateDto.annee_scolaire_id } 
+    });
+    if (!annee_scolaire) throw new NotFoundException('Année scolaire non trouvée');
+    inscription.annee_scolaire = annee_scolaire;
+    inscription.anneeScolaireId = annee_scolaire.id;
+  }
+
+  // Mettre à jour le statut actif si fourni
+  if (updateDto.actif !== undefined) {
+    inscription.actif = updateDto.actif;
+  }
+
+  return await this.inscriptionRepository.save(inscription);
+}
 
   async findOne(id: number): Promise<Inscription> {
     const inscription = await this.inscriptionRepository.findOne({

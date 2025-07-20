@@ -35,6 +35,11 @@ import {
   addWeeks,
   isValid,
   isToday,
+  isAfter,
+  isBefore,
+  startOfDay,
+  endOfDay,
+  isWithinInterval,
 } from 'date-fns';
 import { fr, ar } from 'date-fns/locale';
 import { useAuth } from '@/contexts/AuthContext';
@@ -122,6 +127,10 @@ type DisplayCourse = {
   exceptionType?: 'annulation' | 'remplacement_prof' | 'deplacement_cours' | 'jour_ferie' | 'evenement_special';
   originalEntryId?: number;
 };
+
+interface StudentScheduleProps {
+  userId?: number;
+}
 
 type WeeklySchedule = {
   [day: string]: DisplayCourse[];
@@ -241,11 +250,12 @@ const EmptySlot: React.FC = () => {
   );
 };
 
-export function StudentSchedule() {
+export function StudentSchedule({ userId }: StudentScheduleProps) {
   const { t, language } = useLanguage();
   const currentLocale = language === 'ar' ? ar : fr;
   const isRTL = language === 'ar';
   const { user } = useAuth();
+  const studentId = userId ?? user?.id;
   
   const translateSubject = useCallback((subjectName: string): string => {
     if (!subjectName) return t.common.unknownSubject;
@@ -292,9 +302,67 @@ export function StudentSchedule() {
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const currentWeekEnd = useMemo(() => endOfWeek(currentWeekStart, { weekStartsOn: 1 }), [currentWeekStart]);
 
-  const handlePreviousWeek = () => setCurrentWeekStart(prev => subWeeks(prev, 1));
-  const handleNextWeek = () => setCurrentWeekStart(prev => addWeeks(prev, 1));
-  const handleGoToToday = () => setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  useEffect(() => {
+    if (currentAnneeAcademique?.date_debut && currentAnneeAcademique?.date_fin) {
+      const yearStartDate = startOfDay(parseISO(currentAnneeAcademique.date_debut));
+      const yearEndDate = endOfDay(parseISO(currentAnneeAcademique.date_fin));
+  
+      if (isValid(yearStartDate) && isValid(yearEndDate)) {
+        // If current week starts after the school year ends, jump to the last week of the school year
+        if (isAfter(currentWeekStart, yearEndDate)) {
+          setCurrentWeekStart(startOfWeek(yearEndDate, { weekStartsOn: 1 }));
+        }
+        // If current week ends before the school year starts, jump to the first week of the school year
+        else if (isBefore(currentWeekEnd, yearStartDate)) {
+          setCurrentWeekStart(startOfWeek(yearStartDate, { weekStartsOn: 1 }));
+        }
+      }
+    }
+  }, [currentAnneeAcademique, currentWeekStart]);
+
+  const handlePreviousWeek = () => {
+    if (currentAnneeAcademique?.date_debut) {
+      const prevWeekStart = startOfWeek(subWeeks(currentWeekStart, 1), { weekStartsOn: 1 });
+      const yearStartDate = startOfDay(parseISO(currentAnneeAcademique.date_debut));
+
+      if (isValid(yearStartDate) && isBefore(endOfWeek(prevWeekStart, { weekStartsOn: 1 }), yearStartDate)) {
+        toast({
+          title: t.schedule.startOfYear,
+          description: t.schedule.startOfYearDesc,
+          variant: "default",
+        });
+        return;
+      }
+    }
+    setCurrentWeekStart(prev => subWeeks(prev, 1));
+  };
+
+  const handleNextWeek = () => {
+    if (currentAnneeAcademique?.date_fin) {
+      const nextWeekStart = startOfWeek(addWeeks(currentWeekStart, 1), { weekStartsOn: 1 });
+      const yearEndDate = endOfDay(parseISO(currentAnneeAcademique.date_fin));
+
+      if (isValid(yearEndDate) && isAfter(nextWeekStart, yearEndDate)) {
+        toast({
+          title: t.schedule.endOfYear,
+          description: t.schedule.endOfYearDesc,
+          variant: "default",
+        });
+        return;
+      }
+    }
+    setCurrentWeekStart(prev => addWeeks(prev, 1));
+  };
+  const handleGoToToday = () => {
+    let dateToJumpTo = new Date();
+    if (currentAnneeAcademique?.date_fin) {
+      const yearEndDate = endOfDay(parseISO(currentAnneeAcademique.date_fin));
+      if (isValid(yearEndDate) && isAfter(dateToJumpTo, yearEndDate)) {
+        dateToJumpTo = yearEndDate;
+      }
+    }
+    setCurrentWeekStart(startOfWeek(dateToJumpTo, { weekStartsOn: 1 }));
+  };
 
   const currentWeekDaysInfo = useMemo(() => {
     return eachDayOfInterval({
@@ -316,6 +384,28 @@ export function StudentSchedule() {
       .sort((a, b) => (isRTL ? b.dayOrder - a.dayOrder : a.dayOrder - b.dayOrder));
   }, [currentWeekStart, t, isRTL]);
 
+  const displayedWeekStart = useMemo(() => {
+    const originalStart = currentWeekStart;
+    if (currentAnneeAcademique?.date_debut) {
+      const yearStartDate = startOfDay(parseISO(currentAnneeAcademique.date_debut));
+      if (isValid(yearStartDate) && isBefore(originalStart, yearStartDate)) {
+        return yearStartDate;
+      }
+    }
+    return originalStart;
+  }, [currentWeekStart, currentAnneeAcademique]);
+
+  const displayedWeekEnd = useMemo(() => {
+    const originalEnd = currentWeekEnd;
+    if (currentAnneeAcademique?.date_fin) {
+      const yearEndDate = endOfDay(parseISO(currentAnneeAcademique.date_fin));
+      if (isValid(yearEndDate) && isAfter(originalEnd, yearEndDate)) {
+        return yearEndDate;
+      }
+    }
+    return originalEnd;
+  }, [currentWeekEnd, currentAnneeAcademique]);
+
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
@@ -324,7 +414,7 @@ export function StudentSchedule() {
   
   useEffect(() => {
     const fetchStudentContextData = async () => {
-      if (!user || user.role !== 'eleve') {
+      if (!studentId) {
         setError(t.common.accessDenied);
         setLoading(false);
         return;
@@ -379,7 +469,7 @@ export function StudentSchedule() {
         setCurrentAnneeAcademique(anneePourRequete);
 
         const inscriptionsRes: Inscription[] = await fetch(
-          `${API_URL}/api/inscriptions?utilisateurId=${user.id}&anneeScolaireId=${anneePourRequete.id}`
+          `${API_URL}/api/inscriptions?utilisateurId=${studentId}&anneeScolaireId=${anneePourRequete.id}`
         ).then(res => res.json());
         
         const studentInscription = inscriptionsRes.find(inscription => inscription.actif === true);
@@ -412,7 +502,7 @@ export function StudentSchedule() {
     };
 
     fetchStudentContextData();
-  }, [user, t]);
+  }, [studentId, t]);
 
   const fetchWeeklySchedule = useCallback(async () => {
     if (!studentClassId || !currentAnneeAcademique) return;
@@ -451,6 +541,16 @@ export function StudentSchedule() {
     fetchWeeklySchedule();
   }, [fetchWeeklySchedule]);
 
+  const isSchoolYearActive = useMemo(() => {
+    if (!currentAnneeAcademique?.date_debut || !currentAnneeAcademique?.date_fin) return false;
+    const now = new Date();
+    const startDate = parseISO(currentAnneeAcademique.date_debut);
+    const endDate = endOfDay(parseISO(currentAnneeAcademique.date_fin));
+    if (!isValid(startDate) || !isValid(endDate)) return false;
+
+    return isWithinInterval(now, { start: startDate, end: endDate });
+  }, [currentAnneeAcademique]);
+
   const memoizedProcessedWeeklySchedule = useMemo(() => {
     if (allMatieres.length === 0 || allProfessors.length === 0 || !isValid(currentWeekStart) || !isValid(currentWeekEnd)) {
       return {} as WeeklySchedule;
@@ -458,6 +558,17 @@ export function StudentSchedule() {
 
     const weeklySchedule: WeeklySchedule = {};
     const englishDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+    // Check if the current week is outside the academic year range
+    if (currentAnneeAcademique) {
+        const yearStartDate = startOfDay(parseISO(currentAnneeAcademique.date_debut));
+        const yearEndDate = endOfDay(parseISO(currentAnneeAcademique.date_fin));
+        if (!isValid(yearStartDate) || !isValid(yearEndDate) || 
+            isAfter(currentWeekStart, yearEndDate) || 
+            isBefore(currentWeekEnd, yearStartDate)) {
+            return {} as WeeklySchedule; // Return empty schedule if week is out of bounds
+        }
+    }
     englishDays.forEach(day => {
       weeklySchedule[day] = [];
     });
@@ -605,15 +716,15 @@ export function StudentSchedule() {
 
   const todayFr = format(currentTime, 'EEEE', { locale: currentLocale })
     .charAt(0).toUpperCase() + format(currentTime, 'EEEE', { locale: currentLocale }).slice(1);
-  const todayCourses = processedWeeklySchedule[format(currentTime, 'EEEE')] || [];
+  const todayCourses = (isSchoolYearActive && processedWeeklySchedule[format(currentTime, 'EEEE')]) || [];
 
-  const nextCourse = todayCourses.find(course => {
+  const nextCourse = isSchoolYearActive ? todayCourses.find(course => {
     const [start] = course.time.split('-');
     const [hours, minutes] = start.split(':').map(Number);
     const courseTime = new Date();
     courseTime.setHours(hours, minutes, 0, 0);
     return courseTime > currentTime && !course.isCanceled;
-  });
+  }) : undefined;
 
   const getTimeUntilNextCourse = () => {
     if (!nextCourse) return null;
@@ -633,7 +744,7 @@ export function StudentSchedule() {
   const timeUntilNext = getTimeUntilNextCourse();
 
   const getCurrentCourseProgress = () => {
-    const currentCourse = todayCourses.find(course => {
+    const currentCourse = isSchoolYearActive ? todayCourses.find(course => {
       const [start, end] = course.time.split('-');
       const [startHours, startMins] = start.split(':').map(Number);
       const [endHours, endMins] = end.split(':').map(Number);
@@ -645,7 +756,7 @@ export function StudentSchedule() {
       endTime.setHours(endHours, endMins, 0, 0);
 
       return currentTime >= startTime && currentTime < endTime && !course.isCanceled;
-    });
+    }) : undefined;
 
     if (!currentCourse) return null;
 
@@ -718,7 +829,7 @@ export function StudentSchedule() {
     </Button>
     
     <span className="font-extrabold text-lg md:text-xl text-gray-800 dark:text-white select-none mx-2 text-center min-w-[180px]">
-      {format(currentWeekStart, 'dd MMMM', { locale: currentLocale })} - {format(currentWeekEnd, 'dd MMMM', { locale: currentLocale })}
+      {format(displayedWeekStart, 'dd MMMM', { locale: currentLocale })} - {format(displayedWeekEnd, 'dd MMMM', { locale: currentLocale })}
     </span>
     
     <Button

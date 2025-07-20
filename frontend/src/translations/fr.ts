@@ -487,6 +487,8 @@ accounting: {
         userForm: {
             title: "Inscription de nouvel(le) utilisateur(rice)",
             description: "Remplissez ce formulaire pour ajouter un nouvel(le) élève, professeur(e) ou administrateur(rice) à votre établissement.",
+            editTitle: "Modification de l'utilisateur(rice)",
+editDescription: "Modifiez les informations de l’élève, professeur(e) ou administrateur(rice) sélectionné(e).",
             personalInfo: "INFORMATIONS PERSONNELLES",
             name: "Nom",
             firstName: "Prénom",
@@ -536,6 +538,8 @@ roles: {
             status: "Statut de l'inscription",
             activeRegistration: "Inscription active",
             creating: "Création...",
+            updateRegistration: "Mettre à jour l'inscription",
+        updating: "Mise à jour en cours...",
             createRegistration: "Créer l'inscription",
         },
         tableHeaders: {
@@ -557,6 +561,12 @@ roles: {
             warning: "Le mot de passe ne sera plus affiché après fermeture.",
             password: "Mot de passe :",
             copy: "Copier",
+            parentTitle: "Compte Parent Créé",
+parentInfo: "Ce mot de passe permet au parent d'accéder à son espace dédié.",
+show: "Afficher",
+hide: "Masquer",
+copied: "Copié !",
+            parentPassword: "Mot de passe du parent",
             copyAll: "Copier toutes les infos",
             toastCopied: "Mot de passe copié !",
             toastAllCopiedTitle: "Informations copiées !",
@@ -567,11 +577,18 @@ roles: {
         toasts: {
             initialDataError: "Erreur lors du chargement des données initiales.",
             userUpdated: "Utilisateur mis à jour",
+            passwordRetrievalError: "Échec de la récupération du mot de passe. Veuillez réessayer plus tard.",
             userUpdatedSuccess: "{user} a été modifié(e) avec succès.",
             userAddedSuccess: "L'utilisateur {user} a été ajouté(e) avec succès.",
             userCreateUpdateError: "Une erreur est survenue lors de l'ajout/mise à jour de l'utilisateur.",
             selectStudentClassYearError: "Veuillez sélectionner un élève, une classe et une année scolaire.",
             registrationAddedSuccess: "L'inscription a été ajoutée avec succès.",
+             tutorFoundTitle: "Tuteur trouvé",
+            newTutorTitle: "Nouveau tuteur",
+            registrationUpdatedSuccess: "Inscription mise à jour avec succès",
+        registrationUpdateError: "Erreur lors de la mise à jour de l'inscription",
+            newTutorEmailGenerated: "Un e-mail provisoire a été généré.",
+            tutorEmailAutofilled: "L'e-mail du tuteur a été automatiquement rempli.",
             registrationAddError: "Une erreur est survenue lors de l'ajout de l'inscription.",
         },
     },
@@ -1051,6 +1068,10 @@ whatsappMessage: "🔔 Notification disciplinaire 🔔\n\nÉlève: {student}\nMo
         missingEntryId: "ID d'entrée de base manquant",
         missingExceptionId: "ID d'exception manquant",
         teacherViewNotAllowedTitle: "Action non permise",
+        startOfYear: "Début de l'année scolaire",
+  startOfYearDesc: "Date officielle de commencement des cours",
+  endOfYear: "Fin de l'année scolaire",
+  endOfYearDesc: "Date officielle de clôture des cours",
         errorLoadingTerms: "Erreur lors du chargement des trimestres.",
          today: "Aujourd'hui",
     nextCourse: "Prochain cours",
@@ -1445,4 +1466,84 @@ responseTime: "Réponse immédiate",
   availableHours: "de 9h à 18h",
   
 },
+
+  security: {
+  changePassword: "Changer le mot de passe",
+  changePasswordDescParent: "Mettez à jour votre mot de passe pour sécuriser votre compte parent.",
+  currentPassword: "Mot de passe actuel",
+  newPassword: "Nouveau mot de passe",
+  confirmNewPassword: "Confirmer le nouveau mot de passe",
+  passwordMismatch: "Les nouveaux mots de passe ne correspondent pas.",
+  passwordTooShort: "Le nouveau mot de passe doit contenir au moins 8 caractères.",
+  passwordChangedSuccess: "Mot de passe modifié avec succès !",
+  success: "Succès",
+  passwordChangeError: "Une erreur est survenue lors de la modification du mot de passe.",
+  saving: "Sauvegarde...",
+  updatePassword: "Mettre à jour le mot de passe",
+unauthenticatedUser: "Utilisateur non authentifié."
+
+},
+
+parent: {
+  grades: {
+    title: "Notes des enfants",
+    childSelection: "Sélection de l'enfant",
+    childSelectionDesc: "Veuillez sélectionner un enfant pour voir ses notes",
+    selectChild: "Sélectionner un enfant",
+    errorFetchChildren: "Erreur lors du chargement des enfants",
+    noChildren: "Aucun enfant trouvé",
+    noChildrenDesc: "Aucun enfant n'est actuellement enregistré sous votre compte parent. Veuillez contacter l'administration de l'école si vous pensez qu'il s'agit d'une erreur.",
+
+    // ... autres traductions existantes ...
+  },
+  attendance: {
+    title: "Suivi des présences",
+  },
+  schedule: {
+    title: "Emploi du temps",
+    // ... other schedule translations ...
+  },
+
+  // ... autres sections ...
+},
+admin: {
+    title: "Administration de la Plateforme",
+    ecoles: {
+      title: "Gestion des Écoles",
+      description: "Ajoutez, modifiez ou supprimez les établissements de la plateforme.",
+      add: "Ajouter une école",
+      edit: "Modifier l'école",
+      delete: "Supprimer l'école",
+      deleteConfirmTitle: "Êtes-vous sûr ?",
+      deleteConfirmDescription: "Cette action est irréversible. L'école sera définitivement supprimée de la plateforme.",
+      table: {
+        name: "Nom de l'établissement",
+        subdomain: "Sous-domaine",
+        dbName: "Nom de la base de données",
+        actions: "Actions",
+      },
+      form: {
+        titleCreate: "Ajouter une nouvelle école",
+        titleEdit: "Modifier l'école",
+        description: "Remplissez les informations ci-dessous.",
+        nameLabel: "Nom de l'établissement",
+        namePlaceholder: "Ex: Lycée des Sources",
+        subdomainLabel: "Sous-domaine",
+        subdomainPlaceholder: "Ex: lycee (pour lycee.madrastak.net)",
+        dbNameLabel: "Nom de la base de données",
+        dbNamePlaceholder: "Ex: db_lycee_xyz",
+        save: "Enregistrer",
+        saving: "Enregistrement...",
+      },
+      toasts: {
+        loadError: "Erreur lors du chargement des écoles.",
+        addSuccess: "École ajoutée avec succès.",
+        addError: "Erreur lors de l'ajout de l'école.",
+        updateSuccess: "École modifiée avec succès.",
+        updateError: "Erreur lors de la modification de l'école.",
+        deleteSuccess: "École supprimée avec succès.",
+        deleteError: "Erreur lors de la suppression de l'école.",
+      }
+    }
+  },
 };

@@ -179,18 +179,18 @@ const translateSubject = (subjectName: string): string => {
   const exactMatch = Object.entries(t.schedule.subjects).find(
     ([key]) => cleanedName === key.toLowerCase()
   );
-  if (exactMatch) return exactMatch[1];
+  if (exactMatch) return String(exactMatch[1]);
 
   // Correspondance partielle
   const partialMatch = Object.entries(t.schedule.subjects).find(
     ([key]) => cleanedName.includes(key.toLowerCase())
   );
-  if (partialMatch) return partialMatch[1];
+  if (partialMatch) return String(partialMatch[1]);
 
   // Cas particuliers
-  if (cleanedName.includes('math')) return t.schedule.subjects.math;
-  if (cleanedName.includes('physique') || cleanedName.includes('physics')) return t.schedule.subjects.physics;
-  if (cleanedName.includes('arab')) return t.schedule.subjects.arabic;
+  if (cleanedName.includes('math')) return String(t.schedule.subjects.math);
+  if (cleanedName.includes('physique') || cleanedName.includes('physics')) return String(t.schedule.subjects.physics);
+  if (cleanedName.includes('arab')) return String(t.schedule.subjects.arabic);
   
   // Par défaut, retourner le nom original
   return subjectName;

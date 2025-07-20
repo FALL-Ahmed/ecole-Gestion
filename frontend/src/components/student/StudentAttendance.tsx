@@ -72,7 +72,11 @@ const initialAttendanceStats: AttendanceStats = {
   unjustifiedAbsences: 0,
 };
 
-export function StudentAttendance() {
+interface StudentAttendanceProps {
+  userId?: number;
+}
+
+export function StudentAttendance({ userId }: StudentAttendanceProps) {
   const { user } = useAuth();
   const { addNotification } = useNotifications();
   const { t, language } = useLanguage();
@@ -87,6 +91,8 @@ export function StudentAttendance() {
   const [currentAttendanceStats, setCurrentAttendanceStats] = useState<AttendanceStats>(initialAttendanceStats);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const studentId = userId ?? user?.id;
 
   const dateLocale = language === 'ar' ? ar : fr;
   const isRTL = language === 'ar';
@@ -157,7 +163,6 @@ export function StudentAttendance() {
   }, [t]);
 
   useEffect(() => {
-    const studentId = user?.id;
     const yearId = activeSchoolYear?.id;
 
     if (!studentId || !yearId || !startDate || !endDate) {
@@ -167,7 +172,7 @@ export function StudentAttendance() {
       return;
     }
 
-    const storageKey = `notified_absence_ids_${user.id}`;
+    const storageKey = `notified_absence_ids_${studentId}`;
     const storedNotifiedIds = localStorage.getItem(storageKey);
     let initialNotifiedIdsFromStorage = new Set<number>();
     
@@ -267,12 +272,12 @@ export function StudentAttendance() {
     };
 
     fetchAbsences();
-  }, [user?.id, activeSchoolYear, startDate, endDate, t, dateLocale, addNotification]);
+  }, [studentId, activeSchoolYear, startDate, endDate, t, dateLocale, addNotification]);
 
   const currentYearName = activeSchoolYear?.libelle || t.common.loading;
   const currentTermName = trimestres.find(t => t.id.toString() === selectedTermId)?.nom || t.studentAttendance.fullYear;
 
-  if (!user) {
+  if (!studentId) {
     return (
       <div className={`p-6 text-center text-red-500 ${isRTL ? 'text-right' : 'text-left'}`}>
         <h2 className="text-xl font-semibold mb-2">{t.common.accessDenied}</h2>

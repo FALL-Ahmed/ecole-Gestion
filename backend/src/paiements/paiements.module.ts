@@ -1,6 +1,5 @@
 // paiements.module.ts
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { PaiementController } from './paiements.controller';
 import { PaiementService } from './paiements.service';
 import { RappelPaiementService } from './rappel-paiement.service';
@@ -8,10 +7,10 @@ import { Paiement } from './paiements.entity';
 import { TwilioModule } from '../twilo/twilio.module';
 import { Inscription } from '../inscription/inscription.entity';
 import { EtablissementInfoModule } from '../etablissement/etablissement-info.module';
+import { createTenantRepositoryProvider } from '../tenant/tenant-repository.provider';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Paiement, Inscription]),
     TwilioModule,
     EtablissementInfoModule, // Module contenant EtablissementInfoService
   ],
@@ -19,6 +18,8 @@ import { EtablissementInfoModule } from '../etablissement/etablissement-info.mod
   providers: [
     PaiementService,
     RappelPaiementService,
+    createTenantRepositoryProvider(Paiement),
+    createTenantRepositoryProvider(Inscription),
   ],
   exports: [
     PaiementService,

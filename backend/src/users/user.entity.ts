@@ -1,4 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import { Parent } from '../central/parent.entity'; // Ajoutez cet import
 
 import { Classe } from '../classe/classe.entity';
 import { anneescolaire } from '../annee-academique/annee-academique.entity';
@@ -29,7 +30,7 @@ export class User {
   @Column({ length: 100 })
   prenom: string;
 
-  @Column({ length: 100, unique: true })
+  @Column({ length: 100 })
   email: string;
 
   @Column({ name: 'mot_de_passe', length: 255 })
@@ -70,12 +71,23 @@ export class User {
   @Column({ name: 'photo_url', type: 'text', nullable: true })
   photoUrl: string | null;
 
-  
+  // Le champ parent_id ajouté (UUID stocké en string)
+ @Column({ 
+  name: 'parent_id',  // <-- Spécifiez le nom exact de la colonne
+  type: 'char', 
+  length: 36, 
+  nullable: true 
+})
+parentId?: string | null;
 
   @Column({ default: true })
   actif: boolean;
 
   @OneToMany(() => Absence, (absence: Absence) => absence.etudiant) // Typer le paramètre absence
   absences: Absence[];
-  
+  @ManyToOne(() => Parent, parent => parent.enfants)
+  @JoinColumn({ name: 'parent_id' })
+  parent: Parent;
 }
+
+

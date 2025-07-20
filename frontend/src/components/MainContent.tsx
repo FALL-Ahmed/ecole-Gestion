@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -32,6 +32,12 @@ import { StudentGrades } from './student/StudentGrades';
 import { StudentAttendance } from './student/StudentAttendance';
 import { SecuritySettings } from './professor/SecuritySettings';
 
+// Importations des composants Parent
+import { ParentGradesView } from './parent/ParentGradesView';
+import { ParentAttendanceView } from './parent/ParentAttendanceView';
+import { ParentScheduleView } from './parent/ParentScheduleView';
+import { ParentSecuritySettings } from './parent/ParentSecuritySettings';
+
 interface MainContentProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
@@ -53,6 +59,11 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
   }
+
+  // Fonction helper pour convertir l'ID en number si nécessaire
+  const getUserIdAsNumber = (userId: string | number): number => {
+    return typeof userId === 'string' ? parseInt(userId, 10) : userId;
+  };
 
   // Sections Admin
   const renderAdminSection = () => {
@@ -80,7 +91,7 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
       case 'dashboard': return <Dashboard />;
       case 'course-materials': return <CourseMaterials />;
       case 'schedule-view': return <ProfessorSchedule />;
-      case 'grades-input': return       <ProfessorGradeView />;
+      case 'grades-input': return <ProfessorGradeView />;
       case 'chapter-planning': return <ChapterPlanning />;
       case 'settings': return <SecuritySettings />;
       default: return <Dashboard />;
@@ -93,10 +104,22 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
       case 'dashboard': return <Dashboard />;
       case 'schedule-view': return <StudentSchedule />;
       case 'my-courses': return <StudentCourses />;
-      case 'my-grades': return <StudentGrades key={user.id} userId={user.id} />;
-      case 'my-attendance': return <StudentAttendance />;
+      case 'my-grades': return <StudentGrades 
+                               key={user.id} 
+                               userId={getUserIdAsNumber(user.id)} />;      case 'my-attendance': return <StudentAttendance />;
       case 'settings': return <SecuritySettings />;
       default: return <Dashboard />;
+    }
+  };
+
+  // Sections Parent
+  const renderParentSection = () => {
+    switch (activeSection) {
+      case 'child-schedule': return <ParentScheduleView />;
+      case 'child-grades': return <ParentGradesView />;
+      case 'child-attendance': return <ParentAttendanceView />;
+      case 'settings': return <ParentSecuritySettings />;
+      default: return <ParentScheduleView />;
     }
   };
 
@@ -107,6 +130,7 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
       case 'admin': return renderAdminSection();
       case 'professeur': return renderProfessorSection();
       case 'eleve': return renderStudentSection();
+      case 'parent': return renderParentSection();
       default:
         return (
           <div className="p-6 text-center text-gray-600">
@@ -117,9 +141,6 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
   };
 
   return (
-    // Le parent (App.tsx) gère déjà le padding (pt-[80px]) et le défilement.
-    // Ce composant doit juste afficher le contenu de la section active.
-    // Le padding (p-4 md:p-6) est appliqué ici pour que chaque "page" ait un espacement correct.
     <div className="p-4 md:p-6 bg-gray-50 dark:bg-gray-900 min-h-full">
       {renderContent()}
     </div>

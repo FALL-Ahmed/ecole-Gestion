@@ -1,13 +1,17 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { Trimestre } from './trimestre.entity';
 import { TrimestreController } from './trimestre.controller';
 import { TrimestreService } from './trimestre.service';
+import { createTenantRepositoryProvider } from '../tenant/tenant-repository.provider';
 import { anneescolaire } from '../annee-academique/annee-academique.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Trimestre, anneescolaire])],
+  imports: [],
+  providers: [
+    TrimestreService,
+    createTenantRepositoryProvider(Trimestre),
+    createTenantRepositoryProvider(anneescolaire),
+  ],
   controllers: [TrimestreController],
-  providers: [TrimestreService],
 })
 export class TrimestreModule {}

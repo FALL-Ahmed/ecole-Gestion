@@ -409,7 +409,7 @@ export function AccountingManagement() {
           transition={{ duration: 0.5 }}
           className="flex justify-between items-center mb-6"
         >
-          <h1 className="text-3xl font-extrabold flex items-center gap-3">
+          <h1 className="text-2xl font-bold flex items-center gap-3">
             <span>{t.sidebar?.accounting || "Comptabilité"}</span>
           </h1>
           <div className="flex items-center text-lg font-medium bg-blue-50 dark:bg-blue-900 px-4 py-2 rounded-lg shadow-sm border border-blue-100 dark:border-blue-800">

@@ -1,13 +1,15 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { Matiere } from './matiere.entity';
 import { MatiereService } from './matiere.service';
 import { MatiereController } from './matiere.controller';
+import { createTenantRepositoryProvider } from '../tenant/tenant-repository.provider';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Matiere])],
-  providers: [MatiereService],
+imports: [],
+  providers: [
+    MatiereService,
+    createTenantRepositoryProvider(Matiere),
+  ],
   controllers: [MatiereController],
-  exports: [MatiereService],
 })
 export class MatiereModule {}

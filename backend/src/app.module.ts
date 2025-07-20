@@ -1,10 +1,8 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ClasseModule } from './classe/classe.module';
@@ -23,14 +21,59 @@ import { AbsenceModule } from './absence/absence.module';
 import { ChapitreModule } from './chapitre/chapitre.module';
 import { EtablissementInfoModule } from './etablissement/etablissement-info.module';
 import { AuditLogModule } from './historique/historique.module';
-import { PaiementsModule } from './paiements/paiements.module'; // 1. Importer le module des paiements
-import { ProfessorAbsencesModule } from './professor-absence/professor-absence.module'; // 1. Importer le module des paiements
+import { PaiementsModule } from './paiements/paiements.module';
+import { ProfessorAbsencesModule } from './professor-absence/professor-absence.module';
 import { DisciplinaryRecordsModule } from './disciplinary-records/disciplinary-records.module';
 import { WhatsAppModule } from './twilo/whatsapp.module';
 import { RappelPaiementModule } from './paiements/rappel-paiement.module';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { TenantModule } from './tenant/tenant.module';
+import { TenantMiddleware } from './middleware/tenant.middleware';
+import { Parent } from './central/parent.entity';
+import { User } from './users/user.entity';
+import { Absence } from './absence/absence.entity';
+import { Matiere } from './matieres/matiere.entity';
+import { Chapitre } from './chapitre/chapitre.entity';
+import { Classe } from './classe/classe.entity';
+import { Inscription } from './inscription/inscription.entity';
+import { anneescolaire } from './annee-academique/annee-academique.entity';
+import { Evaluation } from './evaluation/evaluation.entity';
+import { Trimestre } from './trimestre/trimestre.entity';
+import { Note } from './note/note.entity';
+import { AdminModule } from './admin/admin.module';
+import { EcolesModule } from './ecoles/ecoles.module';
+import { Ecole } from './ecoles/ecole.entity';
+import { Admin } from './admin/admin.entity';
+import { ParentModule } from './central/parent.module';
 
-
-import { AuditSubscriber } from './subscribers/audit.subscriber'; // 🔥 Ajout ici
+const featureModules = [
+  AuthModule,
+  ParentModule, // Ajouté pour résoudre les dépendances circulaires
+  UsersModule,
+  ClasseModule,
+  AnneeAcademiqueModule,
+  InscriptionModule,
+  MatiereModule,
+  AffectationModule,
+  CoefficientClasseModule,
+  TrimestreModule,
+  EvaluationModule,
+  NoteModule,
+  ConfigurationModule,
+  EmploiDuTempsModule,
+  ExceptionEmploiDuTempsModule,
+  AbsenceModule,
+  ChapitreModule,
+  EtablissementInfoModule,
+  AuditLogModule,
+  PaiementsModule,
+  ProfessorAbsencesModule,
+  DisciplinaryRecordsModule,
+  WhatsAppModule,
+  RappelPaiementModule,
+  AdminModule,
+  EcolesModule,
+];
 
 @Module({
   imports: [
@@ -38,60 +81,42 @@ import { AuditSubscriber } from './subscribers/audit.subscriber'; // 🔥 Ajout 
       isGlobal: true,
       envFilePath: '.env',
     }),
-
+    // First initialize the central database connection
     TypeOrmModule.forRootAsync({
+      name: 'central',
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
+      useFactory: (config: ConfigService) => ({
         type: 'mysql',
-        host: configService.get<string>('DB_HOST'),
-        port: configService.get<number>('DB_PORT'),
-        username: configService.get<string>('DB_USER'),
-        password: configService.get<string>('DB_PASSWORD'),
-        database: configService.get<string>('DB_NAME'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        host: config.get('CENTRAL_DB_HOST'),
+        port: config.get('CENTRAL_DB_PORT'),
+        username: config.get('CENTRAL_DB_USER'),
+        password: config.get('CENTRAL_DB_PASSWORD'),
+        database: config.get('CENTRAL_DB_NAME'),
+        entities: [Parent, User,Absence, Matiere, Chapitre, Classe, Inscription, anneescolaire, Evaluation, Trimestre, Note, Ecole, Admin],
         synchronize: false,
         logging: false,
-        ssl: configService.get<string>('DB_HOST')?.includes('railway')
-          ? { rejectUnauthorized: false }
-          : false,
-        subscribers: [AuditSubscriber], // ✅ Déclaration du subscriber ici aussi
+        // Configuration du pool de connexions pour la base de données centrale
+        extra: {
+          waitForConnections: true,
+          connectionLimit: 10,
+          queueLimit: 0,
+        },
       }),
     }),
-
-    // Modules fonctionnels
-    AuthModule,
-    UsersModule,
-    ClasseModule,
-    AnneeAcademiqueModule,
-    InscriptionModule,
-    MatiereModule,
-    AffectationModule,
-    CoefficientClasseModule,
-    TrimestreModule,
-    EvaluationModule,
-    NoteModule,
-    ConfigurationModule,
-    EmploiDuTempsModule,
-    ExceptionEmploiDuTempsModule,
-    AbsenceModule,
-    ChapitreModule,
-    EtablissementInfoModule,
-    AuditLogModule,
-   PaiementsModule,
-    ProfessorAbsencesModule,
-    DisciplinaryRecordsModule,
-    WhatsAppModule,
-    RappelPaiementModule,
- 
-
-
-    
+    // Then initialize the TenantModule
+    TenantModule.forRoot(),
+    // The tenant database connection is now managed dynamically by TenantConnectionManager
+    // and is no longer initialized here.
+    ...featureModules,
   ],
   controllers: [AppController],
   providers: [
     AppService,
-    AuditSubscriber, // ✅ Pour que Nest puisse injecter correctement
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(TenantMiddleware).forRoutes('*');
+  }
+}

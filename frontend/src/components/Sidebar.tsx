@@ -104,6 +104,15 @@ export function Sidebar({
                     { id: "settings", label: t.sidebar.settings, icon: Settings },
 
         ];
+
+      case "parent":
+        return [
+           { id: "child-schedule", label: t.sidebar.schedule, icon: Calendar },
+           { id: "child-grades", label: t.sidebar.myGrades, icon: GraduationCap },
+           { id: "child-attendance", label: t.sidebar.myAttendance, icon: Clock },
+           { id: "settings", label: t.sidebar.settings, icon: Settings },
+  ];
+
       default:
         return commonItems;
     }

@@ -5,11 +5,16 @@ import { CoefficientClasseService } from "./coeff.service";
 import { CoefficientClasseController } from "./coeff.controller";
 import { Classe } from "../classe/classe.entity";
 import { Matiere } from "../matieres/matiere.entity";
+import { createTenantRepositoryProvider } from "../tenant/tenant-repository.provider";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([CoefficientClasse, Classe, Matiere])],
-  providers: [CoefficientClasseService],
+  imports: [],
+  providers: [
+    CoefficientClasseService,
+    createTenantRepositoryProvider(CoefficientClasse),
+    createTenantRepositoryProvider(Classe),
+    createTenantRepositoryProvider(Matiere),
+  ],
   controllers: [CoefficientClasseController],
-  exports: [CoefficientClasseService],
 })
 export class CoefficientClasseModule {}

@@ -1,13 +1,17 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { Configuration } from './configuration.entity';
 import { ConfigurationService } from './configuration.service';
 import { ConfigurationController } from './configuration.controller';
 import { anneescolaire } from 'src/annee-academique/annee-academique.entity';
+import { createTenantRepositoryProvider } from '../tenant/tenant-repository.provider';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Configuration, anneescolaire])],
+  imports: [],
   controllers: [ConfigurationController],
-  providers: [ConfigurationService],
+  providers: [
+    ConfigurationService,
+    createTenantRepositoryProvider(Configuration),
+    createTenantRepositoryProvider(anneescolaire),
+  ],
 })
 export class ConfigurationModule {}

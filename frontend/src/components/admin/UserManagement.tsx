@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Search, Check, X, ChevronDown, ChevronUp, Loader2, Shield, User, GraduationCap, BookOpen, Upload, Info, Eye, EyeOff, Users as UsersIcon } from 'lucide-react';
+import { Plus, Search, Check, X, ChevronDown, ChevronUp, Loader2, Shield, User as UserIcon, GraduationCap, BookOpen, Upload, Info, Eye, EyeOff, Users as UsersIcon } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Skeleton } from '../ui/skeleton';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -25,52 +25,33 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { useToast } from '@/components/ui/use-toast';
+
 import { cn } from '../../lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { User, UserRole, Classe, AnneeScolaire, Inscription } from '@/types/user';
 
-type UserRole = 'admin' | 'professeur' | 'eleve';
-
-interface User {
-  id: number;
-  nom: string;
-  prenom: string;
-  email: string;
-  role: UserRole;
-  genre?: 'masculin' | 'feminin' | null;
-  adresse?: string | null;
-  tuteurNom?: string | null;
-  tuteurTelephone?: string | null;
-  photoUrl?: string | null;
-  actif: boolean;
-  inscriptions?: Inscription[];
-}
-
-interface Classe {
-  id: number;
-  nom: string;
-  niveau: 'primaire' | 'collège' | 'lycée';
-  annee_scolaire_id: number;
-  inscriptions?: Inscription[];
-}
-
-interface AnneeScolaire {
-  id: number;
-  libelle: string;
-}
-
-interface Inscription {
-  id: number;
-  utilisateur: User;
-  classe: Classe;
-  annee_scolaire: AnneeScolaire;
-  date_inscription: string;
-  actif: boolean;
-}
 interface PasswordRevealProps {
   password: string;
   showPasswordText: string;
   hidePasswordText: string;
 }
+
+const initialUserFormData = {
+  nom: '',
+  prenom: '',
+  email: '',
+  genre: '' as 'masculin' | 'feminin' | '',
+  adresse: '',
+  tuteurNom: '',
+  tuteurTelephone: '',
+  photoUrl: '',
+  role: '' as UserRole | '',
+  actif: true,
+  classe_id: '',
+  annee_scolaire_id: '',
+  date_inscription: new Date().toISOString().split('T')[0],
+  parentId: '',
+};
 
 const roleColors = {
   admin: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
@@ -125,7 +106,13 @@ const PasswordReveal: React.FC<PasswordRevealProps> = ({
 
 export default function UserManagement() {
   const { t, language } = useLanguage(); // Destructurez language
-
+const initialInscriptionFormData = {
+  utilisateur_id: '',
+  classe_id: '',
+  annee_scolaire_id: '',
+  date_inscription: new Date().toISOString().split('T')[0],
+  actif: true,
+};
   const [activeTab, setActiveTab] = useState<'users' | 'inscriptions'>('users');
   const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
   const [inscriptions, setInscriptions] = useState<Inscription[]>([]);
@@ -134,6 +121,8 @@ export default function UserManagement() {
     nom: string;
     prenom: string;
     email: string;
+      parentPassword?: string;  // Add this line
+
   } | null>(null);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
@@ -344,6 +333,7 @@ const handlePrintClassStudents = async (classeId: number) => {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+const [editInscription, setEditInscription] = useState<Inscription | null>(null);
 
   const [academicYears, setAcademicYears] = useState<AnneeScolaire[]>([]);
   const [searchTermUsers, setSearchTermUsers] = useState('');
@@ -370,49 +360,47 @@ const handlePrintClassStudents = async (classeId: number) => {
     date_inscription: new Date().toISOString().split('T')[0],
   });
 
-  const [userFormData, setUserFormData] = useState({
-    nom: '',
-    prenom: '',
-    email: '',
-    genre: '' as 'masculin' | 'feminin' | '',
-    adresse: '',
-    tuteurNom: '',
-    tuteurTelephone: '',
-    photoUrl: '',
-    role: '' as UserRole | '',
-    actif: true,
-    classe_id: '',
-    annee_scolaire_id: '',
-    date_inscription: new Date().toISOString().split('T')[0],
-  });
+const [userFormData, setUserFormData] = useState<typeof initialUserFormData>(initialUserFormData);
+const [emailManuallyEdited, setEmailManuallyEdited] = useState(false);
+  const [isCheckingTuteur, setIsCheckingTuteur] = useState(false);
 
   const handleEditUserFromInscription = (inscription: Inscription) => {
-    setEditUser(inscription.utilisateur);
-    setUserFormData({
-      nom: inscription.utilisateur.nom,
-      prenom: inscription.utilisateur.prenom,
-      email: inscription.utilisateur.email,
-      genre: inscription.utilisateur.genre || '',
-      adresse: inscription.utilisateur.adresse || '',
-      tuteurNom: inscription.utilisateur.tuteurNom || '',
-      tuteurTelephone: inscription.utilisateur.tuteurTelephone || '',
-      photoUrl: inscription.utilisateur.photoUrl || '',
-      role: inscription.utilisateur.role,
-      actif: inscription.utilisateur.actif,
-      classe_id: String(inscription.classe.id),
-      annee_scolaire_id: String(inscription.annee_scolaire.id),
-      date_inscription: inscription.date_inscription.split('T')[0],
-    });
-    setIsAddUserDialogOpen(true);
-  };
-
-  const [inscriptionFormData, setInscriptionFormData] = useState({
-    utilisateur_id: '',
-    classe_id: '',
-    annee_scolaire_id: '',
-    date_inscription: new Date().toISOString().split('T')[0],
-    actif: true,
+  setEditUser(inscription.utilisateur);
+  setUserFormData({
+    nom: inscription.utilisateur.nom,
+    prenom: inscription.utilisateur.prenom,
+    email: inscription.utilisateur.email,
+    genre: inscription.utilisateur.genre || '',
+    adresse: inscription.utilisateur.adresse || '',
+    tuteurNom: inscription.utilisateur.tuteurNom || '',
+    tuteurTelephone: inscription.utilisateur.tuteurTelephone || '',
+    photoUrl: inscription.utilisateur.photoUrl || '',
+    role: inscription.utilisateur.role,
+    actif: inscription.utilisateur.actif,
+    classe_id: String(inscription.classe.id),
+    annee_scolaire_id: String(inscription.annee_scolaire.id), // Bien définir l'année scolaire
+    date_inscription: inscription.date_inscription.split('T')[0],
+    parentId: inscription.utilisateur.parentId || '',
   });
+  setIsAddUserDialogOpen(true);
+};
+
+
+const handleEditInscription = (inscription: Inscription) => {
+  setEditInscription(inscription);
+  setInscriptionFormData({
+    utilisateur_id: String(inscription.utilisateur.id),
+    classe_id: String(inscription.classe.id),
+    annee_scolaire_id: String(inscription.annee_scolaire.id),
+    date_inscription: inscription.date_inscription.split('T')[0],
+    actif: inscription.actif,
+  });
+  setIsAddInscriptionDialogOpen(true);
+};
+
+// Mettez à jour les onClick dans votre tableau pour utiliser handleEditInscription
+  const [inscriptionFormData, setInscriptionFormData] = useState(initialInscriptionFormData);
+
 
   const [sortConfigUsers, setSortConfigUsers] = useState<{ key: SortKey; direction: 'ascending' | 'descending' } | null>(null);
   const [sortConfigInscriptions, setSortConfigInscriptions] = useState<{ key: 'utilisateur' | 'classe' | 'annee_scolaire' | 'actif'; direction: 'ascending' | 'descending' } | null>(null);
@@ -476,77 +464,169 @@ const handlePrintClassStudents = async (classeId: number) => {
       }
     }
     fetchData();
-  }, [toast, t]);
+ }, [toast, t]);
 
-  const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (value: any) => {
-    setUserFormData(prev => ({ ...prev, [field]: value }));
-  }, []);
+useEffect(() => {
+    const checkTuteur = setTimeout(async () => {
+        if (
+            userFormData.role === 'eleve' &&
+            userFormData.tuteurNom &&
+            userFormData.tuteurTelephone &&
+            !emailManuallyEdited
+        ) {
+            setIsCheckingTuteur(true);
+            let tuteurFound = false;
+
+            try {
+                const token = localStorage.getItem('token');
+                
+                // Normalisation du nom (minuscules, sans accents, sans espaces superflus)
+                const normalizedNom = userFormData.tuteurNom
+                    .trim()
+                    .toLowerCase()
+                    .normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "");
+                
+                // Nettoyage du téléphone (garder seulement les chiffres)
+                const cleanedTelephone = userFormData.tuteurTelephone.replace(/\D/g, '');
+
+                const response = await fetch(
+                    `${API_URL}/api/parents/find/by-details?nom=${encodeURIComponent(normalizedNom)}&telephone=${encodeURIComponent(cleanedTelephone)}`,
+                    {
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`,
+                        },
+                    }
+                );
+
+                if (response.ok) {
+                    const responseText = await response.text();
+                    if (responseText) {
+                        const tuteurData = JSON.parse(responseText);
+                        if (tuteurData && tuteurData.email) {
+                            setUserFormData(prev => ({
+                                ...prev,
+                                email: tuteurData.email,
+                                parentId: tuteurData.id,
+                            }));
+                            toast({
+                                title: t.userManagement.toasts.tutorFoundTitle || "Tuteur trouvé",
+                                description: t.userManagement.toasts.tutorEmailAutofilled || "L'e-mail du tuteur a été automatiquement rempli.",
+                                variant: "default",
+                            });
+                            tuteurFound = true;
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error("Erreur lors de la vérification des informations du tuteur:", error);
+            } finally {
+                if (!tuteurFound && userFormData.tuteurNom) {
+                    // Génération de l'email avec incrément si nécessaire
+                    const base = userFormData.tuteurNom
+                        .trim()
+                        .toLowerCase()
+                        .normalize("NFD")
+                        .replace(/[\u0300-\u036f]/g, "")
+                        .replace(/\s+/g, '.');
+                    
+                    let generatedEmail = `${base}@parent.com`;
+                    let compteur = 1;
+
+                    // Vérifier si l'email existe déjà (insensible à la casse)
+                    try {
+                        const token = localStorage.getItem('token');
+                        const normalizedEmail = generatedEmail.toLowerCase();
+                        
+                        const checkEmailResponse = await fetch(
+                            `${API_URL}/api/parents/find/by-details?email=${encodeURIComponent(normalizedEmail)}`,
+                            {
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    Authorization: `Bearer ${token}`,
+                                },
+                            }
+                        );
+
+                        if (checkEmailResponse.ok) {
+                            const responseText = await checkEmailResponse.text();
+                            if (responseText) {
+                                const existingParent = JSON.parse(responseText);
+                                if (existingParent) {
+                                    // Si l'email existe, on incrémente
+                                    generatedEmail = `${base}${compteur}@parent.com`;
+                                    compteur++;
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error("Erreur lors de la vérification de l'email:", error);
+                    }
+
+                    setUserFormData(prev => ({
+                        ...prev,
+                        email: generatedEmail,
+                        parentId: '',
+                    }));
+                    toast({
+                        title: t.userManagement.toasts.newTutorTitle || "Nouveau tuteur",
+                        description: t.userManagement.toasts.newTutorEmailGenerated || "Un e-mail provisoire a été généré.",
+                        variant: "default",
+                    });
+                }
+                setIsCheckingTuteur(false);
+            }
+        }
+    }, 800);
+
+    return () => clearTimeout(checkTuteur);
+}, [userFormData.tuteurNom, userFormData.tuteurTelephone, userFormData.role, emailManuallyEdited]);
+
+
+const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (value: any) => {
+  // Si le champ est email, marquez-le comme édité manuellement
+  if (field === 'email') {
+    setEmailManuallyEdited(true);
+  }
+  setUserFormData(prev => ({ ...prev, [field]: value }));
+}, []);
 
   const handleInscriptionFormChange = useCallback((field: keyof typeof inscriptionFormData) => (value: any) => {
     setInscriptionFormData(prev => ({ ...prev, [field]: value }));
   }, []);
 
-  const handleAddUserSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
+ const handleAddUserSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setIsSubmitting(true);
 
-    try {
-      const userData: Partial<User> = {
-        nom: userFormData.nom,
-        prenom: userFormData.prenom,
-        email: userFormData.email,
-        genre: userFormData.genre === 'masculin' || userFormData.genre === 'feminin' ? userFormData.genre : null,
-        adresse: userFormData.adresse,
-        photoUrl: userFormData.photoUrl || null,
-        role: userFormData.role === "" ? 'eleve' : userFormData.role,
-        actif: userFormData.actif,
-      };
+  try {
+    // Préparation des données utilisateur
+    const userData: Partial<User> = {
+      nom: userFormData.nom,
+      prenom: userFormData.prenom,
+      email: userFormData.email,
+      genre: userFormData.genre === 'masculin' || userFormData.genre === 'feminin' ? userFormData.genre : null,
+      adresse: userFormData.adresse,
+      photoUrl: userFormData.photoUrl || null,
+      role: userFormData.role === "" ? 'eleve' : userFormData.role,
+      actif: userFormData.actif,
+    };
 
-      if (userFormData.role === 'eleve') {
-        if (userFormData.tuteurNom && userFormData.tuteurNom.trim() !== '') {
-          userData.tuteurNom = userFormData.tuteurNom;
-        }
-        if (userFormData.tuteurTelephone && userFormData.tuteurTelephone.trim() !== '') {
-          userData.tuteurTelephone = userFormData.tuteurTelephone;
-        }
-      }
+    // Ajout des infos tuteur si c'est un élève
+    if (userFormData.role === 'eleve') {
+      if (userFormData.tuteurNom?.trim()) userData.tuteurNom = userFormData.tuteurNom;
+      if (userFormData.tuteurTelephone?.trim()) userData.tuteurTelephone = userFormData.tuteurTelephone;
+      if (userFormData.parentId) userData.parentEmail = userFormData.email; // Pour la recherche de parent
+    }
 
-      if (editUser) {
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/api/users/${editUser.id}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(userData),
-        });
+    const token = localStorage.getItem('token');
+    let response: Response;
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || t.userManagement.toasts.userCreateUpdateError);
-        }
-
-        const updatedUser: User = await response.json();
-        setUsers((prev) =>
-          prev.map((u) => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u))
-        );
-
-        toast({
-          title: t.userManagement.toasts.userUpdated,
-          description: t.userManagement.toasts.userUpdatedSuccess.replace('{user}', `${updatedUser.prenom} ${updatedUser.nom}`),
-          variant: "default",
-        });
-
-        setEditUser(null);
-        setIsAddUserDialogOpen(false);
-        setIsSubmitting(false);
-        return;
-      }
-
-      const token = localStorage.getItem('token');
-      const userResponse = await fetch(`${API_URL}/api/users`, {
-        method: 'POST',
+    // Gestion de l'édition
+    if (editUser) {
+      response = await fetch(`${API_URL}/api/users/${editUser.id}`, {
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
@@ -554,72 +634,88 @@ const handlePrintClassStudents = async (classeId: number) => {
         body: JSON.stringify(userData),
       });
 
-      if (!userResponse.ok) {
-        const errorData = await userResponse.json();
-        throw new Error(errorData.message || t.userManagement.toasts.userCreateUpdateError);
-      }
+      if (!response.ok) throw new Error((await response.json()).message);
 
-      const responseData = await userResponse.json();
-      const newUser: User = responseData.user || responseData;
-      setUsers((prev) => [...prev, newUser]);
-
-      if (responseData.motDePasse) {
-        setGeneratedPassword({
-          password: responseData.motDePasse,
-          nom: newUser.nom,
-          prenom: newUser.prenom,
-          email: newUser.email,
-        });
-      }
-
-      if (newUser.role === 'eleve') {
-        setActiveTab('inscriptions');
-        setInscriptionFormData(prev => ({
-          ...prev,
-          utilisateur_id: String(newUser.id),
-          tuteurNom: newUser.tuteurNom || '',
-          tuteurTelephone: newUser.tuteurTelephone || '',
-          classe_id: userFormData.classe_id,
-          annee_scolaire_id: userFormData.annee_scolaire_id,
-        }));
-        setTimeout(() => setIsAddInscriptionDialogOpen(true), 200);
-      }
+      const updatedUser: User = await response.json();
+      setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
 
       toast({
-        title: t.common.success,
-        description: t.userManagement.toasts.userAddedSuccess.replace('{user}', `${newUser.prenom} ${newUser.nom}`),
+        title: t.userManagement.toasts.userUpdated,
+        description: t.userManagement.toasts.userUpdatedSuccess
+          .replace('{user}', `${updatedUser.prenom} ${updatedUser.nom}`),
         variant: "default",
       });
 
-      setUserFormData({
-        nom: '',
-        prenom: '',
-        email: '',
-        genre: '',
-        adresse: '',
-        tuteurNom: '',
-        tuteurTelephone: '',
-        photoUrl: '',
-        role: '',
-        actif: true,
-        classe_id: '',
-        annee_scolaire_id: '',
-        date_inscription: new Date().toISOString().split('T')[0],
-      });
+      setEditUser(null);
       setIsAddUserDialogOpen(false);
-
-    } catch (error) {
-      console.error("Erreur lors de la création/mise à jour de l'utilisateur:", error);
-      toast({
-        title: t.common.error,
-        description: error instanceof Error ? error.message : t.userManagement.toasts.userCreateUpdateError,
-        variant: "destructive",
-      });
-    } finally {
-      setIsSubmitting(false);
+      return;
     }
-  };
 
+    // Création d'un nouvel utilisateur
+    response = await fetch(`${API_URL}/api/users`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(userData),
+    });
+
+    if (!response.ok) throw new Error((await response.json()).message);
+
+    const responseData = await response.json();
+    const newUser = responseData.user || responseData;
+
+    // Mise à jour de la liste des utilisateurs
+    setUsers(prev => [...prev, newUser]);
+
+    // Affichage du mot de passe
+    if (responseData.plainPassword) {
+      setGeneratedPassword({
+        password: responseData.plainPassword,
+        nom: newUser.nom,
+        prenom: newUser.prenom,
+        email: newUser.email,
+    ...(responseData.parentPassword && { parentPassword: responseData.parentPassword })
+      });
+    }
+
+    // Gestion spécifique pour les élèves
+    if (newUser.role === 'eleve') {
+      setActiveTab('inscriptions');
+      setInscriptionFormData(prev => ({
+        ...prev,
+        utilisateur_id: String(newUser.id),
+        tuteurNom: newUser.tuteurNom || '',
+        tuteurTelephone: newUser.tuteurTelephone || '',
+        classe_id: userFormData.classe_id,
+        annee_scolaire_id: userFormData.annee_scolaire_id,
+      }));
+      setTimeout(() => setIsAddInscriptionDialogOpen(true), 200);
+    }
+
+    // Réinitialisation du formulaire
+    setUserFormData(initialUserFormData);
+    setIsAddUserDialogOpen(false);
+
+    toast({
+      title: t.common.success,
+      description: t.userManagement.toasts.userAddedSuccess
+        .replace('{user}', `${newUser.prenom} ${newUser.nom}`),
+      variant: "default",
+    });
+
+  } catch (error) {
+    console.error("Erreur lors de la création/mise à jour:", error);
+    toast({
+      title: t.common.error,
+      description: error instanceof Error ? error.message : t.userManagement.toasts.userCreateUpdateError,
+      variant: "destructive",
+    });
+  } finally {
+    setIsSubmitting(false);
+  }
+};
   const handleAddInscriptionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -686,6 +782,62 @@ const handlePrintClassStudents = async (classeId: number) => {
       setIsSubmitting(false);
     }
   };
+
+  const handleEditInscriptionSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setIsSubmitting(true);
+
+  try {
+    if (!editInscription) return;
+
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_URL}/api/inscriptions/${editInscription.id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        utilisateur_id: parseInt(inscriptionFormData.utilisateur_id),
+        classe_id: parseInt(inscriptionFormData.classe_id),
+        annee_scolaire_id: parseInt(inscriptionFormData.annee_scolaire_id),
+        actif: inscriptionFormData.actif,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || t.userManagement.toasts.registrationUpdateError);
+    }
+
+    const updatedInscription: Inscription = await response.json();
+    
+    // Mettre à jour l'état local
+    setInscriptions(prev => 
+      prev.map(insc => 
+        insc.id === updatedInscription.id ? updatedInscription : insc
+      )
+    );
+
+    toast({
+      title: t.common.success,
+      description: t.userManagement.toasts.registrationUpdatedSuccess,
+      variant: "default",
+    });
+
+    setEditInscription(null);
+    setIsAddInscriptionDialogOpen(false);
+  } catch (error) {
+    console.error("Erreur lors de la mise à jour de l'inscription:", error);
+    toast({
+      title: t.common.error,
+      description: error instanceof Error ? error.message : t.userManagement.toasts.registrationUpdateError,
+      variant: "destructive",
+    });
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const requestSortUsers = (key: SortKey) => {
     let direction: 'ascending' | 'descending' = 'ascending';
@@ -792,6 +944,19 @@ const handlePrintClassStudents = async (classeId: number) => {
   }, [userFormData.annee_scolaire_id, userFormData.classe_id, availableClassesForSelectedYear]);
 
   useEffect(() => {
+  if (inscriptionFormData.annee_scolaire_id && inscriptionFormData.classe_id) {
+    const selectedClass = classes.find(c => c.id === parseInt(inscriptionFormData.classe_id));
+    if (!selectedClass || selectedClass.annee_scolaire_id !== parseInt(inscriptionFormData.annee_scolaire_id)) {
+      setInscriptionFormData(prev => ({ ...prev, classe_id: '' }));
+    }
+  }
+}, [inscriptionFormData.annee_scolaire_id, classes]);
+ useEffect(() => {
+  if (!isAddInscriptionDialogOpen) {
+    setInscriptionFormData(initialInscriptionFormData);
+  }
+}, [isAddInscriptionDialogOpen]);
+  useEffect(() => {
     if (editUser) {
       let classe_id = '';
       let annee_scolaire_id = '';
@@ -823,6 +988,7 @@ const handlePrintClassStudents = async (classeId: number) => {
         classe_id,
         annee_scolaire_id,
         date_inscription,
+        parentId: editUser.parentId || '',
       });
       setIsAddUserDialogOpen(true);
     }
@@ -893,8 +1059,14 @@ const handlePrintClassStudents = async (classeId: number) => {
       {activeTab === 'users' && (
         <>
           <div className="flex justify-center md:justify-end mb-6">
-            <Dialog open={isAddUserDialogOpen} onOpenChange={setIsAddUserDialogOpen}>
-              <DialogTrigger asChild>
+ <Dialog open={isAddUserDialogOpen} onOpenChange={(isOpen) => {
+              setIsAddUserDialogOpen(isOpen);
+              if (!isOpen) {
+                setEditUser(null);
+                setUserFormData(initialUserFormData);
+                setEmailManuallyEdited(false);
+              }
+            }}>              <DialogTrigger asChild>
                 <Button className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2">
                   <Plus className="h-4 w-4" />
                   {t.userManagement.addUser}
@@ -910,11 +1082,17 @@ const handlePrintClassStudents = async (classeId: number) => {
                   </div>
                   <DialogHeader className="relative z-10">
                     <DialogTitle className="flex items-center gap-4 text-3xl font-extrabold text-white leading-tight drop-shadow-sm">
-                      <User className="h-8 w-8 text-white animate-fade-in-up" />
-                      <span>{t.userManagement.userForm.title}</span>
+                      <UserIcon className="h-8 w-8 text-white animate-fade-in-up" />
+                      <span>
+                        {editUser
+                          ? t.userManagement.userForm.editTitle
+                          : t.userManagement.userForm.title}
+                      </span>
                     </DialogTitle>
                     <DialogDescription className="text-blue-100 dark:text-blue-200 mt-2 text-base max-w-md drop-shadow-sm">
-                      {t.userManagement.userForm.description}
+                      {editUser
+                        ? t.userManagement.userForm.editDescription
+                        : t.userManagement.userForm.description}
                     </DialogDescription>
                   </DialogHeader>
                 </div>
@@ -933,15 +1111,20 @@ const handlePrintClassStudents = async (classeId: number) => {
                         <Label htmlFor="nom" className="text-gray-700 dark:text-gray-200 text-sm font-medium">
                           {t.userManagement.userForm.name} <span className="text-red-500">*</span>
                         </Label>
-                        <Input
-                          id="nom"
-                          type="text"
-                          required
-                          placeholder={t.userManagement.userForm.name}
-                          value={userFormData.nom}
-                          onChange={e => setUserFormData(prev => ({ ...prev, nom: e.target.value }))}
-                          className="h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm"
-                        />
+                         <div className="relative">
+                          <Input
+  id="nom"
+  type="text"
+  required
+  placeholder={t.userManagement.userForm.name}
+  value={userFormData.nom}
+  onChange={e => setUserFormData(prev => ({ ...prev, nom: e.target.value }))}
+  className="h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm"
+/>
+                          {isCheckingTuteur && (
+                            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
+                          )}
+                        </div>
                       </div>
                 
                       <div className="space-y-2">
@@ -959,20 +1142,7 @@ const handlePrintClassStudents = async (classeId: number) => {
                         />
                       </div>
                 
-                      <div className="space-y-2">
-                        <Label htmlFor="email" className="text-gray-700 dark:text-gray-200 text-sm font-medium">
-                          {t.userManagement.userForm.email} <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                          id="email"
-                          type="email"
-                          required
-                          placeholder={t.userManagement.userForm.email}
-                          value={userFormData.email}
-                          onChange={e => setUserFormData(prev => ({ ...prev, email: e.target.value }))}
-                          className="h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm"
-                        />
-                      </div>
+                      
                 
                       <div className="space-y-2">
                         <Label className="text-gray-700 dark:text-gray-200 text-sm font-medium">
@@ -993,6 +1163,8 @@ const handlePrintClassStudents = async (classeId: number) => {
                       </div>
                     </div>
                   </div>
+
+                  
                 
                   <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-850 dark:to-gray-900 p-6 rounded-2xl border border-blue-100 dark:border-gray-700 shadow-sm-light transform transition-transform duration-300 hover:scale-[1.005]">
                     <h3 className="flex items-center gap-3 text-base font-semibold text-blue-700 dark:text-blue-300 mb-5 pb-3 border-b border-blue-200/60 dark:border-gray-700/60">
@@ -1007,7 +1179,7 @@ const handlePrintClassStudents = async (classeId: number) => {
                         <Avatar className="h-32 w-32 border-4 border-white dark:border-gray-800 shadow-lg-soft group-hover:border-blue-300 transition-all duration-300 ease-in-out transform group-hover:scale-105">
                           <AvatarImage src={userFormData.photoUrl} alt="Photo de profil" className="object-cover" />
                           <AvatarFallback className="bg-gradient-to-br from-blue-100 to-blue-200 dark:from-gray-700 dark:to-gray-800 flex items-center justify-center text-blue-500 dark:text-blue-400">
-                            <User className="h-14 w-14" />
+                            <UserIcon className="h-14 w-14" />
                           </AvatarFallback>
                         </Avatar>
                         {userFormData.photoUrl && (
@@ -1097,6 +1269,8 @@ const handlePrintClassStudents = async (classeId: number) => {
                           </SelectContent>
                         </Select>
                       </div>
+
+                      
                 
                       <div className="space-y-2">
                         <Label className="text-gray-700 dark:text-gray-200 text-sm font-medium">
@@ -1139,32 +1313,40 @@ const handlePrintClassStudents = async (classeId: number) => {
                           const isClasseDisabled = userFormData.role !== 'eleve' || !userFormData.annee_scolaire_id;
                           return (
                             <Select
-                              value={userFormData.classe_id}
-                              onValueChange={(value) => {
-                                setUserFormData({
-                                  ...userFormData,
-                                  classe_id: value,
-                                });
-                              }}
-                              disabled={isClasseDisabled}
-                            >
-                              <SelectTrigger className={`h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm ${isClasseDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                <SelectValue placeholder={t.userManagement.userForm.selectClass} />
-                              </SelectTrigger>
-                              <SelectContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg animate-fade-in-down">
-                                {classesToDisplay.length === 0 ? (
-                                  <SelectItem value="no-classes-available" disabled>
-                                    {userFormData.annee_scolaire_id ? t.userManagement.userForm.noClassForYear : t.userManagement.userForm.selectYearFirst}
-                                  </SelectItem>
-                                ) : (
-                                  classesToDisplay.map((classe) => (
-                                    <SelectItem key={classe.id} value={String(classe.id)}>
-                                      {classe.nom}
-                                    </SelectItem>
-                                  ))
-                                )}
-                              </SelectContent>
-                            </Select>
+  value={userFormData.classe_id}
+  onValueChange={(value) => {
+    setUserFormData(prev => ({
+      ...prev,
+      classe_id: value,
+    }));
+  }}
+  disabled={isClasseDisabled}
+>
+  <SelectTrigger className={`h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm ${isClasseDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+    <SelectValue placeholder={
+      !userFormData.annee_scolaire_id
+        ? t.userManagement.userForm.selectYearFirst
+        : classesToDisplay.length === 0
+          ? t.userManagement.userForm.noClassForYear
+          : t.userManagement.userForm.selectClass
+    } />
+  </SelectTrigger>
+  <SelectContent className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg animate-fade-in-down">
+    {classesToDisplay.length === 0 ? (
+      <SelectItem value="no-classes-available" disabled>
+        {userFormData.annee_scolaire_id 
+          ? t.userManagement.userForm.noClassForYear 
+          : t.userManagement.userForm.selectYearFirst}
+      </SelectItem>
+    ) : (
+      classesToDisplay.map((classe) => (
+        <SelectItem key={classe.id} value={String(classe.id)}>
+          {classe.nom} ({classe.niveau}) {/* Ajout du niveau pour plus de clarté */}
+        </SelectItem>
+      ))
+    )}
+  </SelectContent>
+</Select>
                           );
                         })()}
                       </div>
@@ -1184,7 +1366,7 @@ const handlePrintClassStudents = async (classeId: number) => {
                       </div>
                     </div>
                   </div>
-                
+
                   <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-850 dark:to-gray-900 p-6 rounded-2xl border border-blue-100 dark:border-gray-700 shadow-sm-light transform transition-transform duration-300 hover:scale-[1.005]">
                     <h3 className="flex items-center gap-3 text-base font-semibold text-blue-700 dark:text-blue-300 mb-5 pb-3 border-b border-blue-200/60 dark:border-gray-700/60">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1207,37 +1389,90 @@ const handlePrintClassStudents = async (classeId: number) => {
                           className="h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm"
                         />
                       </div>
+
+                      
+                      
                 
-                      <div className="space-y-2">
-                        <Label htmlFor="tuteur" className="text-gray-700 dark:text-gray-200 text-sm font-medium">
-                          {t.userManagement.userForm.tutorName}
-                        </Label>
-                        <Input
-                          id="tuteur"
-                          type="text"
-                          placeholder={t.userManagement.userForm.tutorName}
-                          value={userFormData.tuteurNom}
-                          onChange={e => handleUserFormChange('tuteurNom')(e.target.value)}
-                          disabled={userFormData.role !== 'eleve'}
-                          className="h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                        />
-                      </div>
+<div className="space-y-2">
+  <Label
+    htmlFor="tuteur"
+    className="text-gray-700 dark:text-gray-200 text-sm font-medium"
+  >
+    {t.userManagement.userForm.tutorName}
+    <span className="text-red-500 ml-1">*</span>
+  </Label>
+
+  <Input
+    id="tuteur"
+    type="text"
+    required
+    placeholder={t.userManagement.userForm.tutorName}
+    value={userFormData.tuteurNom}
+    onChange={e => {
+      const value = e.target.value;
+      // N'accepte que les lettres, espaces et caractères accentués
+      if (/^[\p{L}\s]*$/u.test(value)) {
+        handleUserFormChange('tuteurNom')(value);
+      }
+    }}
+    disabled={userFormData.role !== 'eleve'}
+    className="h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+  />
+</div>
+
+
+<div className="space-y-2">
+  <Label
+    htmlFor="tuteur_telephone"
+    className="text-gray-700 dark:text-gray-200 text-sm font-medium"
+  >
+    {t.userManagement.userForm.tutorPhone}
+    <span className="text-red-500 ml-1">*</span>
+  </Label>
+  
+  <Input
+    id="tuteur_telephone"
+    type="text"
+    inputMode="numeric"
+    pattern="[0-9]*"
+    maxLength={8}
+    required
+    placeholder={t.userManagement.userForm.tutorPhone}
+    value={userFormData.tuteurTelephone}
+    onChange={e => {
+      const value = e.target.value;
+      if (/^\d*$/.test(value) && value.length <= 8) {
+        handleUserFormChange('tuteurTelephone')(value);
+      }
+    }}
+    disabled={userFormData.role !== 'eleve'}
+    className="h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+  />
+</div>
+
 
                       <div className="space-y-2">
-                        <Label htmlFor="tuteur_telephone" className="text-gray-700 dark:text-gray-200 text-sm font-medium">
-                          {t.userManagement.userForm.tutorPhone}
-                        </Label>
-                        <Input
-                          id="tuteur_telephone"
-                          type="text"
-                          placeholder={t.userManagement.userForm.tutorPhone}
-                          value={userFormData.tuteurTelephone}
-                          onChange={e => handleUserFormChange('tuteurTelephone')(e.target.value)}
-                          disabled={userFormData.role !== 'eleve'}
-                          className="h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                        />
-                      </div>
-                      
+  <Label htmlFor="email" className="text-gray-700 dark:text-gray-200 text-sm font-medium">
+    {t.userManagement.userForm.email} <span className="text-red-500">*</span>
+  </Label>
+  <div className="relative">
+    <Input
+      id="email"
+      type="email"
+      required
+      placeholder={t.userManagement.userForm.email}
+      value={userFormData.email}
+      onChange={e => {
+        setEmailManuallyEdited(true); // Marquer comme édité manuellement
+        handleUserFormChange('email')(e.target.value);
+      }}
+      className="h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm"
+    />
+    {isCheckingTuteur && (
+      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
+    )}
+  </div>
+</div>
                       <div className="flex items-center justify-between pt-4">
                         <Label htmlFor="actif" className="text-gray-700 dark:text-gray-200 text-sm font-medium cursor-pointer">
                           {t.userManagement.userForm.activeAccount}
@@ -1249,33 +1484,40 @@ const handlePrintClassStudents = async (classeId: number) => {
                           className="data-[state=checked]:bg-blue-500 data-[state=unchecked]:bg-gray-200 dark:data-[state=unchecked]:bg-gray-600 transition-colors duration-200 ease-in-out"
                         />
                       </div>
+                      
                     </div>
                   </div>
+
+
                 
-                  <div className="flex flex-col-reverse sm:flex-row justify-end gap-4 pt-6">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsAddUserDialogOpen(false)}
-                      className="px-7 py-3 rounded-xl border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200 shadow-sm hover:shadow-md"
-                    >
-                      {t.common.cancel}
-                    </Button>
-                    {!editUser && (
-                      <Button
-                        type="submit"
-                        className="px-7 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white shadow-lg-soft transition-all duration-300 ease-in-out hover:shadow-xl-soft transform hover:-translate-y-1"
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        {t.userManagement.userForm.createUser}
-                      </Button>
-                    )}
-                    {editUser && (
-                      <Button type="submit">
-                        {t.userManagement.userForm.updateUser}
-                      </Button>
-                    )}
-                  </div>
+                  
+                
+                 <div className="flex flex-col-reverse sm:flex-row justify-end gap-4 pt-6">
+  <Button
+    type="button"
+    variant="outline"
+    onClick={() => setIsAddUserDialogOpen(false)}
+    className="px-7 py-3 rounded-xl border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200 shadow-sm hover:shadow-md"
+  >
+    {t.common.cancel}
+  </Button>
+  {!editUser ? (
+    <Button
+      type="submit"
+      className="px-7 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white shadow-lg-soft transition-all duration-300 ease-in-out hover:shadow-xl-soft transform hover:-translate-y-1"
+    >
+      <Plus className="h-4 w-4 mr-2" />
+      {t.userManagement.userForm.createUser}
+    </Button>
+  ) : (
+    <Button
+      type="submit"
+      className="px-7 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white shadow-lg-soft transition-all duration-300 ease-in-out hover:shadow-xl-soft transform hover:-translate-y-1"
+    >
+      {t.userManagement.userForm.updateUser}
+    </Button>
+  )}
+</div>
                 </form>
               </DialogContent>
             </Dialog>
@@ -1492,9 +1734,17 @@ onClick={() => setFilterRole(key as "all" | UserRole)}
       {activeTab === 'inscriptions' && (
         <>
           <div className="flex justify-center md:justify-end mb-6">
-            <Dialog open={isAddInscriptionDialogOpen} onOpenChange={setIsAddInscriptionDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2">
+<Dialog 
+  open={isAddInscriptionDialogOpen} 
+  onOpenChange={(isOpen) => {
+    setIsAddInscriptionDialogOpen(isOpen);
+    if (!isOpen) {
+      setEditInscription(null);
+      setInscriptionFormData(initialInscriptionFormData);
+    }
+  }}
+>              <DialogTrigger asChild>
+                <Button className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2" onClick={() => setEmailManuallyEdited(false)}>
                   <Plus className="h-4 w-4" />
                   {t.userManagement.addRegistration}
                 </Button>
@@ -1508,7 +1758,7 @@ onClick={() => setFilterRole(key as "all" | UserRole)}
                     {t.userManagement.registrationForm.description}
                   </DialogDescription>
                 </DialogHeader>
-                <form onSubmit={handleAddInscriptionSubmit} className="grid gap-6 py-4">
+                <form onSubmit={editInscription ? handleEditInscriptionSubmit : handleAddInscriptionSubmit} className="grid gap-6 py-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-4">
                       <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
@@ -1535,27 +1785,33 @@ onClick={() => setFilterRole(key as "all" | UserRole)}
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="classe_id" className="text-gray-700 dark:text-gray-200 text-sm font-medium">
-                          {t.userManagement.tableHeaders.class}
-                        </Label>
-                        <Select
-                          value={inscriptionFormData.classe_id}
-                          onValueChange={handleInscriptionFormChange('classe_id')}
-                          required
-                        >
-                          <SelectTrigger className="h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm">
-                            <SelectValue placeholder={t.userManagement.userForm.selectClass} />
-                          </SelectTrigger>
-                          <SelectContent className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg shadow-lg">
-                            {classes.map((classe) => (
-                              <SelectItem key={classe.id} value={String(classe.id)}>
-                                {classe.nom} ({classe.niveau})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    <div className="space-y-2">
+  <Label htmlFor="classe_id" className="text-gray-700 dark:text-gray-200 text-sm font-medium">
+    {t.userManagement.tableHeaders.class}
+  </Label>
+  <Select
+    value={inscriptionFormData.classe_id}
+    onValueChange={handleInscriptionFormChange('classe_id')}
+    required
+  >
+    <SelectTrigger className="h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm">
+      <SelectValue placeholder={t.userManagement.userForm.selectClass} />
+    </SelectTrigger>
+    <SelectContent className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg shadow-lg">
+      {classes
+        .filter(classe => 
+          !inscriptionFormData.annee_scolaire_id || 
+          classe.annee_scolaire_id === parseInt(inscriptionFormData.annee_scolaire_id)
+        )
+        .map((classe) => (
+          <SelectItem key={classe.id} value={String(classe.id)}>
+            {classe.nom} ({classe.niveau})
+          </SelectItem>
+        ))
+      }
+    </SelectContent>
+  </Select>
+</div>
                       <div className="space-y-2">
                         <Label htmlFor="annee_scolaire_id" className="text-gray-700 dark:text-gray-200 text-sm font-medium">
                           {t.userManagement.tableHeaders.schoolYear}
@@ -1606,8 +1862,10 @@ onClick={() => setFilterRole(key as "all" | UserRole)}
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => setIsAddInscriptionDialogOpen(false)}
-                      className="px-7 py-3 rounded-xl border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200 shadow-sm hover:shadow-md"
+onClick={() => {
+          setIsAddInscriptionDialogOpen(false);
+          setEditInscription(null);
+        }}                      className="px-7 py-3 rounded-xl border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200 shadow-sm hover:shadow-md"
                     >
                       {t.common.cancel}
                     </Button>
@@ -1618,14 +1876,22 @@ onClick={() => setFilterRole(key as "all" | UserRole)}
                     >
                       {isSubmitting ? (
                         <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          {t.userManagement.registrationForm.creating}
-                        </>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            {editInscription 
+              ? t.userManagement.registrationForm.updating 
+              : t.userManagement.registrationForm.creating}
+          </>
                       ) : (
-                        <>
-                          <Plus className="h-4 w-4 mr-2" />
-                          {t.userManagement.registrationForm.createRegistration}
-                        </>
+                         <>
+            {editInscription ? (
+              <Check className="h-4 w-4 mr-2" />
+            ) : (
+              <Plus className="h-4 w-4 mr-2" />
+            )}
+            {editInscription 
+              ? t.userManagement.registrationForm.updateRegistration 
+              : t.userManagement.registrationForm.createRegistration}
+          </>
                       )}
                     </Button>
                   </div>
@@ -1741,7 +2007,11 @@ onClick={() => setFilterRole(key as "all" | UserRole)}
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                         {filteredInscriptions.map((inscription) => (
-                          <tr key={inscription.id} className="hover:bg-blue-50 dark:hover:bg-blue-900 transition-colors cursor-pointer" onClick={() => handleEditUserFromInscription(inscription)}>
+    <tr 
+      key={inscription.id} 
+      className="hover:bg-blue-50 dark:hover:bg-blue-900 transition-colors cursor-pointer" 
+      onClick={() => handleEditInscription(inscription)}  // Changé ici
+    >
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center">
                                 <TooltipProvider>
@@ -1817,8 +2087,11 @@ onClick={() => setFilterRole(key as "all" | UserRole)}
                       </div>
                     ) : (
                       filteredInscriptions.map((inscription) => (
-                        <Card key={inscription.id} className="bg-white dark:bg-gray-800 shadow-md rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onClick={() => handleEditUserFromInscription(inscription)}>
-                          <CardHeader className="flex flex-row items-center gap-4 pb-2">
+<Card 
+      key={inscription.id}
+      className="bg-white dark:bg-gray-800 shadow-md rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+      onClick={() => handleEditInscription(inscription)}  // Changé ici
+    >                          <CardHeader className="flex flex-row items-center gap-4 pb-2">
                             <Avatar className="h-12 w-12 border-2 border-white dark:border-gray-700">
                               <AvatarImage src={inscription.utilisateur.photoUrl || undefined} />
                               <AvatarFallback>{inscription.utilisateur.prenom?.[0]}{inscription.utilisateur.nom?.[0]}</AvatarFallback>
@@ -1884,88 +2157,108 @@ onClick={() => setFilterRole(key as "all" | UserRole)}
           </Card>
         </>
       )}
-      {generatedPassword && (
-        <Dialog open={!!generatedPassword} onOpenChange={() => setGeneratedPassword(null)}>
-          <DialogContent className="max-w-md w-full bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 rounded-2xl shadow-xl border border-blue-100 dark:border-gray-700 p-0 overflow-hidden">
-            <div className="flex flex-col items-center text-center px-6 py-8">
-              <div className="bg-green-100 dark:bg-green-900 rounded-full p-3 mb-3 animate-bounce shadow-lg">
-                <Check className="h-8 w-8 text-green-600 dark:text-green-300" />
-              </div>
-              <h2 className="text-2xl font-bold mb-2 text-blue-900 dark:text-blue-100">
-                {t.userManagement.passwordModal.title}
-              </h2>
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <span className="inline-flex items-center px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-xs font-semibold">
-                  <Info className="h-4 w-4 mr-1" /> {t.userManagement.passwordModal.important}
-                </span>
-              </div>
-              <p className="text-gray-600 dark:text-gray-300 mb-4 text-sm">
-                {t.userManagement.passwordModal.info}<br />
-                <span className="text-red-500 font-medium">
-                  {t.userManagement.passwordModal.warning}
-                </span>
-              </p>
-              <div className="w-full bg-white dark:bg-gray-900 rounded-lg shadow p-4 mb-4 space-y-2 border border-gray-100 dark:border-gray-700 text-left">
-                <div>
-                  <span className="font-semibold">{t.userManagement.userForm.name}:</span> {generatedPassword.nom}
-                </div>
-                <div>
-                  <span className="font-semibold">{t.userManagement.userForm.firstName}:</span> {generatedPassword.prenom}
-                </div>
-                <div>
-                  <span className="font-semibold">{t.userManagement.userForm.email}:</span> {generatedPassword.email}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">{t.userManagement.passwordModal.password}</span>
-                  <PasswordReveal password={generatedPassword.password} showPasswordText={''} hidePasswordText={''} />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="ml-2"
-                    onClick={() => {
-                      navigator.clipboard.writeText(generatedPassword.password);
-                      const el = document.getElementById('password-to-copy');
-                      if (el) {
-                        el.classList.add('ring', 'ring-blue-400');
-                        setTimeout(() => el.classList.remove('ring', 'ring-blue-400'), 700);
-                      }
-                      toast({
-                        title: t.userManagement.passwordModal.toastCopied,
-                        variant: "default",
-                      });
-                    }}
-                  >
-                    {t.userManagement.passwordModal.copy}
-                  </Button>
-                </div>
-              </div>
+     {generatedPassword && (
+  <Dialog open={!!generatedPassword} onOpenChange={() => setGeneratedPassword(null)}>
+    <DialogContent className="max-w-md w-full bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 rounded-2xl shadow-xl border border-blue-100 dark:border-gray-700 p-0 overflow-hidden">
+      <div className="flex flex-col items-center text-center px-6 py-8">
+        {/* Icône de succès */}
+        <div className="bg-green-100 dark:bg-green-900 rounded-full p-3 mb-3 animate-bounce shadow-lg">
+          <Check className="h-8 w-8 text-green-600 dark:text-green-300" />
+        </div>
+
+        {/* Titre */}
+        <h2 className="text-2xl font-bold mb-2 text-blue-900 dark:text-blue-100">
+          {generatedPassword.parentPassword 
+            ? t.userManagement.passwordModal.parentTitle 
+            : t.userManagement.passwordModal.title}
+        </h2>
+
+        {/* Message d'avertissement */}
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <span className="inline-flex items-center px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-xs font-semibold">
+            <Info className="h-4 w-4 mr-1" /> {t.userManagement.passwordModal.important}
+          </span>
+        </div>
+
+        {/* Instructions */}
+        <p className="text-gray-600 dark:text-gray-300 mb-4 text-sm">
+          {generatedPassword.parentPassword 
+            ? t.userManagement.passwordModal.parentInfo 
+            : t.userManagement.passwordModal.info}
+          <br />
+          <span className="text-red-500 font-medium">
+            {t.userManagement.passwordModal.warning}
+          </span>
+        </p>
+
+        {/* Détails du compte */}
+        <div className="w-full bg-white dark:bg-gray-900 rounded-lg shadow p-4 mb-4 space-y-2 border border-gray-100 dark:border-gray-700 text-left">
+          {/* Nom + Prénom */}
+          <div>
+            <span className="font-semibold">{t.userManagement.userForm.name}:</span> {generatedPassword.nom}
+          </div>
+          <div>
+            <span className="font-semibold">{t.userManagement.userForm.firstName}:</span> {generatedPassword.prenom}
+          </div>
+          <div>
+            <span className="font-semibold">{t.userManagement.userForm.email}:</span> {generatedPassword.email}
+          </div>
+
+          {/* Afficher le mot de passe parent OU élève selon le cas */}
+          {generatedPassword.parentPassword ? (
+            <div className="flex items-center gap-2 mt-2">
+              <span className="font-semibold">{t.userManagement.passwordModal.parentPassword}:</span>
+              <PasswordReveal 
+                password={generatedPassword.parentPassword} 
+                showPasswordText={t.userManagement.passwordModal.show} 
+                hidePasswordText={t.userManagement.passwordModal.hide} 
+              />
               <Button
                 type="button"
-                variant="secondary"
-                className="mb-2"
+                size="sm"
+                variant="outline"
                 onClick={() => {
-                  navigator.clipboard.writeText(
-                    `${t.userManagement.userForm.name}: ${generatedPassword.nom}\n${t.userManagement.userForm.firstName}: ${generatedPassword.prenom}\n${t.userManagement.userForm.email}: ${generatedPassword.email}\n${t.userManagement.passwordModal.password}: ${generatedPassword.password}`
-                  );
-                  toast({
-                    title: t.userManagement.passwordModal.toastAllCopiedTitle,
-                    description: t.userManagement.passwordModal.toastAllCopiedDescription,
-                    variant: "default",
-                  });
+                  navigator.clipboard.writeText(generatedPassword.parentPassword!);
+                  toast({ title: t.userManagement.passwordModal.copied });
                 }}
               >
-                {t.userManagement.passwordModal.copyAll}
-              </Button>
-              <Button
-                onClick={() => setGeneratedPassword(null)}
-                className="mt-2 px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow"
-              >
-                {t.common.close}
+                {t.userManagement.passwordModal.copy}
               </Button>
             </div>
-          </DialogContent>
-        </Dialog>
+          ) : (
+            <div className="flex items-center gap-2 mt-2">
+              <span className="font-semibold">{t.userManagement.passwordModal.password}:</span>
+              <PasswordReveal 
+                password={generatedPassword.password} 
+                showPasswordText={t.userManagement.passwordModal.show} 
+                hidePasswordText={t.userManagement.passwordModal.hide} 
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(generatedPassword.password);
+                  toast({ title: t.userManagement.passwordModal.copied });
+                }}
+              >
+                {t.userManagement.passwordModal.copy}
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Bouton de fermeture */}
+        <Button
+          onClick={() => setGeneratedPassword(null)}
+          className="mt-2 px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow"
+        >
+          {t.common.close}
+        </Button>
+      </div>
+    </DialogContent>
+  </Dialog>
+
       )}
     </div>
   );

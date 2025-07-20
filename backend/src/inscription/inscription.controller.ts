@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body,Patch, Param, Delete, Query } from '@nestjs/common';
 import { InscriptionService } from './inscription.service';
 import { CreateInscriptionDto } from './dto/create-inscription.dto';
 
@@ -9,6 +9,11 @@ export class InscriptionController {
   @Post()
   create(@Body() createDto: CreateInscriptionDto) {
     return this.inscriptionService.create(createDto);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() updateDto: Partial<CreateInscriptionDto>) {
+    return this.inscriptionService.update(+id, updateDto);
   }
 
   @Get()
