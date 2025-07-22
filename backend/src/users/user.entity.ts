@@ -4,6 +4,7 @@ import { Parent } from '../central/parent.entity'; // Ajoutez cet import
 import { Classe } from '../classe/classe.entity';
 import { anneescolaire } from '../annee-academique/annee-academique.entity';
 import { Absence } from '../absence/absence.entity'; // Adaptez le chemin
+import { UtilisateurBloc } from './utilisateur-bloc.entity';
 
  // Assure-toi d'avoir cette entité importée
 
@@ -88,6 +89,8 @@ parentId?: string | null;
   @ManyToOne(() => Parent, parent => parent.enfants)
   @JoinColumn({ name: 'parent_id' })
   parent: Parent;
+   @OneToMany(() => UtilisateurBloc, acces => acces.utilisateur)
+  accesBlocs: UtilisateurBloc[];
 }
 
 

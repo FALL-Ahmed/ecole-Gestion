@@ -137,6 +137,8 @@ const getStatusBadgeClasses = (status) => {
       'Éducation Civique': t.schedule.subjects.civics,
       'Éducation Physique et Sportive': t.schedule.subjects.sport,
       'Philosophie': t.schedule.subjects.philosophy,
+      'Sciences Naturelles': t.schedule.subjects.naturalSciences,
+      'Technologie/Informatique': t.schedule.subjects.technology,
     };
     return subjectMap[subjectName] || subjectName;
   }, [t]);

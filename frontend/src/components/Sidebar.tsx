@@ -16,6 +16,7 @@ import {
   CheckSquare,
   School,
   LogOut,
+  DollarSign,
   Globe,
   History,
 } from "lucide-react";
@@ -110,6 +111,7 @@ export function Sidebar({
            { id: "child-schedule", label: t.sidebar.schedule, icon: Calendar },
            { id: "child-grades", label: t.sidebar.myGrades, icon: GraduationCap },
            { id: "child-attendance", label: t.sidebar.myAttendance, icon: Clock },
+           { id: "child-payments", label: t.sidebar.payments, icon: DollarSign },
            { id: "settings", label: t.sidebar.settings, icon: Settings },
   ];
 

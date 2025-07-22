@@ -7,9 +7,11 @@ import { Matiere } from '../matieres/matiere.entity';
 import { Classe } from '../classe/classe.entity';
 import { anneescolaire } from '../annee-academique/annee-academique.entity'; // <-- adapte le nom si besoin
 import { createTenantRepositoryProvider } from '../tenant/tenant-repository.provider';
+import { forwardRef } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-   imports: [],
+   imports: [forwardRef(() => AuthModule)],
   controllers: [AffectationController],
   providers: [
     AffectationService,

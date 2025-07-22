@@ -3,6 +3,7 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 't
 import { Classe } from '../classe/classe.entity'; // Assuming you have a Classe entity
 import { Matiere } from '../matieres/matiere.entity'; // Assuming you have a Matiere entity
 import { User } from '../users/user.entity'; // Assuming you have a User entity for Professors
+import { Bloc } from '../bloc/bloc.entity';
 
 export enum JourSemaine {
   LUNDI = 'Lundi',
@@ -43,6 +44,13 @@ export class EmploiDuTemps {
 
   @Column()
   professeur_id: number;
+
+    @Column({ name: 'bloc_id' })
+  blocId: number;
+
+  @ManyToOne(() => Bloc, bloc => bloc.emploiDuTemps, { onDelete: 'CASCADE', nullable: false })
+  @JoinColumn({ name: 'bloc_id' })
+  bloc: Bloc;
 
   @ManyToOne(() => User, { onDelete: 'SET NULL' }) // Assuming a 'User' entity for professors
   @JoinColumn({ name: 'professeur_id' })

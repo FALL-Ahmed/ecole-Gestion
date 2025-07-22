@@ -1,12 +1,14 @@
-import { Injectable, NotFoundException, InternalServerErrorException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, InternalServerErrorException, BadRequestException, Scope, Inject, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, DeepPartial } from 'typeorm';
 import { Note } from './note.entity';
 import { Evaluation } from '../evaluation/evaluation.entity';
 import { User } from '../users/user.entity';
 import { CreateNoteDto } from './dto/create-note.dto';
+import { REQUEST } from '@nestjs/core';
+import { Request } from 'express';
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class NoteService {
   constructor(
     @InjectRepository(Note)
@@ -17,13 +19,24 @@ export class NoteService {
 
     @InjectRepository(User)
     private userRepository: Repository<User>, // Gardé pour la validation
+
+    @Inject(REQUEST) private readonly request: Request,
   ) {}
+
+  private getBlocId(): number {
+    const user = this.request.user as any;
+    if (!user || !user.blocId) {
+      throw new UnauthorizedException("Impossible d'effectuer des opérations sur les notes sans être dans le contexte d'un bloc.");
+    }
+    return user.blocId;
+  }
 
   async createMultiple(createNoteDtos: CreateNoteDto[]): Promise<Note[]> {
     if (!Array.isArray(createNoteDtos) || createNoteDtos.length === 0) {
       throw new BadRequestException('Le corps de la requête doit être un tableau de notes et ne doit pas être vide.');
     }
 
+    const blocId = this.getBlocId();
     const notesToSave: Note[] = [];
 
     for (const dto of createNoteDtos) {
@@ -43,6 +56,7 @@ export class NoteService {
         note: dto.note,
         evaluation: { id: dto.evaluation_id } as Evaluation, // Assigne l'ID de l'évaluation
         etudiant: { id: dto.etudiant_id } as User,       // Assigne l'ID de l'étudiant
+        blocId: blocId, // Assigne le blocId du tenant actuel
       };
       notesToSave.push(this.noteRepository.create(notePartial));
     }
@@ -61,32 +75,42 @@ export class NoteService {
       throw new InternalServerErrorException('Erreur serveur lors de la création des notes.');
     }
   }
+async findAll(): Promise<Note[]> {
+  const notes = await this.noteRepository.find({
+    where: { blocId: this.getBlocId() },
+    relations: {
+  evaluation: {
+    matiere: true,
+    classe: true,
+    trimestre: true,
+    anneeScolaire: true,
+    professeur: true,
+  },
+  etudiant: true,
+},
 
-  async findAll(): Promise<Note[]> {
-    return this.noteRepository.find({
-      relations: {
-        evaluation: {
-          matiere: true,
-          classe: true, // Assure que l'entité Classe est chargée avec l'Évaluation
-        },
-        etudiant: true,
-      },
-    });
-  }
+  });
+  console.log("[Backend Debug] Note avec évaluation ID 22 :", notes.find(n => n.evaluation?.id === 22));
+  return notes;
+}
 
   async findByEvaluation(evaluationId: number): Promise<Note[]> {
     if (isNaN(evaluationId)) {
       throw new BadRequestException('L\'ID de l\'évaluation doit être un nombre valide.');
     }
     return this.noteRepository.find({
-      where: { evaluation: { id: evaluationId } },
+      where: { evaluation: { id: evaluationId }, blocId: this.getBlocId() },
       relations: {
-        evaluation: {
-          matiere: true,
-          classe: true, // Assure que l'entité Classe est chargée
-        },
-        etudiant: true,
-      },
+  evaluation: {
+    matiere: true,
+    classe: true,
+    trimestre: true,
+    anneeScolaire: true,
+    professeur: true,
+  },
+  etudiant: true,
+},
+
     });
   }
 
@@ -95,14 +119,18 @@ export class NoteService {
       return [];
     }
     return this.noteRepository.find({
-      where: { evaluation: { id: In(evaluationIds) } },
-      relations: {
-        evaluation: {
-          matiere: true,
-          classe: true, // Assure que l'entité Classe est chargée
-        },
-        etudiant: true,
-      },
+      where: { evaluation: { id: In(evaluationIds) }, blocId: this.getBlocId() },
+       relations: {
+  evaluation: {
+    matiere: true,
+    classe: true,
+    trimestre: true,
+    anneeScolaire: true,
+    professeur: true,
+  },
+  etudiant: true,
+},
+
     });
   }
 
@@ -111,14 +139,18 @@ export class NoteService {
       throw new BadRequestException('L\'ID de la note doit être un nombre valide.');
     }
     const note = await this.noteRepository.findOne({
-      where: { id },
+      where: { id, blocId: this.getBlocId() },
       relations: {
-        evaluation: {
-          matiere: true,
-          classe: true, // Assure que l'entité Classe est chargée
-        },
-        etudiant: true,
-      },
+  evaluation: {
+    matiere: true,
+    classe: true,
+    trimestre: true,
+    anneeScolaire: true,
+    professeur: true,
+  },
+  etudiant: true,
+},
+
     });
     if (!note) {
       throw new NotFoundException(`Note avec l'ID ${id} non trouvée.`);
@@ -135,14 +167,19 @@ export class NoteService {
       where: {
         evaluation: { id: In(evaluationIds) },
         etudiant: { id: etudiantId },
+        blocId: this.getBlocId(),
       },
-      relations: {
-        evaluation: {
-          matiere: true,
-          classe: true, // Assure que l'entité Classe est chargée
-        },
-        etudiant: true,
-      },
+     relations: {
+  evaluation: {
+    matiere: true,
+    classe: true,
+    trimestre: true,
+    anneeScolaire: true,
+    professeur: true,
+  },
+  etudiant: true,
+},
+
     });
     return notes.length > 0 ? notes : null;
   }
@@ -152,13 +189,14 @@ export class NoteService {
       throw new BadRequestException('L\'ID de la note à mettre à jour doit être un nombre valide.');
     }
   
+    const blocId = this.getBlocId();
     // Vérifier si la note existe
-    const noteToUpdate = await this.noteRepository.findOneBy({ id });
+    const noteToUpdate = await this.noteRepository.findOneBy({ id, blocId });
     if (!noteToUpdate) {
-      throw new NotFoundException(`Note avec l'ID ${id} non trouvée pour la mise à jour.`);
+      throw new NotFoundException(`Note avec l'ID ${id} non trouvée dans ce bloc pour la mise à jour.`);
     }
   
-    // Si evaluation_id ou etudiant_id sont fournis dans data, il faut les traiter comme des relations
+    // Si evaluation ou etudiant sont fournis dans data, il faut les traiter comme des relations
     const updatePayload: DeepPartial<Note> = { ...data };
   
     if (data.evaluation && typeof (data.evaluation as any).id === 'number') {
@@ -183,7 +221,7 @@ export class NoteService {
   
     // Appliquer les modifications à l'entité chargée
     // TypeORM gère la mise à jour des champs simples et des relations si les IDs sont fournis
-    await this.noteRepository.update(id, updatePayload);
+    await this.noteRepository.update({ id, blocId }, updatePayload);
   
     // Récupérer la note mise à jour avec toutes les relations souhaitées
     const updatedNoteWithRelations = await this.findOne(id);
@@ -199,9 +237,9 @@ export class NoteService {
     if (isNaN(id)) {
       throw new BadRequestException('L\'ID de la note à supprimer doit être un nombre valide.');
     }
-    const result = await this.noteRepository.delete(id);
+    const result = await this.noteRepository.delete({ id, blocId: this.getBlocId() });
     if (result.affected === 0) {
-      throw new NotFoundException(`Note avec l'ID ${id} non trouvée.`);
+      throw new NotFoundException(`Note avec l'ID ${id} non trouvée dans ce bloc.`);
     }
   }
 }

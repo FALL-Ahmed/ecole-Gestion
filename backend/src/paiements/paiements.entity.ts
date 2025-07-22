@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { User } from 'src/users/user.entity'; // This is correct for professeur
 import { anneescolaire } from 'src/annee-academique/annee-academique.entity';
+import { Bloc } from '../bloc/bloc.entity';
 
 export enum StatutPaiement {
   NON_PAYE = 'Non Payé',
@@ -57,5 +58,12 @@ export class Paiement {
   @ManyToOne(() => anneescolaire, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'anneeScolaireId' })
   anneeScolaire: anneescolaire;
+
+    @Column({ name: 'bloc_id' })
+  blocId: number;
+
+  @ManyToOne(() => Bloc, bloc => bloc.paiements, { onDelete: 'CASCADE', nullable: false })
+  @JoinColumn({ name: 'bloc_id' })
+  bloc: Bloc;
 }
 

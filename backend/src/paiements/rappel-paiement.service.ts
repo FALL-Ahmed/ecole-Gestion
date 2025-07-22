@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException, BadRequestException } from '@nestjs/common';
 import { PaiementService } from '../paiements/paiements.service';
 import { TwilioService } from '../twilo/twilio.service';
 import { EtablissementInfoService } from '../etablissement/etablissement-info.service';
@@ -24,10 +24,7 @@ async envoyerRappelManuel(eleveId: number, mois: string) {
       const eleveInfo = await this.paiementService.getEleveInfo(eleveId);
       
       if (!eleveInfo?.tuteurTelephone) {
-        return {
-          success: false,
-          message: 'Numéro de téléphone du tuteur non disponible'
-        };
+        throw new BadRequestException('Numéro de téléphone du tuteur non disponible');
       }
 
       await this.envoyerNotificationNonPaye(
@@ -47,10 +44,7 @@ async envoyerRappelManuel(eleveId: number, mois: string) {
 
     // Validation pour les autres cas
     if (!paiement?.eleve?.tuteurTelephone) {
-      return {
-        success: false,
-        message: 'Numéro de téléphone du tuteur non disponible'
-      };
+      throw new BadRequestException('Numéro de téléphone du tuteur non disponible');
     }
 
     const tuteurTelephone = paiement.eleve.tuteurTelephone.trim();
@@ -105,7 +99,7 @@ async envoyerRappelManuel(eleveId: number, mois: string) {
 
   } catch (error) {
     this.logger.error(`Erreur d'envoi de rappel`, error.stack);
-    throw new Error(`Échec de l'envoi: ${error.message}`);
+    throw new InternalServerErrorException(`Échec de l'envoi du rappel: ${error.message}`);
   }
 }
   private async envoyerNotificationNonPaye(

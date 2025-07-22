@@ -271,6 +271,8 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
       'Éducation Civique': t.schedule.subjects.civics,
       'Éducation Physique et Sportive': t.schedule.subjects.sport,
       'Philosophie': t.schedule.subjects.philosophy,
+      'Sciences Naturelles': t.schedule.subjects.naturalSciences,
+      'Technologie/Informatique': t.schedule.subjects.technology,
     };
     return subjectMap[subjectName] || subjectName;
   }, [t]);
@@ -481,13 +483,28 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
         
         setStudentClassId(studentInscription.classeId);
         
-        const [matieresRes, classesRes, usersRes] = await Promise.all([
-          fetch(`${API_URL}/api/matieres`).then(res => res.json()),
+        const studentClassId = studentInscription.classeId;
+        const anneeScolaireId = anneePourRequete.id;
+
+        // Fetch affectations to get taught subjects
+        const affectationsRes = await fetch(`${API_URL}/api/affectations?classe_id=${studentClassId}&annee_scolaire_id=${anneeScolaireId}`);
+        if (!affectationsRes.ok) throw new Error(t.schedule.errorLoading);
+        const affectations = await affectationsRes.json();
+        
+        const taughtMatieresMap = new Map<number, Matiere>();
+        affectations.forEach((aff: any) => {
+          if (aff.matiere && aff.matiere.id) {
+            taughtMatieresMap.set(aff.matiere.id, aff.matiere);
+          }
+        });
+        const taughtMatieres = Array.from(taughtMatieresMap.values());
+
+        const [classesRes, usersRes] = await Promise.all([
           fetch(`${API_URL}/api/classes`).then(res => res.json()),
           fetch(`${API_URL}/api/users`).then(res => res.json()),
         ]);
 
-        setAllMatieres(matieresRes);
+        setAllMatieres(taughtMatieres);
         setAllClasses(classesRes);
         setAllProfessors(usersRes.filter((u: UserData) => u.role === 'professeur'));
       } catch (err) {
@@ -802,7 +819,7 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
 
   return (
     <div className={`p-6 min-h-[100dvh] pb-[env(safe-area-inset-bottom)] ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
-      <header className={`mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10 p-4 bg-white/70 dark:bg-gray-800/70 backdrop-blur-md rounded-2xl border border-gray-100 dark:border-gray-700 ${isRTL ? 'text-right' : 'text-left'}`}>
+      <header className={`mb-6 flex flex-col md:flex-row justify-between items-center gap-4 mb-10 p-4 bg-white/70 dark:bg-gray-800/70 backdrop-blur-md rounded-2xl border border-gray-100 dark:border-gray-700 ${isRTL ? 'text-right' : 'text-left'}`}>
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white leading-tight drop">
             {t.schedule.title}
@@ -816,7 +833,7 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
             {format(currentTime, 'EEEE dd MMMM yyyy', { locale: currentLocale })}
           </p>
         </div>
-       <div className={`flex flex-wrap items-center justify-between gap-2 bg-gray-50/50 dark:bg-gray-700/50 p-2 rounded-xl shadow-inner border border-gray-100 dark:border-gray-600 ${isRTL ? 'flex-row-reverse' : ''}`}>
+       <div className={`flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-2 bg-gray-50/50 dark:bg-gray-700/50 p-2 rounded-xl shadow-inner border border-gray-100 dark:border-gray-600 ${isRTL ? 'sm:flex-row-reverse' : ''}`}>
   {/* Contrôles de navigation */}
   <div className={`flex items-center ${isRTL ? 'flex-row-reverse' : ''}`}>
     <Button
@@ -947,14 +964,14 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
         <CardContent className="pt-6 px-6">
           <ScrollArea className="w-full h-[700px] rounded-2xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-inner p-4">
             {/* Desktop View */}
-            <div className="hidden lg:block min-w-[1200px]">
+            <div className="hidden 2xl:block min-w-[1200px]">
                     <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10">
                   <tr>
                     <th className={`text-center font-extrabold text-xl text-gray-800 dark:text-white p-3 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10 shadow-sm ${isRTL ? 'text-right' : 'text-left'}`}>
                       {t.common.hours}
                     </th>
-                    {currentWeekDaysInfo.map((dayInfo) => {
+                    {currentWeekDaysInfo.map(dayInfo => {
                       return (
                         <th
                           key={dayInfo.dayNameCapitalized}
@@ -1010,9 +1027,9 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
 
                    </div>
 
-            {/* Mobile View */}
-            <div className="lg:hidden space-y-6 min-h-[100dvh] pb-[env(safe-area-inset-bottom)]">
-              {(isRTL ? [...currentWeekDaysInfo].reverse() : currentWeekDaysInfo).map(dayInfo => (
+            {/* Mobile & Tablet View */}
+            <div className="2xl:hidden grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 min-h-[100dvh] pb-[env(safe-area-inset-bottom)]">
+              {currentWeekDaysInfo.map(dayInfo => (
                 <div key={dayInfo.dayNameCapitalized}>
                   <h3 className={cn(
                     "text-lg font-bold mb-3 sticky top-0 py-2 z-10 border-b text-center rounded-t-lg",

@@ -72,6 +72,14 @@ interface Inscription {
   annee_scolaire: AnneeAcademique;
 }
 
+interface Affectation {
+  id: number;
+  professeur: User;
+  matiere: { id: number; nom: string };
+  classe: Classe;
+  annee_scolaire: AnneeAcademique;
+}
+
 interface CoefficientClasse {
   id: number;
   matiere_id: number;
@@ -88,7 +96,7 @@ interface Evaluation {
   date_eval: string;
   matiere?: { id: number; nom: string };
   classe_id?: number;
-  trimestreId?: number;
+  trimestre?: { id: number; nom: string };
   classe?: {
     id: number;
     annee_scolaire_id: number;
@@ -154,6 +162,7 @@ const [studentSearchTerm, setStudentSearchTerm] = useState('');
   const [absencesInYear, setAbsencesInYear] = useState<Absence[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string>('all');
   const [coefficients, setCoefficients] = useState<CoefficientClasse[]>([]);
+  const [affectations, setAffectations] = useState<Affectation[]>([]);
   const getTextAlignment = (language: string) => {
   return language === 'ar' ? 'text-right' : 'text-left';
 };
@@ -173,27 +182,23 @@ const translateTerm = (termName: string): string => {
   }
 };
 const translateSubject = (subjectName: string): string => {
-  const cleanedName = subjectName.toLowerCase().trim();
-  
-  // Correspondance exacte
-  const exactMatch = Object.entries(t.schedule.subjects).find(
-    ([key]) => cleanedName === key.toLowerCase()
-  );
-  if (exactMatch) return String(exactMatch[1]);
+  if (!subjectName) return t.common.unknownSubject;
 
-  // Correspondance partielle
-  const partialMatch = Object.entries(t.schedule.subjects).find(
-    ([key]) => cleanedName.includes(key.toLowerCase())
-  );
-  if (partialMatch) return String(partialMatch[1]);
-
-  // Cas particuliers
-  if (cleanedName.includes('math')) return String(t.schedule.subjects.math);
-  if (cleanedName.includes('physique') || cleanedName.includes('physics')) return String(t.schedule.subjects.physics);
-  if (cleanedName.includes('arab')) return String(t.schedule.subjects.arabic);
-  
-  // Par défaut, retourner le nom original
-  return subjectName;
+  const subjectMap: { [key: string]: string } = {
+    'Mathématiques': t.schedule.subjects.math,
+    'Physique Chimie': t.schedule.subjects.physics,
+    'Arabe': t.schedule.subjects.arabic,
+    'Français': t.schedule.subjects.french,
+    'Anglais': t.schedule.subjects.english,
+    'Éducation Islamique': t.schedule.subjects.islamic,
+    'Histoire Géographie': t.schedule.subjects.history,
+    'Éducation Civique': t.schedule.subjects.civics,
+    'Éducation Physique et Sportive': t.schedule.subjects.sport,
+    'Philosophie': t.schedule.subjects.philosophy,
+    'Sciences Naturelles': t.schedule.subjects.naturalSciences,
+    'Technologie/Informatique': t.schedule.subjects.technology,
+  };
+  return subjectMap[subjectName] || subjectName;
 };
 
   const [loading, setLoading] = useState({
@@ -205,6 +210,7 @@ const translateSubject = (subjectName: string): string => {
     grades: false,
     absences: false,
     coefficients: false,
+    affectations: false,
   });
 
   const [error, setError] = useState<string | null>(null);
@@ -363,6 +369,12 @@ const translateSubject = (subjectName: string): string => {
       const yearCoeffs = mappedCoeffs.filter(c => classIdsForYear.includes(Number(c.classe_id)));
       setCoefficients(yearCoeffs);
       setLoading(prev => ({ ...prev, coefficients: false }));
+
+      // 7. Fetch Affectations
+      setLoading(prev => ({ ...prev, affectations: true }));
+      fetchData(`affectations?annee_scolaire_id=${yearId}&_expand=matiere&_expand=classe`)
+        .then(setAffectations)
+        .finally(() => setLoading(prev => ({ ...prev, affectations: false })));
     };
 
     loadYearData();
@@ -390,7 +402,7 @@ const translateSubject = (subjectName: string): string => {
     const studentNotesForSubjectCurrentTerm = allNotesForYear.filter(note =>
       note.etudiant?.id === studentId &&
       note.evaluation?.matiere?.id === subjectId &&
-      note.evaluation?.trimestreId === termId
+      note.evaluation?.trimestre?.id === termId
     );
 
     let totalPointsDevoirsCurrentTerm = 0;
@@ -418,8 +430,9 @@ const translateSubject = (subjectName: string): string => {
       );
       if (trimestre1Obj) {
         const compoT1Eval = allEvalsForYear.find(e =>
-          e.matiere?.id === subjectId &&
-          e.trimestreId === trimestre1Obj.id &&
+ e.matiere?.id === subjectId &&
+          e.trimestre?.id === trimestre1Obj.id &&
+         
           (e.type?.toLowerCase().includes("composition") || e.type?.toLowerCase().includes("compo")) &&
           e.classe?.annee_scolaire_id === academicYearId
         );
@@ -437,8 +450,9 @@ const translateSubject = (subjectName: string): string => {
       );
       if (trimestre2Obj) {
         const compoT2Eval = allEvalsForYear.find(e =>
-          e.matiere?.id === subjectId &&
-          e.trimestreId === trimestre2Obj.id &&
+                   e.matiere?.id === subjectId &&
+          e.trimestre?.id === trimestre2Obj.id &&
+          
           (e.type?.toLowerCase().includes("composition") || e.type?.toLowerCase().includes("compo")) &&
           e.classe?.annee_scolaire_id === academicYearId
         );
@@ -460,16 +474,16 @@ const translateSubject = (subjectName: string): string => {
       let somme = 0;
       let poids = 0;
       if (countDevoirsCurrentTerm > 0) { somme += avgDevoirsCurrentTerm * 3; poids += 3; }
-      if (compositionNoteValueCurrentTerm !== null) { somme += compositionNoteValueCurrentTerm; poids += 1; }
+      if (compositionNoteValueCurrentTerm !== null) { somme += compositionNoteValueCurrentTerm * 2; poids += 2; }
       if (compoT1Note !== null) { somme += compoT1Note; poids += 1; }
       moyenneMatiere = poids > 0 ? somme / poids : 0;
     } else if (currentTrimestreNumero === 3) {
       let somme = 0;
       let poids = 0;
       if (countDevoirsCurrentTerm > 0) { somme += avgDevoirsCurrentTerm * 3; poids += 3; }
-      if (compositionNoteValueCurrentTerm !== null) { somme += compositionNoteValueCurrentTerm; poids += 1; }
+      if (compositionNoteValueCurrentTerm !== null) { somme += compositionNoteValueCurrentTerm * 3; poids += 3; }
       if (compoT1Note !== null) { somme += compoT1Note; poids += 1; }
-      if (compoT2Note !== null) { somme += compoT2Note; poids += 1; }
+      if (compoT2Note !== null) { somme += compoT2Note * 2; poids += 2; }
       moyenneMatiere = poids > 0 ? somme / poids : 0;
     }
 
@@ -548,7 +562,7 @@ const translateSubject = (subjectName: string): string => {
 }, [studentsInYear, loading.students, selectedClassId, t]);
 
   const filteredGrades = useMemo(() => {
-    if (!selectedAcademicYearId) return [];
+    if (!selectedAcademicYearId || !gradesInYear) return [];
     const yearIdNum = parseInt(selectedAcademicYearId);
 
     let tempGrades = gradesInYear.filter(grade => {
@@ -560,7 +574,7 @@ const translateSubject = (subjectName: string): string => {
     if (currentTerm && selectedTermId !== 'all') {
       const termIdNum = parseInt(selectedTermId);
       tempGrades = tempGrades.filter(grade =>
-        grade.evaluation?.trimestreId === termIdNum
+        grade.evaluation?.trimestre?.id === termIdNum
       );
     }
 
@@ -568,7 +582,7 @@ const translateSubject = (subjectName: string): string => {
   }, [gradesInYear, selectedAcademicYearId, selectedTermId, termsForYear]);
 
   const classAveragesData = useMemo((): GradeChartItem[] => {
-    if (loading.grades || loading.students || loading.classes || loading.coefficients || 
+    if (loading.grades || loading.students || loading.classes || loading.coefficients || loading.affectations ||
         studentsInYear.length === 0 || !selectedAcademicYearId || !selectedTermId) {
       return [];
     }
@@ -764,7 +778,7 @@ const translateSubject = (subjectName: string): string => {
   ]);
 
   const subjectAverageData = useMemo((): SubjectSuccessRateItem[] => {
-    if (loading.grades || loading.students || loading.coefficients || !selectedAcademicYearId) {
+    if (loading.grades || loading.students || loading.affectations || !selectedAcademicYearId) {
       return [];
     }
 
@@ -785,16 +799,15 @@ const translateSubject = (subjectName: string): string => {
 
     let relevantSubjectIds: number[] = [];
     if (selectedClassId !== 'all') {
+      // Use affectations to find subjects for the selected class
       relevantSubjectIds = Array.from(new Set(
-        coefficients
-          .filter(c => Number(c.classe_id) === Number(selectedClassId))
-          .map(c => c.matiere_id)
-          .filter(id => id != null)
-      )) as number[];
+        affectations
+          .filter(a => a.classe.id === parseInt(selectedClassId))
+          .map(a => a.matiere.id)
+      ));
     } else {
-      relevantSubjectIds = Array.from(new Set(
-        coefficients.map(c => c.matiere_id).filter(id => id != null)
-      )) as number[];
+      // Use affectations for the whole year if 'all classes' is selected
+      relevantSubjectIds = Array.from(new Set(affectations.map(a => a.matiere.id)));
     }
 
     const averagesBySubject: { [subjectId: number]: { 
@@ -804,7 +817,7 @@ const translateSubject = (subjectName: string): string => {
     } } = {};
 
     relevantSubjectIds.forEach(subjectId => {
-      const matiereInfo = coefficients.find(c => c.matiere_id === subjectId)?.matiere || 
+      const matiereInfo = affectations.find(a => a.matiere.id === subjectId)?.matiere || 
         allEvalsForYear.find(e => e.matiere?.id === subjectId)?.matiere;
       if (!matiereInfo) return;
 
@@ -816,9 +829,11 @@ const translateSubject = (subjectName: string): string => {
 
       studentsToProcess.forEach(student => {
         if (selectedClassId === 'all') {
-          const studentClassCoeffs = coefficients.filter(c => 
-            Number(c.classe_id) === Number(student.classe?.id));
-          if (!studentClassCoeffs.some(c => c.matiere_id === subjectId)) {
+          // Check if the subject is taught in the student's class
+          const isSubjectTaught = affectations.some(a => 
+            a.classe.id === student.classe?.id && a.matiere.id === subjectId
+          );
+          if (!isSubjectTaught) {
             return; 
           }
         }
@@ -850,9 +865,9 @@ const translateSubject = (subjectName: string): string => {
     }))
     .filter(item => item.taux > 0);
   }, [
-    gradesInYear, studentsInYear, coefficients, termsForYear,
+    gradesInYear, studentsInYear, affectations, termsForYear,
     selectedAcademicYearId, selectedClassId, selectedTermId, selectedStudentId,
-    calculateStudentSubjectAverageForTerm, loading.grades, loading.students, loading.coefficients, loading.terms
+    calculateStudentSubjectAverageForTerm, loading.grades, loading.students, loading.affectations, loading.terms
   ]);
 
   const averageEvolutionData = useMemo(() => {

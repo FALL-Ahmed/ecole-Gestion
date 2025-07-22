@@ -15,10 +15,10 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { toast } from '@/hooks/use-toast';
-import { User as AuthUser } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useMediaQuery } from '@/hooks/use-media-query';
@@ -29,6 +29,13 @@ interface AnneeAcademique {
   libelle: string;
   date_debut: string;
   date_fin: string;
+}
+interface AuthUser {
+  id: number;
+  nom: string;
+  prenom: string;
+  email: string;
+  role: 'admin' | 'eleve' | 'professeur' | 'parent' | 'tuteur';
 }
 
 interface Classe {
@@ -41,7 +48,6 @@ interface Classe {
 interface Matiere {
   id: number;
   nom: string;
-  coefficient: number;
 }
 
 interface TrimestreData {
@@ -128,9 +134,69 @@ interface StudentGradesProps {
   userId: number;
 }
 
+const SubjectGradeCard = ({ grade, headers, t }: { grade: StudentSubjectGrades, headers: { devoir1: string, devoir2: string, composition: string }, t: any }) => (
+  <Card className="overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+    <CardHeader className="flex flex-row items-center justify-between p-4 bg-muted/30 dark:bg-muted/10">
+      <CardTitle className="text-lg font-bold">{grade.subject}</CardTitle>
+      <Badge variant="outline">{t.reportManagement.coefficient}: {grade.coefficient}</Badge>
+    </CardHeader>
+    <CardContent className="p-6 space-y-4">
+      <div className="grid grid-cols-3 gap-4 text-center">
+        <div>
+          <p className="text-sm font-medium text-muted-foreground h-10 flex items-center justify-center">{headers.devoir1}</p>
+          <p className="text-lg font-bold">{grade.devoir1Note !== null ? grade.devoir1Note : '-'}</p>
+        </div>
+        <div>
+          <p className="text-sm font-medium text-muted-foreground h-10 flex items-center justify-center">{headers.devoir2}</p>
+          <p className="text-lg font-bold">{grade.devoir2Note !== null ? grade.devoir2Note : '-'}</p>
+        </div>
+        <div>
+          <p className="text-sm font-medium text-muted-foreground h-10 flex items-center justify-center">{headers.composition}</p>
+          <p className="text-lg font-bold">{grade.compositionNote !== null ? grade.compositionNote : '-'}</p>
+        </div>
+      </div>
+      <div className="border-t pt-4 mt-4 flex justify-between items-center">
+        <div className="text-center">
+          <p className="text-sm font-medium text-muted-foreground">{t.reportManagement.subjectAvg}</p>
+          <p className="text-xl font-extrabold text-blue-600">{grade.average !== null ? grade.average.toFixed(2) : '-'}</p>
+        </div>
+        <div className="text-center">
+          <p className="text-sm font-medium text-muted-foreground">{t.studentGrades.classAverage}</p>
+          <p className="text-lg font-semibold text-gray-600">{grade.classAvg !== null ? grade.classAvg.toFixed(2) : '-'}</p>
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+);
+
+const fetchTaughtSubjects = async (classId: number, anneeScolaireId: number): Promise<Matiere[]> => {
+  try {
+    const response = await fetch(`${API_URL}/api/affectations?classe_id=${classId}&annee_scolaire_id=${anneeScolaireId}&_expand=matiere`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const affectations = await response.json();
+    const taughtMatieresMap = new Map<number, Matiere>();
+    affectations.forEach((aff: any) => {
+      if (aff.matiere && aff.matiere.id) {
+        taughtMatieresMap.set(aff.matiere.id, { id: aff.matiere.id, nom: aff.matiere.nom });
+      }
+    });
+    return Array.from(taughtMatieresMap.values());
+  } catch (error) {
+    toast({
+      title: "Erreur de chargement",
+      description: "Impossible de charger les matières enseignées.",
+      variant: "destructive",
+    });
+    return [];
+  }
+};
 export function StudentGrades({ userId }: StudentGradesProps) {
   const { t, language } = useLanguage();
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isRTL = language === 'ar';
+  // Affiche les cartes sur mobile et tablettes (jusqu'à 1024px)
+  const useCardLayout = useMediaQuery('(max-width: 1024px)');
   const [selectedTerm, setSelectedTerm] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [studentName, setStudentName] = useState<string>(t.common.loading);
@@ -141,7 +207,6 @@ export function StudentGrades({ userId }: StudentGradesProps) {
   const [allPossibleTerms, setAllPossibleTerms] = useState<string[]>([]);
   const [allTrimestreObjects, setAllTrimestreObjects] = useState<TrimestreData[]>([]);
   const [activeAcademicYearId, setActiveAcademicYearId] = useState<number | null>(null);
-  const [allStudentNotes, setAllStudentNotes] = useState<Note[]>([]);
   const [allMatiere, setAllMatiere] = useState<Matiere[]>([]);
   const [classCoefficients, setClassCoefficients] = useState<Coefficient[]>([]);
   const [classStudents, setClassStudents] = useState<Inscription[]>([]);
@@ -151,7 +216,38 @@ export function StudentGrades({ userId }: StudentGradesProps) {
   const [classAverages, setClassAverages] = useState<ClassAverages>({});
   const [progressData, setProgressData] = useState<ProgressData[]>([]);
   const [subjectComparisonData, setSubjectComparisonData] = useState<any[]>([]);
+  
   const { addNotification } = useNotifications();
+
+  const translateSubject = useCallback((subjectName: string): string => {
+    if (!subjectName) return t.common.unknownSubject;
+
+    const subjectMap: { [key: string]: string } = {
+      'Mathématiques': t.schedule.subjects.math,
+      'Physique Chimie': t.schedule.subjects.physics,
+      'Arabe': t.schedule.subjects.arabic,
+      'Français': t.schedule.subjects.french,
+      'Anglais': t.schedule.subjects.english,
+      'Éducation Islamique': t.schedule.subjects.islamic,
+      'Histoire Géographie': t.schedule.subjects.history,
+      'Éducation Civique': t.schedule.subjects.civics,
+      'Éducation Physique et Sportive': t.schedule.subjects.sport,
+      'Philosophie': t.schedule.subjects.philosophy,
+      'Sciences Naturelles': t.schedule.subjects.naturalSciences,
+      'Technologie/Informatique': t.schedule.subjects.technology,
+    };
+    return subjectMap[subjectName] || subjectName;
+  }, [t]);
+
+  const translateTerm = useCallback((termName: string): string => {
+    if (!termName) return '';
+    const termMap: { [key: string]: string } = {
+      'Trimestre 1': t. gradeManagement.term1,
+      'Trimestre 2': t. gradeManagement.term2,
+      'Trimestre 3': t. gradeManagement.term3,
+    };
+    return termMap[termName] || termName;
+  }, [t]);
 
   const fetchCoefficientsForClass = async (classId: number): Promise<Coefficient[]> => {
     try {
@@ -256,59 +352,7 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     }
   };
 
-  const fetchNotesForEleve = async (eleveId: number): Promise<Note[]> => {
-    try {
-      const response = await fetch(`${API_URL}/api/notes?_expand=evaluation&_expand=evaluation.matiere&_cacheBust=${Date.now()}`);
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
-      }
-      const allNotesFromApi: any[] = await response.json();
-      
-      const studentApiNotes = allNotesFromApi.filter(note => {
-        if (note.etudiant && typeof note.etudiant.id !== 'undefined') {
-          return String(note.etudiant.id) === String(eleveId);
-        }
-        if (typeof note.etudiant_id !== 'undefined') {
-          return String(note.etudiant_id) === String(eleveId);
-        }
-        return false;
-      });
-
-      return studentApiNotes.map(apiNote => ({
-        id: parseInt(apiNote.id, 10),
-        eleveId: eleveId,
-        evaluationId: parseInt(apiNote.evaluation?.id, 10),
-        evaluation: apiNote.evaluation,
-        note: parseFloat(apiNote.note),
-      }));
-    } catch (error) {
-      toast({
-        title: t.common.errorLoading,
-        description: `${t.gradeManagement.errorLoadingGrades} ${error instanceof Error ? error.message : String(error)}`,
-        variant: "destructive",
-      });
-      return [];
-    }
-  };
-
-  const fetchAllMatiere = async (): Promise<Matiere[]> => {
-    try {
-      const response = await fetch(`${API_URL}/api/matieres`);
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
-      }
-      return await response.json();
-    } catch (error) {
-      toast({
-        title: t.common.errorLoading,
-        description: `${t.gradeManagement.errorLoadingSubjects} ${error instanceof Error ? error.message : String(error)}`,
-        variant: "destructive",
-      });
-      return [];
-    }
-  };
+  
 
   const fetchAllTrimestresNames = async (): Promise<string[]> => {
     try {
@@ -377,19 +421,33 @@ export function StudentGrades({ userId }: StudentGradesProps) {
 
   const fetchAllNotesForClass = async (classId: number, anneeScolaireId: number): Promise<Note[]> => {
     try {
-      const response = await fetch(`${API_URL}/api/notes?_expand=evaluation&_expand=evaluation.matiere&_expand=evaluation.classe&_cacheBust=${Date.now()}`);
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
+      // 1. Fetch evaluations filtered by class and year for reliability
+   const evalUrl = `${API_URL}/api/evaluations?classe_id=${classId}&annee_scolaire_id=${anneeScolaireId}`;
+      console.log(`[StudentGrades] Fetching evaluations from: ${evalUrl}`);
+      const evaluationsResponse = await fetch(evalUrl);
+         if (!evaluationsResponse.ok) {
+        throw new Error(`HTTP error fetching evaluations! status: ${evaluationsResponse.status}`);
       }
-      const allNotesFromApi: any[] = await response.json();
+      const evaluationsForClass: { id: number }[] = await evaluationsResponse.json();
+ console.log(`[StudentGrades] Évaluations trouvées pour la classe ${classId}:`, evaluationsForClass);
+      const evaluationIds = evaluationsForClass.map(e => e.id);
 
-      const classNotesFromApi = allNotesFromApi.filter((apiNote: any) => {
-        const apiEvalClasseId = apiNote.evaluation?.classe?.id;
-        const apiEvalAnneeScolaireId = apiNote.evaluation?.classe?.annee_scolaire_id;
-        return apiEvalClasseId === classId && apiEvalAnneeScolaireId === anneeScolaireId;
-      });    
-      
+    
+      if (evaluationIds.length === 0) {
+        return []; // No evaluations for this class, so no notes.
+      }
+
+      // 2. Fetch all notes and filter them by the relevant evaluation IDs
+      const notesResponse = await fetch(`${API_URL}/api/notes?_expand=evaluation&_expand=evaluation.matiere&_expand=evaluation.classe&_cacheBust=${Date.now()}`);
+      if (!notesResponse.ok) {
+        const errorText = await notesResponse.text();
+        throw new Error(`HTTP error fetching notes! status: ${notesResponse.status}. Response: ${errorText}`);
+      }
+      const allNotesFromApi: any[] = await notesResponse.json();
+
+      const classNotesFromApi = allNotesFromApi.filter(note => evaluationIds.includes(note.evaluation?.id));
+      console.log(`[StudentGrades] Notes trouvées pour la classe ${classId} (après filtrage):`, classNotesFromApi);
+
       return classNotesFromApi.map((apiNote: any) => {
         let studentIdVal: number | undefined;
         if (apiNote.etudiant && typeof apiNote.etudiant.id !== 'undefined') {
@@ -406,8 +464,7 @@ export function StudentGrades({ userId }: StudentGradesProps) {
           professeur_id: parseInt(apiNote.evaluation.professeur_id, 10),
           professeur: apiNote.evaluation.professeur,
           date_eval: apiNote.evaluation.date_eval,
-          trimestreId: apiNote.evaluation.trimestreId || apiNote.evaluation.trimestre_id ? 
-                        parseInt(apiNote.evaluation.trimestreId || apiNote.evaluation.trimestre_id, 10) : undefined,
+                    trimestreId: apiNote.evaluation?.trimestre?.id ? parseInt(String(apiNote.evaluation.trimestre.id), 10) : undefined,
           annee_scolaire_id: apiNote.evaluation.classe?.annee_scolaire_id ?
                               parseInt(apiNote.evaluation.classe.annee_scolaire_id, 10) :
                               (apiNote.evaluation.annee_scolaire_id ? parseInt(apiNote.evaluation.annee_scolaire_id, 10) : undefined),
@@ -443,7 +500,6 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     setStudentClassId(null);
     setStudentAnneeScolaireId(null);
     setEleveId(null);
-    setAllStudentNotes([]);
     setClassCoefficients([]);
     setClassStudents([]);
     setClassNotes([]);
@@ -458,15 +514,13 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     const loadInitialAppConfig = async () => {
       setLoading(true);
       try {
-        const [yearId, matieres, termsNames, termsObjects] = await Promise.all([
+        const [yearId, termsNames, termsObjects] = await Promise.all([
           fetchActiveAcademicYearId(),
-          fetchAllMatiere(),
           fetchAllTrimestresNames(),
           fetchAllTrimestreObjects(),
         ]);
 
         setActiveAcademicYearId(yearId);
-        setAllMatiere(matieres);
         setAllPossibleTerms(termsNames);
         setAllTrimestreObjects(termsObjects);
 
@@ -492,7 +546,6 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     const loadStudentInfo = async () => {
       if (activeAcademicYearId === null || userId === undefined) {
         setEleveId(null);
-        setAllStudentNotes([]);
         return;
       }
       setLoading(true);
@@ -505,35 +558,26 @@ export function StudentGrades({ userId }: StudentGradesProps) {
           setStudentAnneeScolaireId(info.anneeScolaireId);
           setEleveId(userId);
           
-          const [coeffs, students] = await Promise.all([
+          const [coeffs, students, taughtSubjects] = await Promise.all([
             fetchCoefficientsForClass(info.classId),
-            fetchAllStudentsInClass(info.classId, info.anneeScolaireId)
+            fetchAllStudentsInClass(info.classId, info.anneeScolaireId),
+            fetchTaughtSubjects(info.classId, info.anneeScolaireId)
           ]);
           setClassCoefficients(coeffs);
           setClassStudents(students);
+          setAllMatiere(taughtSubjects);
           
           const notes = await fetchAllNotesForClass(info.classId, info.anneeScolaireId);
           setClassNotes(notes);
-        } else {
-          setAllStudentNotes([]);
-          setEleveId(null);
-          setStudentName(t.common.na);
-          setClassName(t.common.na);
-          setStudentClassId(null);
-          setStudentAnneeScolaireId(null);
-          setClassCoefficients([]);
-          setClassStudents([]);
-          setClassNotes([]);
-          
-          toast({
-            title: t.userManagement.noActiveRegistration,
-            description: t.userManagement.noActiveRegistrationDesc,
-            variant: "default",
+          console.log('%c[StudentGrades] Données de contexte chargées', 'color: green; font-weight: bold;', {
+            'Infos Élève': info,
+            'Coefficients': coeffs,
+            'Élèves de la classe': students,
+            'Notes de la classe': notes,
           });
         }
       } catch (error) {
         setEleveId(null);
-        setAllStudentNotes([]);
         setClassCoefficients([]);
         setClassStudents([]);
         setClassNotes([]);
@@ -544,30 +588,12 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     loadStudentInfo();
   }, [userId, activeAcademicYearId, t]);
 
-  useEffect(() => {
-    const getStudentNotes = async () => {
-      if (typeof eleveId === 'number') {
-        setLoading(true);
-        try {
-          const notes = await fetchNotesForEleve(eleveId);
-          setAllStudentNotes(notes);
-        } catch (error) {
-          setAllStudentNotes([]);
-        } finally {
-          setLoading(false);
-        }
-      } else {
-        setAllStudentNotes([]);
-      }
-    };
-    if (activeAcademicYearId !== null && userId !== undefined) {
-      getStudentNotes();
-    } else {
-      setAllStudentNotes([]);
-    }
-  }, [eleveId, activeAcademicYearId, userId, t]);
+  
 
   useEffect(() => {
+     console.log('%c[StudentGrades] Déclenchement du calcul des notes (processNotes). Dépendances:', 'color: blue; font-weight: bold;', {
+        selectedTerm, studentClassId, studentAnneeScolaireId, allMatiere, allPossibleTerms, allTrimestreObjects, classCoefficients, classStudents, classNotes
+    });
     const termEvaluationMap: { [key: string]: { devoir1: string, devoir2: string, composition: string } } = {
       'Trimestre 1': {
         devoir1: 'Devoir 1',
@@ -625,11 +651,15 @@ export function StudentGrades({ userId }: StudentGradesProps) {
               continue;
             }
 
-            const studentNotesForTerm = classNotes.filter(note => 
-              note.eleveId === student.utilisateur.id && 
-              note.evaluation?.trimestreId === currentTermId &&
-              note.evaluation?.matiere?.id === matiereId
-            );
+            const studentNotesForTerm = classNotes.filter(note => {
+              if (!note.evaluation || note.eleveId !== student.utilisateur.id || note.evaluation.matiere?.id !== matiereId) {
+                return false;
+              }
+              const evalDate = new Date(note.evaluation.date_eval);
+              const termStartDate = new Date(currentTermObject.date_debut);
+              const termEndDate = new Date(currentTermObject.date_fin);
+              return evalDate >= termStartDate && evalDate <= termEndDate;
+            });
 
             let devoir1Note: number | null = null;
             let devoir2Note: number | null = null;
@@ -749,8 +779,9 @@ export function StudentGrades({ userId }: StudentGradesProps) {
           let devoir2Note: number | null = null;
           let compositionNote: number | null = null;
 
+const allStudentNotes = classNotes.filter(note => note.eleveId === eleveId);
           const notesForSubjectAndTerm = allStudentNotes.filter(note => {
-            if (!note.evaluation || !note.evaluation.matiere || note.evaluation.trimestreId === undefined) {
+                      if (!note.evaluation || !note.evaluation.matiere || note.evaluation.trimestreId === undefined) {
               return false;
             }
             return note.evaluation.matiere.id === matiereId && 
@@ -807,15 +838,15 @@ export function StudentGrades({ userId }: StudentGradesProps) {
             let somme = 0;
             let poids = 0;
             if (avgDevoirs !== null) { somme += avgDevoirs * 3; poids += 3; }
-            if (compositionNote !== null) { somme += compositionNote; poids += 1; }
+            if (compositionNote !== null) { somme += compositionNote * 2; poids += 2; }
             if (compoT1Note !== null) { somme += compoT1Note; poids += 1; }
             subjectAverage = poids > 0 ? somme / poids : null;
 
           } else if (currentTrimestreNumero === 3) {
-            const term1Obj = allTrimestreObjects.find(t =>
+            const term1Obj = allTrimestreObjects.find(t => 
               t.nom === "Trimestre 1" && t.anneeScolaire?.id === studentAnneeScolaireId
             );
-            const term2Obj = allTrimestreObjects.find(t =>
+            const term2Obj = allTrimestreObjects.find(t => 
               t.nom === "Trimestre 2" && t.anneeScolaire?.id === studentAnneeScolaireId
             );
             let compoT1Note: number | null = null, compoT2Note: number | null = null;
@@ -842,9 +873,9 @@ export function StudentGrades({ userId }: StudentGradesProps) {
             let somme = 0;
             let poids = 0;
             if (avgDevoirs !== null) { somme += avgDevoirs * 3; poids += 3; }
-            if (compositionNote !== null) { somme += compositionNote; poids += 1; }
+            if (compositionNote !== null) { somme += compositionNote * 3; poids += 3; }
             if (compoT1Note !== null) { somme += compoT1Note; poids += 1; }
-            if (compoT2Note !== null) { somme += compoT2Note; poids += 1; }
+            if (compoT2Note !== null) { somme += compoT2Note * 2; poids += 2; }
             subjectAverage = poids > 0 ? somme / poids : null;
           }
 
@@ -855,7 +886,7 @@ export function StudentGrades({ userId }: StudentGradesProps) {
           }
 
           gradesForCurrentTerm.push({
-            subject: subjectName,
+            subject: translateSubject(subjectName),
             matiereId: matiereId,
             coefficient: subjectCoefficient,
             devoir1Note,
@@ -896,7 +927,7 @@ export function StudentGrades({ userId }: StudentGradesProps) {
         }
         
         return {
-          name: term,
+          name: translateTerm(term),
           moyenne: generalAveragesCalc[term] || 0,
           moyenneClasse: classGeneralAverage > 0 && !isNaN(classGeneralAverage) ? classGeneralAverage : 0,
         };
@@ -918,7 +949,8 @@ export function StudentGrades({ userId }: StudentGradesProps) {
 
     processNotes();
   }, [
-    allStudentNotes, 
+    eleveId,
+
     selectedTerm, 
     studentClassId, 
     studentAnneeScolaireId, 
@@ -928,7 +960,8 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     classCoefficients,
     classStudents,
     classNotes,
-    t
+    t,
+    translateSubject, translateTerm
   ]);
 
   const currentSelectedGrades = processedGrades[selectedTerm] || [];
@@ -967,7 +1000,7 @@ export function StudentGrades({ userId }: StudentGradesProps) {
 
   if (loading || activeAcademicYearId === null) {
     return (
-      <div className={`p-6 text-center text-gray-500 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+      <div className="p-6 text-center text-gray-500" dir={isRTL ? 'rtl' : 'ltr'}>
         {t.common.loadingData}
       </div>
     );
@@ -975,7 +1008,7 @@ export function StudentGrades({ userId }: StudentGradesProps) {
 
   if (eleveId === null) {
     return (
-      <div className={`p-6 text-center text-red-500 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+      <div className="p-6 text-center text-red-500" dir={isRTL ? 'rtl' : 'ltr'}>
         <h2 className="text-xl font-semibold mb-2">{t.common.errorLoading}</h2>
         <p>{t.userManagement.noActiveRegistrationDesc}</p>
       </div>
@@ -983,13 +1016,13 @@ export function StudentGrades({ userId }: StudentGradesProps) {
   }
 
   return (
-    <div className={`p-6 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
-      <h1 className={`text-2xl font-bold mb-6 ${language === 'ar' ? 'text-right' : 'text-left'}`}>
+    <div className="p-6" dir={isRTL ? 'rtl' : 'ltr'}>
+      <h1 className={`text-2xl font-bold mb-6 ${isRTL ? 'text-right' : 'text-left'}`}>
         {t.studentGrades.title}
       </h1>
 
-      <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
-        <div className={`flex flex-col md:flex-row items-start md:items-center gap-4 ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
+      <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 ${isRTL ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex flex-col md:flex-row items-start md:items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
           <Select
             value={selectedTerm}
             onValueChange={setSelectedTerm}
@@ -1002,7 +1035,7 @@ export function StudentGrades({ userId }: StudentGradesProps) {
               {allPossibleTerms.length > 0 ? (
                 allPossibleTerms.map((term) => (
                   <SelectItem key={term} value={term}>
-                    {term}
+                    {translateTerm(term)}
                   </SelectItem>
                 ))
               ) : (
@@ -1014,72 +1047,107 @@ export function StudentGrades({ userId }: StudentGradesProps) {
           </Select>
 
           <h2 className="text-lg font-semibold">
-            {t.studentGrades.gradesFor} {selectedTerm}
+            {t.studentGrades.gradesFor} {translateTerm(selectedTerm)}
           </h2>
         </div>
 
       </div>
 
       <Tabs defaultValue="grades" className="space-y-4">
-        <TabsList className={`w-full ${language === 'ar' ? 'flex-row-reverse' : ''}`}>
+        <TabsList className={`w-full ${isRTL ? 'flex-row-reverse' : ''}`}>
           <TabsTrigger value="grades">{t.studentGrades.gradeDetails}</TabsTrigger>
           <TabsTrigger value="charts">{t.studentGrades.charts}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="grades">
-          <Card>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t.reportManagement.subject}</TableHead>
-                      <TableHead className="text-center">{t.reportManagement.coefficient}</TableHead>
-                      <TableHead className="text-center">{devoir1}</TableHead>
-                      <TableHead className="text-center">{devoir2}</TableHead>
-                      <TableHead className="text-center">{composition}</TableHead>
-                      <TableHead className="text-center">{t.reportManagement.subjectAvg}</TableHead>
-                      <TableHead className="text-center">{t.studentGrades.classAverage}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {currentSelectedGrades.length === 0 && allMatiere.length === 0 ? (
+          {useCardLayout ? (
+            <div className="space-y-4">
+              {currentSelectedGrades.length > 0 ? (
+                currentSelectedGrades.map((grade, index) => (
+                  <SubjectGradeCard key={index} grade={grade} headers={{ devoir1, devoir2, composition }} t={t} />
+                ))
+              ) : (
+                <Card>
+                  <CardContent className="text-center text-gray-500 py-8">
+                    {selectedTerm === t.common.noDataAvailable
+                      ? t.reports.noStudentOrGradeHint
+                      : `${t.reports.noStudentOrGrade} ${translateTerm(selectedTerm)}.`}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-gray-500 py-8">
-                          {selectedTerm === t.common.noDataAvailable
-                            ? t.reports.noStudentOrGradeHint
-                            : `${t.reports.noStudentOrGrade} ${selectedTerm}.`}
-                        </TableCell>
+                        {isRTL ? (
+                          <>
+                            <TableHead className="text-center">{t.studentGrades.classAverage}</TableHead>
+                            <TableHead className="text-center">{t.reportManagement.subjectAvg}</TableHead>
+                            <TableHead className="text-center">{composition}</TableHead>
+                            <TableHead className="text-center">{devoir2}</TableHead>
+                            <TableHead className="text-center">{devoir1}</TableHead>
+                            <TableHead className="text-center">{t.reportManagement.coefficient}</TableHead>
+                            <TableHead className="text-right">{t.reportManagement.subject}</TableHead>
+                          </>
+                        ) : (
+                          <>
+                            <TableHead className="text-left">{t.reportManagement.subject}</TableHead>
+                            <TableHead className="text-center">{t.reportManagement.coefficient}</TableHead>
+                            <TableHead className="text-center">{devoir1}</TableHead>
+                            <TableHead className="text-center">{devoir2}</TableHead>
+                            <TableHead className="text-center">{composition}</TableHead>
+                            <TableHead className="text-center">{t.reportManagement.subjectAvg}</TableHead>
+                            <TableHead className="text-center">{t.studentGrades.classAverage}</TableHead>
+                          </>
+                        )}
                       </TableRow>
-                    ) : (
-                      currentSelectedGrades.map((grade, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium">{grade.subject}</TableCell>
-                          <TableCell className="text-center">{grade.coefficient}</TableCell>
-                          <TableCell className="text-center">
-                            {grade.devoir1Note !== null ? `${grade.devoir1Note}/20` : '-'}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {grade.devoir2Note !== null ? `${grade.devoir2Note}/20` : '-'}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {grade.compositionNote !== null ? `${grade.compositionNote}/20` : '-'}
-                          </TableCell>
-                          <TableCell className="text-center font-semibold">
-                            {grade.average !== null ? `${grade.average.toFixed(2)}/20` : '-'}
-                          </TableCell>
-                          <TableCell className="text-center text-gray-600">
-                            {grade.classAvg !== null ? `${grade.classAvg.toFixed(2)}/20` : '-'}
+                    </TableHeader>
+                    <TableBody>
+                      {currentSelectedGrades.length === 0 && allMatiere.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                            {selectedTerm === t.common.noDataAvailable
+                              ? t.reports.noStudentOrGradeHint
+                              : `${t.reports.noStudentOrGrade} ${selectedTerm}.`}
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-
+                      ) : (
+                        currentSelectedGrades.map((grade, index) => (
+                          <TableRow key={index}>
+                            {isRTL ? (
+                              <>
+                                <TableCell className="text-center text-gray-600">{grade.classAvg !== null ? `${grade.classAvg.toFixed(2)}/20` : '-'}</TableCell>
+                                <TableCell className="text-center font-semibold">{grade.average !== null ? `${grade.average.toFixed(2)}/20` : '-'}</TableCell>
+                                <TableCell className="text-center">{grade.compositionNote !== null ? `${grade.compositionNote}/20` : '-'}</TableCell>
+                                <TableCell className="text-center">{grade.devoir2Note !== null ? `${grade.devoir2Note}/20` : '-'}</TableCell>
+                                <TableCell className="text-center">{grade.devoir1Note !== null ? `${grade.devoir1Note}/20` : '-'}</TableCell>
+                                <TableCell className="text-center">{grade.coefficient}</TableCell>
+                                <TableCell className="font-medium text-right">{grade.subject}</TableCell>
+                              </>
+                            ) : (
+                              <>
+                                <TableCell className="font-medium text-left">{grade.subject}</TableCell>
+                                <TableCell className="text-center">{grade.coefficient}</TableCell>
+                                <TableCell className="text-center">{grade.devoir1Note !== null ? `${grade.devoir1Note}/20` : '-'}</TableCell>
+                                <TableCell className="text-center">{grade.devoir2Note !== null ? `${grade.devoir2Note}/20` : '-'}</TableCell>
+                                <TableCell className="text-center">{grade.compositionNote !== null ? `${grade.compositionNote}/20` : '-'}</TableCell>
+                                <TableCell className="text-center font-semibold">{grade.average !== null ? `${grade.average.toFixed(2)}/20` : '-'}</TableCell>
+                                <TableCell className="text-center text-gray-600">{grade.classAvg !== null ? `${grade.classAvg.toFixed(2)}/20` : '-'}</TableCell>
+                              </>
+                            )}
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="charts">

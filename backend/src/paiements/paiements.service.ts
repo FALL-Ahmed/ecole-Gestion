@@ -179,5 +179,19 @@ async getEleveInfo(eleveId: number) {
 
     return this.paiementRepository.save(paiement);
   }
-}
 
+  async findHistoriqueByEleve(
+    eleveId: number,
+    anneeScolaireId: number,
+  ): Promise<Paiement[]> {
+    return this.paiementRepository.find({
+      where: {
+        eleveId: eleveId,
+        anneeScolaireId: anneeScolaireId,
+      },
+      order: {
+        createdAt: 'ASC',
+      },
+    });
+  }
+}

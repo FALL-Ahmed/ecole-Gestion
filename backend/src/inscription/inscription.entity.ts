@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, Jo
 import { User } from '../users/user.entity';
 import { Classe } from '../classe/classe.entity';
 import { anneescolaire } from '../annee-academique/annee-academique.entity';
+import { Bloc } from '../bloc/bloc.entity';
 
 @Entity('inscriptions') // Nom exact de ta table en base
 export class Inscription {
@@ -34,7 +35,12 @@ export class Inscription {
 
   @CreateDateColumn()
   date_inscription: Date;
+   @Column({ name: 'bloc_id' })
+  blocId: number;
 
+  @ManyToOne(() => Bloc, bloc => bloc.inscriptions, { onDelete: 'CASCADE', nullable: false })
+  @JoinColumn({ name: 'bloc_id' })
+  bloc: Bloc;
   // FIX: Utilise un transformer pour gérer la conversion entre boolean (JS) et 0/1 (DB)
   @Column({
     default: true,

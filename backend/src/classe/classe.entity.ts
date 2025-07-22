@@ -5,6 +5,7 @@ import { anneescolaire } from '../annee-academique/annee-academique.entity';
 import { Absence } from '../absence/absence.entity'; // Adaptez le chemin
 import { Evaluation } from '../evaluation/evaluation.entity'; // Ajustez le chemin si nécessaire
 import { Chapitre } from '../chapitre/chapitre.entity'; // Assurez-vous que le chemin est correct
+import { Bloc } from '../bloc/bloc.entity';
 
 
 
@@ -45,12 +46,18 @@ export class Classe {
   @OneToMany(() => Absence, (absence) => absence.classe)
 absences: Absence[];
 
-@OneToMany(() => Chapitre, chapitre => chapitre.matiere)
+@OneToMany(() => Chapitre, chapitre => chapitre.classe)
   chapitres: Chapitre[];
 
 
 @OneToMany(() => Evaluation, (evaluation) => evaluation.classe)
   // 'evaluation.classe' est la propriété dans l'entité Evaluation qui mappe vers cette classe
   evaluations: Evaluation[]; // Une classe peut avoir plusieurs évaluations
-}
 
+   @Column({ name: 'bloc_id' })
+  blocId: number;
+
+  @ManyToOne(() => Bloc, bloc => bloc.classes, { onDelete: 'CASCADE', nullable: false })
+  @JoinColumn({ name: 'bloc_id' })
+  bloc: Bloc;
+}

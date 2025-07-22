@@ -1,7 +1,13 @@
-import { Controller, Get, Post, Body, BadRequestException, Param, Put, Delete, NotFoundException, ParseIntPipe } from "@nestjs/common";
+import { Controller, Get, Post, Body, BadRequestException, Param, Put, ParseIntPipe, UseGuards } from "@nestjs/common";
 import { CoefficientClasseService } from "./coeff.service";
+import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { RolesGuard } from "../auth/roles.guard";
+import { Roles } from "../auth/roles.decorator";
+import { UserRole } from "../users/user.entity";
 
 @Controller("api/coefficientclasse")
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN) // Seuls les administrateurs peuvent gérer les coefficients
 export class CoefficientClasseController {
   constructor(private readonly coefficientClasseService: CoefficientClasseService) {}
 

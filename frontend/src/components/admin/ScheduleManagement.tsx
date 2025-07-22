@@ -178,7 +178,9 @@ let textColor = 'text-white';
       'Histoire Géographie': t.schedule.subjects.history,
       'Éducation Civique': t.schedule.subjects.civics,
       'Éducation Physique et Sportive': t.schedule.subjects.sport,
-      'Philosophie': t.schedule.subjects.philosophy
+      'Philosophie': t.schedule.subjects.philosophy,
+      'Sciences Naturelles': t.schedule.subjects.naturalSciences,
+      'Technologie/Informatique': t.schedule.subjects.technology,
     };
     return subjectTranslations[subjectName] || subjectName;
   };

@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 't
 // Supposons que vous ayez des entités Matiere et Classe
 import { Matiere } from '../matieres/matiere.entity'; // Adaptez le chemin
 import { Classe } from '../classe/classe.entity'; // Adaptez le chemin
+import { Bloc } from '../bloc/bloc.entity';
 
 export enum StatutChapitre {
   PLANIFIE = 'planifié',
@@ -49,7 +50,12 @@ export class Chapitre {
   @Column({ type: 'date', nullable: true, name: 'date_fin_reel' })
   dateFinReel: Date; // Suggestion: Utiliser le type Date
 
+ @Column({ name: 'bloc_id' })
+  blocId: number;
 
+  @ManyToOne(() => Bloc, bloc => bloc.chapitres, { onDelete: 'CASCADE', nullable: false })
+  @JoinColumn({ name: 'bloc_id' })
+  bloc: Bloc;
 
   @Column({
     type: 'enum',

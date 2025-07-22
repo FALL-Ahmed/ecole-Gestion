@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -17,8 +17,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { fr, ar } from 'date-fns/locale';
-import { Loader2 } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
+import {
+  Loader2,
+  AlertCircle,
+  CheckCircle,
+  XCircle,
+  Percent,
+} from 'lucide-react';import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -96,6 +101,33 @@ export function StudentAttendance({ userId }: StudentAttendanceProps) {
 
   const dateLocale = language === 'ar' ? ar : fr;
   const isRTL = language === 'ar';
+
+  const translateSubject = useCallback((subjectName: string): string => {
+    if (!subjectName) return t.common.unknownSubject;
+
+    const subjectMap: { [key: string]: string } = {
+      'Mathématiques': t.schedule.subjects.math,
+      'Physique Chimie': t.schedule.subjects.physics,
+      'Arabe': t.schedule.subjects.arabic,
+      'Français': t.schedule.subjects.french,
+      'Anglais': t.schedule.subjects.english,
+      'Éducation Islamique': t.schedule.subjects.islamic,
+      'Histoire Géographie': t.schedule.subjects.history,
+      'Éducation Civique': t.schedule.subjects.civics,
+      'Éducation Physique et Sportive': t.schedule.subjects.sport,
+      'Philosophie': t.schedule.subjects.philosophy,
+      'Sciences Naturelles': t.schedule.subjects.naturalSciences,
+      'Technologie/Informatique': t.schedule.subjects.technology,
+    };
+    return subjectMap[subjectName] || subjectName;
+  }, [t]);
+
+  const justificationRate =
+    currentAttendanceStats.totalAbsences > 0
+      ? (currentAttendanceStats.justifiedAbsences /
+          currentAttendanceStats.totalAbsences) *
+        100
+      : 0;
 
   useEffect(() => {
     const term = trimestres.find(t => t.id.toString() === selectedTermId);
@@ -217,7 +249,7 @@ export function StudentAttendance({ userId }: StudentAttendanceProps) {
           date: item.date,
           dayOfWeek: format(new Date(item.date), 'EEEE', { locale: dateLocale }).charAt(0).toUpperCase() + 
                    format(new Date(item.date), 'EEEE', { locale: dateLocale }).slice(1),
-          subject: item.matiere?.nom || t.common.subjectNotFound,
+          subject: translateSubject(item.matiere?.nom || ''),
           period: `${item.heure_debut?.substring(0, 5) || 'N/A'} - ${item.heure_fin?.substring(0, 5) || 'N/A'}`,
           justified: item.justifie && !!item.justification,
           justification: item.justification || t.common.noDetailsAvailable,
@@ -272,7 +304,7 @@ export function StudentAttendance({ userId }: StudentAttendanceProps) {
     };
 
     fetchAbsences();
-  }, [studentId, activeSchoolYear, startDate, endDate, t, dateLocale, addNotification]);
+  }, [studentId, activeSchoolYear, startDate, endDate, t, dateLocale, addNotification, translateSubject]);
 
   const currentYearName = activeSchoolYear?.libelle || t.common.loading;
   const currentTermName = trimestres.find(t => t.id.toString() === selectedTermId)?.nom || t.studentAttendance.fullYear;
@@ -301,67 +333,112 @@ export function StudentAttendance({ userId }: StudentAttendanceProps) {
         {t.studentAttendance.title}
       </h1>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <Card>
-          <CardContent className="p-6">
-            <h3 className={`font-semibold text-lg mb-2 ${isRTL ? 'text-right' : 'text-left'}`}>
-              {t.studentAttendance.totalAbsences} ({currentTermName})
-            </h3>
-            <p className="text-3xl font-bold text-red-600">{currentAttendanceStats.totalAbsences}</p>
-            <p className={`text-sm text-gray-600 dark:text-gray-400 ${isRTL ? 'text-right' : 'text-left'}`}>
-              {t.studentAttendance.recordedAbsences}
+{/* Stats Cards - Improved Version */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* Total Absences */}
+        <Card className="dark:bg-gray-800 shadow-sm hover:shadow-lg transition-shadow duration-300">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-300">
+              {t.studentAttendance.totalAbsences}
+            </CardTitle>
+            <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-full">
+              <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">
+              {currentAttendanceStats.totalAbsences}
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {t.studentAttendance.recordedAbsences} ({currentTermName})
+            
             </p>
           </CardContent>
         </Card>
         
-        <Card>
-          <CardContent className="p-6">
-            <h3 className={`font-semibold text-lg mb-2 ${isRTL ? 'text-right' : 'text-left'}`}>
-              {t.studentAttendance.justifiedAbsences} ({currentTermName})
-            </h3>
-            <p className="text-3xl font-bold text-green-600">{currentAttendanceStats.justifiedAbsences}</p>
-            <p className={`text-sm text-gray-600 dark:text-gray-400 ${isRTL ? 'text-right' : 'text-left'}`}>
+                {/* Justified Absences */}
+        <Card className="dark:bg-gray-800 shadow-sm hover:shadow-lg transition-shadow duration-300">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-300">
+              {t.studentAttendance.justifiedAbsences}
+            </CardTitle>
+            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-full">
+              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">
+              {currentAttendanceStats.justifiedAbsences}
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              
               {t.studentAttendance.justifiedAbsencesCount}
             </p>
           </CardContent>
         </Card>
         
-        <Card>
-          <CardContent className="p-6">
-            <h3 className={`font-semibold text-lg mb-2 ${isRTL ? 'text-right' : 'text-left'}`}>
+              {/* Unjustified Absences */}
+        <Card className="dark:bg-gray-800 shadow-sm hover:shadow-lg transition-shadow duration-300">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-300">
+              
               {t.studentAttendance.unjustifiedAbsences}
-            </h3>
-            <p className="text-3xl font-bold text-red-600">{currentAttendanceStats.unjustifiedAbsences}</p>
-            <p className={`text-sm text-gray-600 dark:text-gray-400 ${isRTL ? 'text-right' : 'text-left'}`}>
+                       </CardTitle>
+            <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-full">
+              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">
+              {currentAttendanceStats.unjustifiedAbsences}
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              
               {t.studentAttendance.daysWithoutJustification}
             </p>
           </CardContent>
         </Card>
+                {/* Justification Rate */}
+        <Card className="dark:bg-gray-800 shadow-sm hover:shadow-lg transition-shadow duration-300">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-300">
+              {t.studentAttendance.justificationRate || 'Taux de justification'}
+            </CardTitle>
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-full">
+              <Percent className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">
+              {justificationRate.toFixed(1)}%
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {t.studentAttendance.ofTotalAbsences || 'du total des absences'}
+            </p>
+          </CardContent>
+        </Card>
+
       </div>
 
       {/* Filters Card */}
       <Card className="mb-6">
-        <CardHeader className={isRTL ? 'text-right' : 'text-left'}>
-          <CardTitle>{t.common.filters}</CardTitle>
-          <CardDescription>{t.studentAttendance.selectTerm}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className={isRTL ? 'text-right' : 'text-left'}>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">{t.common.schoolYear}</p>
-              <p className="text-lg font-semibold text-gray-800 dark:text-white">{currentYearName}</p>
+               <CardContent className="p-4">
+          <div className={`flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${isRTL ? 'md:flex-row-reverse' : ''}`}>
+            <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400 shrink-0">{t.common.schoolYear}:</p>
+              <Badge variant="secondary" className="text-base">{currentYearName}</Badge>
             </div>
+
             
-            <div className={isRTL ? 'text-right' : 'text-left'}>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">{t.studentAttendance.termPeriod}</p>
+            <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400 shrink-0">{t.studentAttendance.termPeriod}:</p>
               <Select 
                 value={selectedTermId} 
                 onValueChange={setSelectedTermId} 
                 disabled={trimestres.length === 0}
                 dir={isRTL ? 'rtl' : 'ltr'}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full md:w-[220px]">
                   <SelectValue placeholder={t.common.selectTerm} />
                 </SelectTrigger>
                 <SelectContent>
@@ -369,7 +446,7 @@ export function StudentAttendance({ userId }: StudentAttendanceProps) {
                     <SelectItem value="full-year">{t.studentAttendance.fullYear}</SelectItem>
                   )}
                   {trimestres.map((term) => (
-                    <SelectItem key={term.id} value={term.id.toString()}>
+                    <SelectItem key={term.id} value={term.id.toString()} className={isRTL ? 'text-right' : 'text-left'}>
                       {term.nom}
                     </SelectItem>
                   ))}
@@ -393,44 +470,74 @@ export function StudentAttendance({ userId }: StudentAttendanceProps) {
               <p className="text-gray-600 dark:text-gray-400">{t.common.loading}</p>
             </div>
           ) : absenceRecords.length > 0 ? (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t.common.date}</TableHead>
-                    <TableHead>{t.common.day}</TableHead>
-                    <TableHead>{t.common.subject}</TableHead>
-                    <TableHead>{t.studentAttendance.timeSlot}</TableHead>
-                    <TableHead>{t.common.status.general}</TableHead>
-                    <TableHead>{t.studentAttendance.justification}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {absenceRecords.map((absence) => (
-                    <TableRow key={absence.id}>
-                      <TableCell>
-                        {format(new Date(absence.date), 'dd/MM/yyyy', { locale: dateLocale })}
-                      </TableCell>
-                      <TableCell>{absence.dayOfWeek}</TableCell>
-                      <TableCell>{absence.subject}</TableCell>
-                      <TableCell>{absence.period}</TableCell>
-                      <TableCell>
-                        {absence.justified ? (
-                          <Badge className="bg-green-100 text-green-700 border-green-300 dark:bg-green-900 dark:text-green-200">
-                            {t.common.status.completed}
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-red-100 text-red-700 border-red-300 dark:bg-red-900 dark:text-red-200">
-                            {t.common.status.inactive}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>{absence.justification}</TableCell>
+            <>
+              {/* Desktop View: Table */}
+              <div className="hidden lg:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className={isRTL ? 'text-right' : 'text-left'}>{t.common.date}</TableHead>
+                      <TableHead className={isRTL ? 'text-right' : 'text-left'}>{t.common.day}</TableHead>
+                      <TableHead className={isRTL ? 'text-right' : 'text-left'}>{t.common.subject}</TableHead>
+                      <TableHead className={isRTL ? 'text-right' : 'text-left'}>{t.studentAttendance.timeSlot}</TableHead>
+                      <TableHead className={isRTL ? 'text-right' : 'text-left'}>{t.common.status.general}</TableHead>
+                      <TableHead className={isRTL ? 'text-right' : 'text-left'}>{t.studentAttendance.justification}</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {absenceRecords.map((absence) => (
+                      <TableRow key={absence.id}>
+                        <TableCell className={isRTL ? 'text-right' : 'text-left'}>
+                          {format(new Date(absence.date), 'dd/MM/yyyy', { locale: dateLocale })}
+                        </TableCell>
+                        <TableCell className={isRTL ? 'text-right' : 'text-left'}>{absence.dayOfWeek}</TableCell>
+                        <TableCell className={isRTL ? 'text-right' : 'text-left'}>{absence.subject}</TableCell>
+                        <TableCell className={isRTL ? 'text-right' : 'text-left'}>{absence.period}</TableCell>
+                        <TableCell className={isRTL ? 'text-right' : 'text-left'}>
+                          {absence.justified ? (
+                            <Badge className="bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-200">
+                              {t.common.status.justifie}
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-red-100 text-red-800 border-red-300 dark:bg-red-900 dark:text-red-200">
+                              {t.common.status.nonjustif}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className={isRTL ? 'text-right' : 'text-left'}>{absence.justification}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile View: Cards */}
+              <div className="lg:hidden space-y-4">
+                {absenceRecords.map((absence) => (
+                  <Card key={absence.id} className="p-4 bg-white dark:bg-gray-800 shadow-sm">
+                    <div className={`flex justify-between items-start mb-3 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                      <div className={isRTL ? 'text-right' : 'text-left'}>
+                        <p className="font-bold text-base text-gray-800 dark:text-white">{absence.subject}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">{format(new Date(absence.date), 'dd MMMM yyyy', { locale: dateLocale })}</p>
+                      </div>
+                      {absence.justified ? (
+                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">{t.common.status.justifie}</Badge>
+                      ) : (
+                        <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">{t.common.status.nonjustif}</Badge>
+                      )}
+                    </div>
+                    <div className={`grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-600 dark:text-gray-300 border-t border-gray-100 dark:border-gray-700 pt-3 ${isRTL ? 'text-right' : 'text-left'}`}>
+                      <p className="font-medium text-gray-800 dark:text-gray-100">{t.common.day}:</p>
+                      <p>{absence.dayOfWeek}</p>
+                      <p className="font-medium text-gray-800 dark:text-gray-100">{t.studentAttendance.timeSlot}:</p>
+                      <p>{absence.period}</p>
+                      <p className="font-medium text-gray-800 dark:text-gray-100 col-span-2 mt-2">{t.studentAttendance.justification}:</p>
+                      <p className="col-span-2 text-gray-500 dark:text-gray-400">{absence.justification}</p>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </>
           ) : (
             <div className={`text-center py-8 text-gray-600 dark:text-gray-400 ${isRTL ? 'text-right' : 'text-left'}`}>
               <p>{t.studentAttendance.noAbsencesForPeriod}</p>

@@ -323,7 +323,7 @@ html, body, #root {
     page-break-inside: avoid;
   }
 @page {
-  size: A4 landscape;
+  size: A4;
   margin: 15mm;
 }
   #bulletin-preview-content-area {

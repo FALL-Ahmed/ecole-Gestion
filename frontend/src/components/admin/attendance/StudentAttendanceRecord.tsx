@@ -278,6 +278,8 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques, t
         'Éducation Civique': t.schedule.subjects.civics,
         'Éducation Physique et Sportive': t.schedule.subjects.sport,
         'Philosophie': t.schedule.subjects.philosophy,
+        'Sciences Naturelles': t.schedule.subjects.naturalSciences,
+        'Technologie/Informatique': t.schedule.subjects.technology,
     };
     return subjectMap[subjectName] || subjectName;
   };
@@ -803,6 +805,8 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques, t,
         'Éducation Civique': t.schedule.subjects.civics,
         'Éducation Physique et Sportive': t.schedule.subjects.sport,
         'Philosophie': t.schedule.subjects.philosophy,
+        'Sciences Naturelles': t.schedule.subjects.naturalSciences,
+        'Technologie/Informatique': t.schedule.subjects.technology,
     };
     return subjectMap[subjectName] || subjectName;
   };

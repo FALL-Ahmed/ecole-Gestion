@@ -79,6 +79,8 @@ export function StudentCourses() {
       'Éducation Civique': t.schedule.subjects.civics,
       'Éducation Physique et Sportive': t.schedule.subjects.sport,
       'Philosophie': t.schedule.subjects.philosophy,
+      'Sciences Naturelles': t.schedule.subjects.naturalSciences,
+      'Technologie/Informatique': t.schedule.subjects.technology,
     };
     return subjectMap[subjectName] || subjectName;
   }, [t]);
@@ -118,21 +120,12 @@ export function StudentCourses() {
         
         const studentClassId = studentInscription.classe.id;
 
-        const [affectationsRes, matieresRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/affectations?_expand=professeur&_expand=matiere&_expand=classe&_expand=annee_scolaire`),
-          fetch(`${API_BASE_URL}/matieres`)
-        ]);
+        const affectationsRes = await fetch(`${API_BASE_URL}/affectations?classe_id=${studentClassId}&annee_scolaire_id=${activeAnneeId}&_expand=professeur&_expand=matiere`);
 
         if (!affectationsRes.ok) throw new Error(t.common.errorLoadingData('affectations', affectationsRes.statusText));
-        if (!matieresRes.ok) throw new Error(t.common.errorLoadingData('matières', matieresRes.statusText));
 
         const allAffectations: Affectation[] = await affectationsRes.json();
-        const allMatieres: { id: number; nom: string }[] = await matieresRes.json();
-        const allMatieresIds = new Set(allMatieres.map(m => m.id));
-
-        const affectations = allAffectations.filter(aff => aff.classe?.id === studentClassId && aff.annee_scolaire?.id === activeAnneeId);
-
-        const validAffectations = affectations.filter(aff => aff.matiere && allMatieresIds.has(aff.matiere.id));
+        const validAffectations = allAffectations.filter(aff => aff.matiere && aff.professeur);
 
         const uniqueCourses = new Map<number, Course>();
 

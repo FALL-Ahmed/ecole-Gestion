@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { Evaluation } from 'src/evaluation/evaluation.entity';
 import { User } from 'src/users/user.entity';
+import { Bloc } from '../bloc/bloc.entity';
 
 @Entity('note')
 export class Note {
@@ -24,4 +25,10 @@ export class Note {
 
   @Column({ type: 'float' })
   note: number;
+   @Column({ name: 'bloc_id' })
+  blocId: number;
+
+  @ManyToOne(() => Bloc, bloc => bloc.notes, { onDelete: 'CASCADE', nullable: false })
+  @JoinColumn({ name: 'bloc_id' })
+  bloc: Bloc;
 }

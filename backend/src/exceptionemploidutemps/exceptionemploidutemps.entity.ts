@@ -3,6 +3,7 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 't
 import { Classe } from '../classe/classe.entity'; // Assumer que vous avez une entité Classe
 import { Matiere } from '../matieres/matiere.entity'; // Assumer que vous avez une entité Matiere
 import { User } from '../users/user.entity'; // Assumer que vous avez une entité User (pour professeurs)
+import { Bloc } from '../bloc/bloc.entity';
 
 export enum JourSemaine {
   LUNDI = 'Lundi',
@@ -87,4 +88,12 @@ export class ExceptionEmploiDuTemps {
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   motif: string | null;
+
+  @Column({ name: 'bloc_id' })
+  blocId: number;
+
+  @ManyToOne(() => Bloc, bloc => bloc.exceptionsEmploiDuTemps, { onDelete: 'CASCADE', nullable: false })
+  @JoinColumn({ name: 'bloc_id' })
+  bloc: Bloc;
+
 }

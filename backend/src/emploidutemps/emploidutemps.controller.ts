@@ -1,14 +1,20 @@
 // src/emploi-du-temps/emploi-du-temps.controller.ts
-import { Controller, Get, Post, Body, Param, Delete, Query, Put } from '@nestjs/common'; // Removed Patch
+import { Controller, Get, Post, Body, Param, Delete, Query, Put, UseGuards, ParseIntPipe } from '@nestjs/common';
 import { EmploiDuTempsService } from './emploidutemps.service';
 import { CreateEmploiDuTempsDto } from './dto/create-emploi-du-temps.dto';
 import { UpdateEmploiDuTempsDto } from './dto/update-emploi-du-temps.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { UserRole } from '../users/user.entity';
 
 @Controller('api/emploi-du-temps') // Base URL: /api/emploi-du-temps
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class EmploiDuTempsController {
   constructor(private readonly emploiDuTempsService: EmploiDuTempsService) {}
 
   @Post()
+  @Roles(UserRole.ADMIN)
   create(@Body() createEmploiDuTempsDto: CreateEmploiDuTempsDto) {
     return this.emploiDuTempsService.create(createEmploiDuTempsDto);
   }
@@ -37,37 +43,19 @@ export class EmploiDuTempsController {
   // --- END MODIFIED ---
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.emploiDuTempsService.findOne(+id);
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.emploiDuTempsService.findOne(id);
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() updateEmploiDuTempsDto: UpdateEmploiDuTempsDto) {
-    return this.emploiDuTempsService.update(+id, updateEmploiDuTempsDto);
+  @Roles(UserRole.ADMIN)
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateEmploiDuTempsDto: UpdateEmploiDuTempsDto) {
+    return this.emploiDuTempsService.update(id, updateEmploiDuTempsDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.emploiDuTempsService.remove(+id);
+  @Roles(UserRole.ADMIN)
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.emploiDuTempsService.remove(id);
   }
-
-  // --- REMOVED: by-class and by-teacher as they are now handled by findAll ---
-  // @Get('by-class')
-  // findByClass(
-  //   @Query('classeId') classeId: string,
-  //   @Query('anneeAcademiqueId') anneeAcademiqueId: string
-  // ) {
-  //   if (!classeId) {
-  //     throw new Error('classeId query parameter is required.');
-  //   }
-  //   return this.emploiDuTempsService.findByClassAndYear(+classeId, +anneeAcademiqueId);
-  // }
-
-  // @Get('by-teacher')
-  // findByTeacher(@Query('professeurId') professeurId: string) {
-  //   if (!professeurId) {
-  //     throw new Error('professeurId query parameter is required.');
-  //   }
-  //   return this.emploiDuTempsService.findByTeacher(+professeurId);
-  // }
 }

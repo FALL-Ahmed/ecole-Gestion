@@ -27,6 +27,10 @@ import { DisciplinaryRecordsModule } from './disciplinary-records/disciplinary-r
 import { WhatsAppModule } from './twilo/whatsapp.module';
 import { RappelPaiementModule } from './paiements/rappel-paiement.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
+import { Bloc } from './bloc/bloc.entity';
+import { EmploiDuTemps } from './emploidutemps/emploidutemps.entity';
+import { UtilisateurBloc } from './users/utilisateur-bloc.entity';
+
 import { TenantModule } from './tenant/tenant.module';
 import { TenantMiddleware } from './middleware/tenant.middleware';
 import { Parent } from './central/parent.entity';
@@ -45,6 +49,8 @@ import { EcolesModule } from './ecoles/ecoles.module';
 import { Ecole } from './ecoles/ecole.entity';
 import { Admin } from './admin/admin.entity';
 import { ParentModule } from './central/parent.module';
+import { ExceptionEmploiDuTemps } from './exceptionemploidutemps/exceptionemploidutemps.entity';
+import { Paiement } from './paiements/paiements.entity';
 
 const featureModules = [
   AuthModule,
@@ -93,7 +99,29 @@ const featureModules = [
         username: config.get('CENTRAL_DB_USER'),
         password: config.get('CENTRAL_DB_PASSWORD'),
         database: config.get('CENTRAL_DB_NAME'),
-        entities: [Parent, User,Absence, Matiere, Chapitre, Classe, Inscription, anneescolaire, Evaluation, Trimestre, Note, Ecole, Admin],
+entities: [
+  Parent,
+  User,
+  Absence,
+  Matiere,
+  Chapitre,
+  Classe,
+  Inscription,
+  anneescolaire,
+  Evaluation,
+  Trimestre,
+  Note,
+  Ecole,
+  Admin,
+  Bloc,
+  EmploiDuTemps,
+  ExceptionEmploiDuTemps,
+  Paiement,
+  // 👇 ajoute ici
+  UtilisateurBloc,
+],
+
+
         synchronize: false,
         logging: false,
         // Configuration du pool de connexions pour la base de données centrale

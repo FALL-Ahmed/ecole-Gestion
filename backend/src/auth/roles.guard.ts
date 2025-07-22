@@ -15,7 +15,9 @@ export class RolesGuard implements CanActivate {
       return true; // Si aucun rôle n'est requis, on autorise
     }
     const { user } = context.switchToHttp().getRequest();
-    return requiredRoles.some((role) => user.role?.includes(role));
+
+    // Vérifie si le rôle de l'utilisateur (user.role) est présent dans le tableau des rôles requis.
+    // Il est aussi plus sûr de vérifier que 'user' et 'user.role' existent.
+    return requiredRoles.some((role) => user?.role === role);
   }
 }
-

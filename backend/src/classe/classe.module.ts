@@ -1,12 +1,13 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { Classe } from './classe.entity';
 import { ClasseService } from './classe.service';
 import { ClasseController } from './classe.controller';
 import { createTenantRepositoryProvider } from '../tenant/tenant-repository.provider';
 import { anneescolaire } from '../annee-academique/annee-academique.entity';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
- imports: [],
+ imports: [forwardRef(() => AuthModule)],
   providers: [
     ClasseService,
     createTenantRepositoryProvider(Classe),

@@ -620,9 +620,17 @@ export function Dashboard() {
                 if (currentTrimestreNumero === 1) {
                   subjectAverage = (avgDevoirs * 3 + compositionNote) / 4;
                 } else if (currentTrimestreNumero === 2) {
-                  if (compoT1Note !== null) {
-                    subjectAverage = (avgDevoirs * 3 + compositionNote + compoT1Note) / 5;
+                  let somme = 0;
+                  let poids = 0;
+                  if (devoir1Note !== null && devoir2Note !== null) {
+                    const avgDevoirs = (devoir1Note + devoir2Note) / 2;
+                    somme += avgDevoirs * 3;
+                    poids += 3;
                   }
+                  if (compositionNote !== null) { somme += compositionNote * 2; poids += 2; }
+                  if (compoT1Note !== null) { somme += compoT1Note; poids += 1; }
+                  subjectAverage = poids > 0 ? somme / poids : null;
+
                 } else if (currentTrimestreNumero === 3) {
                   if (compoT1Note !== null && compoT2Note !== null) {
                     subjectAverage = (avgDevoirs * 3 + compositionNote + compoT1Note + compoT2Note) / 6;
@@ -745,7 +753,7 @@ export function Dashboard() {
 
         const [notesResponse, evaluationsResponse, matieresResponse] = await Promise.all([
           axios.get<NoteApiData[]>(`${API_BASE_URL}/notes`),
-          axios.get<EvaluationApiData[]>(`${API_BASE_URL}/evaluations`),
+          axios.get<EvaluationApiData[]>(`${API_BASE_URL}/evaluations?annee_scolaire_id=${activeYearId}`),
           axios.get<MatiereApiData[]>(`${API_BASE_URL}/matieres`),
         ]);
 
@@ -768,11 +776,7 @@ export function Dashboard() {
             const noteEvaluationId = note.evaluation?.id;
             if (!noteEvaluationId) return null;
 
-            const evaluation = allEvaluations.find(
-              (evalItem: EvaluationApiData) =>
-                String(evalItem.id) === String(noteEvaluationId) &&
-                (activeYearId ? String(evalItem.anneeScolaire?.id) === String(activeYearId) : true)
-            );
+            const evaluation = allEvaluations.find(evalItem => String(evalItem.id) === String(noteEvaluationId));
             if (!evaluation) return null;
 
             const evaluationMatiereId = evaluation.matiere?.id;

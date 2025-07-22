@@ -3,6 +3,8 @@ export default {
         hours: "Les horaires",
         hourse: "h",
         phone: "Tél",
+        filterBy: "Filter by",
+
         loadError: "Erreur de chargement",
   tutorPhone: "Téléphone du tuteur",
         saveChanges: "Enregistrer les modifications",
@@ -13,6 +15,7 @@ export default {
             today: "Aujourd'hui",
             notProvided: "Non fourni",
             currency: "MRU",
+  notApplicable: "N/A",
 
                 activeYearNotFound: "Aucune année active trouvée",
   isRTL: false,
@@ -81,7 +84,10 @@ missingFields: "Champs manquants",
             inactive: "Inactif",
             planned: "Planifié",
             inProgress: "En cours",
-            completed: "Terminé"
+            completed: "Terminé",
+            justifie: "Justifié",
+            nonjustif: "Non Justifié",
+            
         },
         actions: "Actions",
         class: "Classe",
@@ -294,6 +300,8 @@ accounting: {
         schoolManagement: "Gestion Scolaire",
         gradeManagement: "Gestion des Notes",
             accounting: "Comptabilité",
+            payments: "Paiements",
+
 
         schedule: "Emploi du Temps", // Moved here from the error context for schedule
         attendance: "Gestion des Absences",
@@ -324,7 +332,8 @@ accounting: {
         title: "Connexion",
             successMessage: "Vous êtes maintenant connecté(e) avec succès.",
     pleaseLogin: "Veuillez vous connecter pour voir vos absences",
-
+ selectEstablishmentTitle: "Choisir un établissement",
+    selectEstablishmentDescription: "Votre compte a accès à plusieurs établissements. Veuillez en sélectionner un pour continuer.",
           errorDescription: "Email ou mot de passe incorrect",
  successTitle: "Connexion réussie",
     redirecting: "Redirection en cours...",
@@ -342,6 +351,9 @@ accounting: {
             successTitle: "Connexion réussie",
             successDescription: "Bienvenue {user}",
             errorTitle: "Erreur de connexion",
+            missingToken: "Jeton de présélection manquant. Veuillez vous reconnecter.",
+      selectionFailedTitle: "Erreur de sélection",
+      selectionError: "Erreur lors de la sélection de l'établissement.",
             loginFailedTitle: "Échec de la connexion",
   errorConfig: "Impossible de vérifier la configuration de l'année scolaire.",
   errorNoActiveYear: "Aucune année scolaire active n'est configurée. Connexion impossible.",
@@ -641,6 +653,10 @@ copied: "Copié !",
 studentAttendance: {
   title: "Mes Absences",
   totalAbsences: "Absences totales",
+   justificationRate: "Taux de justification",
+  ofTotalAbsences: "du total des absences",
+    noAbsencesTitle: "Aucune absence à signaler",
+
   justifiedAbsences: "Absences justifiées",
   unjustifiedAbsences: "Absences non justifiées",
   selectTerm: "Sélectionnez le trimestre",
@@ -899,6 +915,8 @@ whatsappMessage: "🔔 Notification disciplinaire 🔔\n\nÉlève: {student}\nMo
       printAllReports: "Imprimer tous les bulletins",
     noStudentFound: "Aucun élève correspondant à votre recherche",
         title: "Gestion des Bulletins Scolaires",
+        reportPreview: "Aperçu du rapport",
+previewDescription: "Vérifiez le bulletin scolaire avant impression ou exportation",
          generationError: "Erreur lors de la génération des bulletins",
       missingParameters: "Paramètres manquants pour générer les bulletins",
       termNotFound: "Trimestre introuvable",
@@ -1202,7 +1220,11 @@ checkOtherDays: "Vérifiez les autres jours",
             history: "Histoire Géographie",
             civics: "Éducation Civique",
             sport: "Éducation Physique et Sportive",
-            philosophy: "Philosophie"
+            philosophy: "Philosophie",
+                naturalSciences: "Sciences Naturelles",
+    technology: "Technologie/Informatique",
+
+            
         },
 
         // Textes supplémentaires pour les interactions
@@ -1480,9 +1502,19 @@ responseTime: "Réponse immédiate",
   passwordChangeError: "Une erreur est survenue lors de la modification du mot de passe.",
   saving: "Sauvegarde...",
   updatePassword: "Mettre à jour le mot de passe",
+   strength: {
+  weak: "Faible",
+  medium: "Moyen",
+  good: "Bon",
+  strong: "Fort",
+  veryStrong: "Très fort",
+  },
+  passwordSameAsOld: "Le nouveau mot de passe doit être différent de l'ancien.",
 unauthenticatedUser: "Utilisateur non authentifié."
 
 },
+
+
 
 parent: {
   grades: {
@@ -1501,8 +1533,38 @@ parent: {
   },
   schedule: {
     title: "Emploi du temps",
+    scheduleFor: "Emploi du temps de",
+     currentWeek: "Semaine du",
+      scrollHint: "Faites glisser pour voir toute la semaine"
+
     // ... other schedule translations ...
   },
+  payments: {
+  title: "Historique des Paiements",
+  description: "Consultez le statut de vos paiements de frais de scolarité pour l'année en cours.",
+  historyFor: "Historique pour",
+  total: "Total annuel",
+  annualSummary: "Récapitulatif annuel",
+  noPaymentsForFilter: "Aucun paiement ne correspond à ce filtre.",
+  loadError: "Impossible de charger l'historique des paiements. Veuillez réessayer plus tard.",
+  noPayments: "Aucun paiement enregistré pour cet élève pour l'année scolaire en cours.",
+  noChildrenFound: "Aucun enfant trouvé",
+  table: {
+    month: "Mois",
+    progression: "Progressession",
+
+    amountDue: "Montant Dû",
+    amountPaid: "Montant Payé",
+    balance: "Reste à Payer",
+    status: "Statut",
+    paymentDate: "Date du Paiement",
+  },
+  status: {
+    paid: "Payé",
+    partial: "Partiel",
+    unpaid: "Non Payé",
+  },
+},
 
   // ... autres sections ...
 },

@@ -5,6 +5,8 @@ import {
   ConflictException,
   BadRequestException,
   UnauthorizedException,
+  Inject,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -15,11 +17,20 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { ParentService } from '../central/parent.service';
 import { CreerParentDto } from '../central/dto/creer-parent.dto';
 import * as bcrypt from 'bcrypt';
+import { UtilisateurBloc } from './utilisateur-bloc.entity';
+import { REQUEST } from '@nestjs/core';
+import { Request } from 'express';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 @Injectable({ scope: Scope.REQUEST })
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+
+    @InjectRepository(UtilisateurBloc)
+    private readonly utilisateurBlocRepository: Repository<UtilisateurBloc>,
 
     @InjectRepository(Classe)
     private readonly classeRepository: Repository<Classe>,
@@ -28,7 +39,19 @@ export class UsersService {
     private readonly anneeScolaireRepository: Repository<anneescolaire>,
 
     private readonly parentService: ParentService,
+    @Inject(REQUEST) private readonly request: Request,
   ) {}
+
+  private getBlocId(): number | null {
+    const user = this.request.user as any;
+    this.logger.debug(`[getBlocId] Tentative de récupération du blocId depuis request.user.`);
+    if (!user || !user.blocId) {
+      this.logger.debug(`[getBlocId] Aucun utilisateur ou blocId trouvé sur request.user. request.user est: ${JSON.stringify(user)}`);
+      return null; // Ne pas lancer d'erreur, certains contextes peuvent ne pas avoir de blocId
+    }
+    this.logger.debug(`[getBlocId] blocId trouvé: ${user.blocId}`);
+    return user.blocId;
+  }
 
   private generateRandomPassword(length = 10): string {
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()';
@@ -55,14 +78,17 @@ export class UsersService {
   }
 
   private normalizeMauritanianPhone(phone: string): string {
-    const clean = phone.trim().replace(/\s+/g, '');
-    if (clean.startsWith('+222')) return clean;
-    if (clean.startsWith('00')) {
-      if (clean.startsWith('00222')) return '+' + clean.slice(2);
-      throw new BadRequestException("Seuls les numéros mauritaniens (+222) sont autorisés.");
+    const phoneNumber = parsePhoneNumberFromString(phone, 'MR');
+
+    if (!phoneNumber || !phoneNumber.isValid()) {
+      throw new BadRequestException(`Le numéro de téléphone '${phone}' n'est pas valide.`);
     }
-    if (clean.startsWith('0')) return '+222' + clean.slice(1);
-    return '+222' + clean;
+
+    if (phoneNumber.country !== 'MR') {
+      throw new BadRequestException("Seuls les numéros mauritaniens sont autorisés.");
+    }
+
+    return phoneNumber.format('E.164'); // Retourne le format international, ex: +22222123456
   }
 
   async createUser(
@@ -140,6 +166,22 @@ export class UsersService {
 
     const savedUser = await this.userRepository.save(newUser);
 
+    // **NOUVELLE LOGIQUE : Lier l'utilisateur au bloc actuel**
+    // Ne s'applique pas aux étudiants, car leur lien se fait à l'inscription.
+    const blocId = this.getBlocId();
+    if (blocId && savedUser.role !== UserRole.ETUDIANT) {
+      const newAccess = this.utilisateurBlocRepository.create({
+        utilisateur: { id: savedUser.id },
+        bloc: { id: blocId },
+      });
+      try {
+        await this.utilisateurBlocRepository.save(newAccess);
+      } catch (error) {
+        // Log l'erreur mais ne bloque pas la création de l'utilisateur
+        console.error(`Impossible de lier l'utilisateur ${savedUser.id} au bloc ${blocId}`, error);
+      }
+    }
+
     return {
       user: savedUser,
       plainPassword,
@@ -147,29 +189,72 @@ export class UsersService {
     };
   }
 
-  async findById(id: number): Promise<User> {
-    const user = await this.userRepository.findOne({ where: { id } });
-    if (!user) {
-      throw new NotFoundException('Utilisateur non trouvé');
-    }
-    return user;
+ async findById(id: number): Promise<User> {
+  const blocId = this.getBlocId();
+  
+  const query = this.userRepository
+    .createQueryBuilder('user')
+    .where('user.id = :id', { id });
+
+  if (blocId) {
+    query.innerJoin('user.accesBlocs', 'acces', 'acces.blocId = :blocId', { blocId });
   }
 
+  const user = await query.getOne();
+  
+  if (!user) {
+    throw new NotFoundException('Utilisateur non trouvé');
+  }
+  return user;
+}
+
   async findByEmail(email: string): Promise<User | null> {
+    this.logger.debug(`[findByEmail] Recherche simple pour l'email: ${email}`);
     return this.userRepository.findOne({ where: { email } });
   }
 
-    async findByEmailWithPassword(email: string): Promise<User | null> {
-    return this.userRepository
+  async findByEmailWithPassword(email: string): Promise<User | null> {
+    this.logger.log(`[findByEmailWithPassword] Recherche de l'utilisateur avec l'email: ${email}`);
+    const blocId = this.getBlocId();
+    this.logger.debug(`[findByEmailWithPassword] Contexte de blocId obtenu: ${blocId}`);
+
+    const query = this.userRepository
       .createQueryBuilder('user')
       .addSelect('user.motDePasse')
-      .where('user.email = :email', { email })
-      .getOne();
-  }
+      .leftJoinAndSelect('user.accesBlocs', 'accesBlocs')
+      .leftJoinAndSelect('accesBlocs.bloc', 'bloc')
+      .where('user.email = :email', { email });
 
+    if (blocId) {
+      this.logger.debug(`[findByEmailWithPassword] Ajout du filtre pour le blocId: ${blocId}`);
+      query.andWhere('accesBlocs.blocId = :blocId', { blocId });
+    } else {
+      this.logger.debug(`[findByEmailWithPassword] Aucun filtre de blocId appliqué (ce qui est normal pendant la validation du jeton).`);
+    }
+    const user = await query.getOne();
+    if (user) {
+      this.logger.log(`[findByEmailWithPassword] Utilisateur trouvé pour l'email ${email}.`);
+    } else {
+      this.logger.warn(`[findByEmailWithPassword] Aucun utilisateur trouvé pour l'email ${email}.`);
+    }
+    return user;
+}
 
   async findAll(): Promise<Partial<User>[]> {
-    return this.userRepository.find();
+    const blocId = this.getBlocId();
+    if (!blocId) {
+      // Si aucun bloc n'est sélectionné (ex: superadmin), on ne peut pas filtrer.
+      // Pour la sécurité, retournons une liste vide.
+      console.warn("[UsersService.findAll] Aucun blocId trouvé, retour d'une liste vide.");
+      return [];
+    }
+
+    // Trouve tous les utilisateurs qui ont accès au bloc actuel.
+    return this.userRepository
+      .createQueryBuilder('user')
+      .innerJoin('user.accesBlocs', 'acces')
+      .where('acces.blocId = :blocId', { blocId })
+      .getMany();
   }
 
   async deleteUser(id: number): Promise<void> {

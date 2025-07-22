@@ -1,34 +1,34 @@
-import { Controller, Post, Body, Get, Param, Delete, Query, ParseIntPipe, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Delete, Query, ParseIntPipe, UseGuards, Put } from '@nestjs/common';
 import { EvaluationService } from './evaluation.service';
 import { Evaluation } from './evaluation.entity';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { UserRole } from '../users/user.entity';
 
 @Controller('api/evaluations')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class EvaluationController {
   constructor(private readonly evaluationService: EvaluationService) {}
 
   @Post()
+  @Roles(UserRole.ADMIN, UserRole.PROFESSEUR)
   create(@Body() data: Partial<Evaluation>) {
     return this.evaluationService.create(data);
   }
 
   @Get()
   findAllFiltered(
-    @Query('classeId') classeId?: string,
-    @Query('matiereId') matiereId?: string,
-    @Query('trimestre') trimestreId?: string,
-    @Query('anneeScolaireId') anneeScolaireId?: string,
+    @Query('classeId', new ParseIntPipe({ optional: true })) classeId?: number,
+    @Query('matiereId', new ParseIntPipe({ optional: true })) matiereId?: number,
+    @Query('trimestre', new ParseIntPipe({ optional: true })) trimestreId?: number,
+    @Query('anneeScolaireId', new ParseIntPipe({ optional: true })) anneeScolaireId?: number,
   ) {
-    const parsedClasseId = classeId ? parseInt(classeId, 10) : undefined;
-    const parsedMatiereId = matiereId ? parseInt(matiereId, 10) : undefined;
-    const parsedTrimestreId = trimestreId ? parseInt(trimestreId, 10) : undefined;
-    const parsedAnneeScolaireId = anneeScolaireId ? parseInt(anneeScolaireId, 10) : undefined;
-
-   
     return this.evaluationService.findAll(
-      parsedClasseId,
-      parsedMatiereId,
-      parsedTrimestreId,
-      parsedAnneeScolaireId,
+      classeId,
+      matiereId,
+      trimestreId,
+      anneeScolaireId,
     );
   }
 
@@ -37,7 +37,9 @@ export class EvaluationController {
     return this.evaluationService.findOne(id);
   }
 
+
   @Delete(':id')
+  @Roles(UserRole.ADMIN, UserRole.PROFESSEUR)
   async remove(@Param('id', ParseIntPipe) id: number) {
     return this.evaluationService.remove(id);
   }

@@ -1,11 +1,12 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { EvaluationService } from './evaluation.service';
 import { EvaluationController } from './evaluation.controller';
 import { Evaluation } from './evaluation.entity';
 import { createTenantRepositoryProvider } from '../tenant/tenant-repository.provider';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-imports: [],
+imports: [forwardRef(() => AuthModule)],
   providers: [
     EvaluationService,
     createTenantRepositoryProvider(Evaluation),

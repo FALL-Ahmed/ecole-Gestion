@@ -51,24 +51,25 @@ export function ParentScheduleView() {
 
   return (
     <div className={cn(
-      "p-6",
+      "p-4 md:p-6",
       language === 'ar' ? 'rtl' : 'ltr'
     )}>
       <h1 className={cn(
         "text-2xl font-bold mb-6",
         language === 'ar' ? 'text-right' : 'text-left'
       )}>
-        {t.parent.schedule.title}
+        {t.parent.schedule.title || "Emploi du temps des enfants"}
       </h1>
 
       <ChildSelector children={children} selectedChild={selectedChild} onChildChange={setSelectedChild} />
 
       {selectedChild && (
-        <StudentSchedule key={selectedChild} userId={selectedChild} />
+        <div className="mt-6">
+          <StudentSchedule key={selectedChild} userId={selectedChild} />
+        </div>
       )}
     </div>
   );
 }
 
 export default ParentScheduleView;
-

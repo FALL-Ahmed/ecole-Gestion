@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
@@ -16,7 +17,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 
+import { Loader2 } from 'lucide-react';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+interface Bloc {
+  id: number;
+  nom: string;
+}
 
 const educationalTips = [
   "Madrastak centralise toute la gestion scolaire pour que chaque acteur gagne en efficacité.",
@@ -79,6 +86,11 @@ export function LoginForm() {
   const [redirecting, setRedirecting] = useState(false);
   const navigate = useNavigate();
 
+  const [showBlocSelection, setShowBlocSelection] = useState(false);
+  const [blocs, setBlocs] = useState<Bloc[]>([]);
+  const [preselectionToken, setPreselectionToken] = useState<string | null>(null);
+  const [selectedBlocId, setSelectedBlocId] = useState<number | null>(null);
+
   // Generate floating elements with more variety
   useEffect(() => {
     const elements = [];
@@ -134,12 +146,66 @@ export function LoginForm() {
     localStorage.setItem('token', access_token);
   };
 
+  const handleBlocSelect = async (blocId: number) => {
+    setSelectedBlocId(blocId);
+    if (!preselectionToken) {
+      toast({
+        title: t.login.toast.errorTitle || "Erreur",
+        description: t.login.toast.missingToken || "Jeton de présélection manquant. Veuillez vous reconnecter.",
+        variant: "destructive",
+      });
+      setShowBlocSelection(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setShowBlocSelection(false); // Hide selection while processing
+
+    try {
+      const response = await fetch(`${API_URL}/api/auth/select-bloc`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${preselectionToken}`,
+        },
+        body: JSON.stringify({ blocId }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: t.login.toast.selectionError || "Erreur lors de la sélection de l'établissement." }));
+        throw new Error(errorData.message);
+      }
+
+      const data = await response.json();
+      const { access_token, user } = data;
+
+      // Same success flow as direct login
+      setLoginSuccess(true);
+      setTimeout(() => {
+        setRedirecting(true);
+        setTimeout(() => {
+          login(access_token, user);
+          navigate('/dashboard');
+        }, 1500);
+      }, 1500);
+
+    } catch (error: any) {
+      toast({
+        title: t.login.toast.selectionFailedTitle || "Erreur de sélection",
+        description: error.message,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      setSelectedBlocId(null);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/auth/login`, {
+      const response = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -151,7 +217,17 @@ export function LoginForm() {
       }
 
       const data = await response.json();
-      const { access_token, user } = data;
+
+      // Gérer la réponse de sélection de bloc
+      if (data.status === 'selection_required') {
+        setBlocs(data.blocs);
+        setPreselectionToken(data.preselectionToken);
+        setShowBlocSelection(true);
+        setIsLoading(false);
+        return;
+      }
+
+      const { access_token, user } = data; // Connexion directe
 
       // Vérification supplémentaire pour les élèves
       if (user.role === 'eleve') {
@@ -248,6 +324,50 @@ export function LoginForm() {
           </motion.div>
         ))}
       </div>
+
+      {/* Modal de sélection de bloc */}
+      <AnimatePresence>
+        {showBlocSelection && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 flex items-center justify-center z-20 bg-black/50 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              transition={{ type: 'spring', stiffness: 300 }}
+              className="w-full max-w-md"
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t.login.selectEstablishmentTitle || "Choisir un établissement"}</CardTitle>
+                  <CardDescription>{t.login.selectEstablishmentDescription || "Votre compte a accès à plusieurs établissements. Veuillez en sélectionner un pour continuer."}</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col space-y-3 text-start">
+                  {blocs.map((bloc) => (
+                    <Button
+                      key={bloc.id}
+                      onClick={() => handleBlocSelect(bloc.id)}
+                      className="w-full justify-start p-4 h-auto"
+                      variant="outline"
+                      disabled={isLoading}
+                    >
+                      {isLoading && selectedBlocId === bloc.id ? (
+                        <Loader2 className="me-3 h-5 w-5 animate-spin" />
+                      ) : (
+                        <School className="me-3 h-5 w-5 text-blue-500" />
+                      )}
+                      <span className="font-semibold text-start">{bloc.nom}</span>
+                    </Button>
+                  ))}
+                </CardContent>
+              </Card>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Success confirmation overlay */}
       <AnimatePresence>

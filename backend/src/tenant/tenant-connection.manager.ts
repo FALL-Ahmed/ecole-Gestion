@@ -50,29 +50,75 @@ export class TenantConnectionManager {
 
   /**
    * Finds the database name for a tenant by querying the central database.
-   * @param tenantId The identifier for the tenant.
+   * It can resolve a tenant from a subdomain or a blocId.
+   * @param tenantId The identifier for the tenant (e.g., 'default', 'lycee1', or 'bloc_123').
    * @returns The database name or null if not found.
    */
   private async getTenantDbNameFromCentralDB(tenantId: string): Promise<string | null> {
+    // Case 1: Local development or a default tenant
     if (tenantId === 'default') {
-      // For local development or a default tenant
       return this.configService.get<string>('DB_NAME') || 'school_management';
     }
 
+    // Case 2: Special identifier for the central admin portal.
+    // This should not result in a tenant DB connection. Returning null is safe.
+    if (tenantId === 'admin_portal') {
+      return null;
+    }
+
+    // Case 3: Tenant identified by a bloc ID (from JWT)
+    if (tenantId.startsWith('bloc_')) {
+      const blocId = parseInt(tenantId.replace('bloc_', ''), 10);
+      if (isNaN(blocId)) {
+        console.error(`[TenantConnectionManager] Invalid blocId format: ${tenantId}`);
+        return null;
+      }
+
+      try {
+        // This query uses a central mapping table to find the school (and its db_name)
+        // associated with a given bloc_id, without altering the tenant's 'blocs' table.
+        const queryResult = await this.centralDataSource.query(
+          `SELECT e.db_name 
+           FROM ecoles e
+           INNER JOIN bloc_ecole_mapping bem ON e.id = bem.ecole_id 
+           WHERE bem.bloc_id = ?`,
+          [blocId],
+        );
+
+        if (!queryResult || queryResult.length === 0) {
+          console.warn(
+            `[TenantConnectionManager] No ecole/db_name found in 'bloc_ecole_mapping' for blocId: ${blocId}`,
+          );
+          return null;
+        }
+        return queryResult[0].db_name;
+      } catch (error) {
+        console.error(
+          `[TenantConnectionManager] Error querying central DB for blocId '${blocId}'`,
+          error,
+        );
+        throw new HttpException(
+          'Error resolving tenant from bloc.',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      }
+    }
+
+    // Case 4: Tenant identified by subdomain (from TenantMiddleware)
     try {
-      // Use '?' for mysql2 parameter binding to prevent SQL injection
       const queryResult = await this.centralDataSource.query(
         `SELECT db_name FROM ecoles WHERE sous_domaine = ? LIMIT 1`,
         [tenantId],
       );
 
       if (!queryResult || queryResult.length === 0) {
+        console.warn(`[TenantConnectionManager] No ecole/db_name found for subdomain: ${tenantId}`);
         return null;
       }
 
       return queryResult[0].db_name;
     } catch (error) {
-      console.error(`[TenantConnectionManager] Error querying central DB for tenant '${tenantId}'`, error);
+      console.error(`[TenantConnectionManager] Error querying central DB for subdomain '${tenantId}'`, error);
       throw new HttpException('Error connecting to central database to resolve tenant.', HttpStatus.SERVICE_UNAVAILABLE);
     }
   }
@@ -106,4 +152,3 @@ export class TenantConnectionManager {
     };
   }
 }
-

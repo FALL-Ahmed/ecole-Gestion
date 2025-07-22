@@ -1,13 +1,19 @@
-import { Controller, Post, Body, Get, Param, Put, Delete, ParseIntPipe, UsePipes, ValidationPipe, Query, HttpCode, HttpStatus, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Put, Delete, ParseIntPipe, UsePipes, ValidationPipe, Query, HttpCode, HttpStatus, BadRequestException, UseGuards } from '@nestjs/common';
 import { NoteService } from './note.service';
 import { Note } from './note.entity';
 import { CreateNoteDto } from './dto/create-note.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { UserRole } from '../users/user.entity';
 
 @Controller('api/notes')
+@UseGuards(JwtAuthGuard, RolesGuard) // SÉCURITÉ AJOUTÉE
 export class NoteController {
   constructor(private readonly noteService: NoteService) {}
 
   @Post()
+  @Roles(UserRole.ADMIN, UserRole.PROFESSEUR) // Seuls admin et prof peuvent créer
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   async createMultiple(@Body() createNoteDtos: CreateNoteDto[]): Promise<Note[]> {
     return this.noteService.createMultiple(createNoteDtos);
@@ -50,6 +56,7 @@ export class NoteController {
   }
 
   @Put(':id')
+  @Roles(UserRole.ADMIN, UserRole.PROFESSEUR) // Seuls admin et prof peuvent modifier
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -59,6 +66,7 @@ export class NoteController {
   }
 
   @Delete(':id')
+  @Roles(UserRole.ADMIN, UserRole.PROFESSEUR) // Seuls admin et prof peuvent supprimer
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
     await this.noteService.remove(id);

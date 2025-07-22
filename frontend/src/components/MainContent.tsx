@@ -37,6 +37,7 @@ import { ParentGradesView } from './parent/ParentGradesView';
 import { ParentAttendanceView } from './parent/ParentAttendanceView';
 import { ParentScheduleView } from './parent/ParentScheduleView';
 import { ParentSecuritySettings } from './parent/ParentSecuritySettings';
+import HistoriquePaiements from './parent/HistoriquePaiements';
 
 interface MainContentProps {
   activeSection: string;
@@ -118,6 +119,7 @@ export function MainContent({ activeSection, onSectionChange }: MainContentProps
       case 'child-schedule': return <ParentScheduleView />;
       case 'child-grades': return <ParentGradesView />;
       case 'child-attendance': return <ParentAttendanceView />;
+      case 'child-payments': return <HistoriquePaiements />;
       case 'settings': return <ParentSecuritySettings />;
       default: return <ParentScheduleView />;
     }

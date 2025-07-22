@@ -9,10 +9,11 @@ import {
 } from 'typeorm';
 import { Matiere } from 'src/matieres/matiere.entity';
 import { Classe } from 'src/classe/classe.entity';
-import { User } from 'src/users/user.entity'; // This is correct for professeur
+import { User } from 'src/users/user.entity';
 import { Trimestre } from 'src/trimestre/trimestre.entity';
 import { anneescolaire } from 'src/annee-academique/annee-academique.entity';
 import { Note } from 'src/note/note.entity';
+import { Bloc } from '../bloc/bloc.entity';
 
 @Entity('evaluation')
 export class Evaluation {
@@ -23,14 +24,9 @@ export class Evaluation {
   @JoinColumn({ name: 'matiere_id' })
   matiere: Matiere;
 
-  // Relation vers Classe
-  @ManyToOne(() => Classe, (classe) => classe.evaluations, { eager: false })
-  @JoinColumn({ name: 'classe_id' }) // Nom de la colonne clé étrangère
-  classe: Classe; // Propriété pour l'objet Classe lié (utile si vous avez besoin d'autres infos de la classe)
-
-  @Column({ name: 'classe_id' }) // Colonne pour stocker l'ID de la classe directement
-  classeId: number; // Correspond à l'attente du frontend pour un accès direct
-
+  @ManyToOne(() => Classe, (classe) => classe.evaluations)
+  @JoinColumn({ name: 'classe_id' })
+  classe: Classe;
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'professeur_id' })
@@ -40,15 +36,12 @@ export class Evaluation {
   type: string;
 
   @Column({ type: 'date', name: 'date_eval' })
-  dateEval: string;
+date_eval: string;
+
 
   @ManyToOne(() => Trimestre)
-@JoinColumn({ name: 'trimestre' }) // nom explicite et clair
-trimestre: Trimestre;
-
-@Column({ name: 'trimestre' }) // colonne pour gérer facilement l'ID
-trimestreId: number;
-
+  @JoinColumn({ name: 'trimestre' }) // Nom de colonne exact comme dans la BDD
+  trimestre: Trimestre;
 
   @ManyToOne(() => anneescolaire)
   @JoinColumn({ name: 'annee_scolaire_id' })
@@ -56,4 +49,10 @@ trimestreId: number;
 
   @OneToMany(() => Note, (note) => note.evaluation)
   notes: Note[];
+   @Column({ name: 'bloc_id' })
+  blocId: number;
+
+  @ManyToOne(() => Bloc, bloc => bloc.evaluations, { onDelete: 'CASCADE', nullable: false })
+  @JoinColumn({ name: 'bloc_id' })
+  bloc: Bloc;
 }
