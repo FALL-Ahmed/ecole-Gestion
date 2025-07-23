@@ -41,9 +41,7 @@ import { fr, ar } from 'date-fns/locale';
 import { toast } from '@/hooks/use-toast';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
-
-// API Configuration
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import apiClient from '@/lib/apiClient';
 
 // Interfaces
 interface AnneeAcademique {
@@ -304,17 +302,17 @@ const skeletonStyles = {
         setProfessorId(profIdNum);
         setProfessorName(`${user.prenom} ${user.nom}`);
 
-        const [anneesRes, matieresRes, classesRes, usersRes] = await Promise.all([
-          fetch(`${API_URL}/api/annees-academiques`).then(res => res.json()),
-          fetch(`${API_URL}/api/matieres`).then(res => res.json()),
-          fetch(`${API_URL}/api/classes`).then(res => res.json()),
-          fetch(`${API_URL}/api/users`).then(res => res.json()),
+        const [anneesResponse, matieresResponse, classesResponse, usersResponse] = await Promise.all([
+          apiClient.get('/annees-academiques'),
+          apiClient.get('/matieres'),
+          apiClient.get('/classes'),
+          apiClient.get('/users'),
         ]);
 
-        setAllMatieres(matieresRes);
-        setAllClasses(classesRes);
-        setAllProfessors(usersRes.filter((u: User) => u.role === 'professeur'));
-
+        setAllMatieres(matieresResponse.data);
+        setAllClasses(classesResponse.data);
+        setAllProfessors(usersResponse.data.filter((u: User) => u.role === 'professeur'));
+        const anneesRes = anneesResponse.data;
         const currentYear = new Date().getFullYear();
         const activeAnnee = anneesRes.find((an: AnneeAcademique) =>
           new Date(an.date_debut).getFullYear() <= currentYear &&
@@ -322,14 +320,15 @@ const skeletonStyles = {
         ) || anneesRes[0];
 
         setCurrentAnneeAcademique(activeAnnee);
-      } catch (err) {
-        console.log('ERROR:', t.schedule.errorLoading, err);
+      } catch (err: any) {
+        const errorMessage = err.response?.data?.message || err.message || t.schedule.errorLoading;
+        console.error('ERROR:', errorMessage, err);
         toast({
           title: t.common.error,
-          description: t.schedule.errorLoading,
+          description: errorMessage,
           variant: "destructive",
         });
-        setError(t.schedule.errorLoading);
+        setError(errorMessage);
       }
     };
 
@@ -347,33 +346,35 @@ const skeletonStyles = {
     setError(null);
 
     try {
-      const scheduleRes: EmploiDuTempsEntry[] = await fetch(
-        `${API_URL}/api/emploi-du-temps?professeur_id=${professorId}&annee_academique_id=${currentAnneeAcademique.id}`
-      ).then(res => res.json());
+      const scheduleResponse = await apiClient.get(
+        `/emploi-du-temps?professeur_id=${professorId}&annee_academique_id=${currentAnneeAcademique.id}`
+      );
+      const scheduleRes: EmploiDuTempsEntry[] = scheduleResponse.data || [];
 
       // Utiliser une liste fixe de jours en français pour correspondre à la base de données
       const frenchDaysOfWeek = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
       const groupedSchedule: Record<string, EmploiDuTempsEntry[]> = {};
       frenchDaysOfWeek.forEach(day => {
-        groupedSchedule[day] = scheduleRes.filter(entry => entry.jour === day) || [];
+        groupedSchedule[day] = (scheduleRes || []).filter(entry => entry.jour === day);
       });
       setScheduleData(groupedSchedule);
 
       const weekStartDate = format(currentWeekStart, 'yyyy-MM-dd');
       const weekEndDate = format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'yyyy-MM-dd');
 
-      const exceptionsRes: ExceptionEmploiDuTempsEntry[] = await fetch(
-        `${API_URL}/api/exception-emploi-du-temps?professeur_id=${professorId}&start_date=${weekStartDate}&end_date=${weekEndDate}`
-      ).then(res => res.json());
-      setExceptionsData(exceptionsRes);
-    } catch (err) {
-      console.log('ERROR:', t.schedule.errorLoading, err);
+      const exceptionsResponse = await apiClient.get(
+        `/exception-emploi-du-temps?professeur_id=${professorId}&start_date=${weekStartDate}&end_date=${weekEndDate}`
+      );
+      setExceptionsData(exceptionsResponse.data || []);
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || err.message || t.schedule.errorLoading;
+      console.error('ERROR:', errorMessage, err);
       toast({
         title: t.common.error,
-        description: t.schedule.errorLoading,
+        description: errorMessage,
         variant: "destructive",
       });
-      setError(t.schedule.errorLoading);
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

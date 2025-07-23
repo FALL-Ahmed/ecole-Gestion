@@ -23,13 +23,11 @@ import {
   CheckCircle,
   XCircle,
   Percent,
-} from 'lucide-react';import { useAuth } from '@/contexts/AuthContext';
+} from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
-import { useNotifications } from '@/contexts/NotificationContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const API_BASE_URL = `${API_URL}/api`;
+import apiClient from '@/lib/apiClient';
 
 interface AnneeAcademique {
   id: number;
@@ -83,7 +81,6 @@ interface StudentAttendanceProps {
 
 export function StudentAttendance({ userId }: StudentAttendanceProps) {
   const { user } = useAuth();
-  const { addNotification } = useNotifications();
   const { t, language } = useLanguage();
 
   const [activeSchoolYear, setActiveSchoolYear] = useState<AnneeAcademique | null>(null);
@@ -149,9 +146,8 @@ export function StudentAttendance({ userId }: StudentAttendanceProps) {
       setIsLoading(true);
       setError(null);
       try {
-        const configRes = await fetch(`${API_BASE_URL}/configuration`);
-        if (!configRes.ok) throw new Error(t.common.errorLoadingConfig);
-        const configData: any | any[] = await configRes.json();
+        const configRes = await apiClient.get('/configuration');
+        const configData: any | any[] = configRes.data;
         let activeYearId: number | null = null;
 
         if (Array.isArray(configData) && configData.length > 0) {
@@ -161,18 +157,17 @@ export function StudentAttendance({ userId }: StudentAttendanceProps) {
           // Gère la réponse sous forme d'objet simple
           activeYearId = (configData as any).annee_academique_active_id || (configData as any).annee_scolaire?.id;
         }
-        
+
         if (!activeYearId) {
           throw new Error(t.common.missingYearConfig);
         }
 
         const [yearsRes, trimestresRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/annees-academiques`),
-          fetch(`${API_BASE_URL}/trimestres?anneeScolaireId=${activeYearId}`)
+          apiClient.get('/annees-academiques'),
+          apiClient.get(`/trimestres?anneeScolaireId=${activeYearId}`)
         ]);
 
-        if (!yearsRes.ok) throw new Error(t.common.errorLoadingYear);
-        const allYears: AnneeAcademique[] = await yearsRes.json();
+        const allYears: AnneeAcademique[] = yearsRes.data;
 
         const currentActiveYear = allYears.find(y => y.id === activeYearId);
         if (!currentActiveYear) {
@@ -180,12 +175,11 @@ export function StudentAttendance({ userId }: StudentAttendanceProps) {
         }
         setActiveSchoolYear(currentActiveYear);
 
-        if (!trimestresRes.ok) throw new Error(t.common.errorLoadingData('trimestres', ''));
-        const trimestresData: Trimestre[] = await trimestresRes.json();
+        const trimestresData: Trimestre[] = trimestresRes.data;
         setTrimestres(trimestresData);
 
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : t.common.errorLoadingInitialData;
+      } catch (err: any) {
+        const errorMessage = err.response?.data?.message || (err instanceof Error ? err.message : t.common.errorLoadingInitialData);
         setError(errorMessage);
       } finally {
         setIsLoading(false);
@@ -231,25 +225,19 @@ export function StudentAttendance({ userId }: StudentAttendanceProps) {
           date_fin: format(endDate, 'yyyy-MM-dd'),
         });
 
-        const response = await fetch(`${API_BASE_URL}/absences?${params.toString()}`);
-
-        if (!response.ok) {
-          if (response.status === 404 || response.status === 204) {
-            setAbsenceRecords([]);
-            setCurrentAttendanceStats(initialAttendanceStats);
-            return;
-          }
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data: AbsenceAPI[] = await response.json();
+        const response = await apiClient.get(`/absences?${params.toString()}`);
+        const data: AbsenceAPI[] = response.data || [];
 
         const mappedData: AbsenceRecord[] = data.map(item => ({
           id: item.id,
           date: item.date,
-          dayOfWeek: format(new Date(item.date), 'EEEE', { locale: dateLocale }).charAt(0).toUpperCase() + 
-                   format(new Date(item.date), 'EEEE', { locale: dateLocale }).slice(1),
-          subject: translateSubject(item.matiere?.nom || ''),
+          dayOfWeek: format(new Date(item.date), 'EEEE', { locale: dateLocale })
+            .charAt(0)
+            .toUpperCase() +
+            format(new Date(item.date), 'EEEE', { locale: dateLocale }).slice(1),
+          subject: translateSubject(
+            item.matiere?.nom || t.common.unknownSubject
+          ),
           period: `${item.heure_debut?.substring(0, 5) || 'N/A'} - ${item.heure_fin?.substring(0, 5) || 'N/A'}`,
           justified: item.justifie && !!item.justification,
           justification: item.justification || t.common.noDetailsAvailable,
@@ -271,15 +259,6 @@ export function StudentAttendance({ userId }: StudentAttendanceProps) {
 
           mappedData.forEach(absence => {
             if (absence.id && !idsKnownAtStartOfEffect.has(absence.id)) {
-              addNotification(
-                t.studentAttendance.newAbsenceNotification({
-                  date: format(new Date(absence.date), 'dd/MM/yyyy', { locale: dateLocale }),
-                  subject: absence.subject,
-                  period: absence.period
-                }),
-                'absence',
-                '/student/my-attendance'
-              );
               newIdsAddedThisCycle.add(absence.id);
             }
           });
@@ -290,21 +269,26 @@ export function StudentAttendance({ userId }: StudentAttendanceProps) {
             localStorage.setItem(storageKey, JSON.stringify(Array.from(allNotifiedIdsNow)));
           }
         }
-      } catch (err) {
-        console.error("Error fetching absences:", err);
+      } catch (err: any) {
+        if (err.response && (err.response.status === 404 || err.response.status === 204)) {
+          setAbsenceRecords([]);
+          setCurrentAttendanceStats(initialAttendanceStats);
+          return;
+        }
+        console.error('Error fetching absences:', err);
         toast({ 
           title: t.common.error, 
-          description: t.studentAttendance.errorLoadingAbsences, 
+          description: err.response?.data?.message || t.studentAttendance.errorLoadingAbsences, 
           variant: "destructive" 
         });
-        setError(t.studentAttendance.errorLoadingAbsences);
+        setError(err.response?.data?.message || t.studentAttendance.errorLoadingAbsences);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchAbsences();
-  }, [studentId, activeSchoolYear, startDate, endDate, t, dateLocale, addNotification, translateSubject]);
+  }, [studentId, activeSchoolYear, startDate, endDate, t, dateLocale, translateSubject]);
 
   const currentYearName = activeSchoolYear?.libelle || t.common.loading;
   const currentTermName = trimestres.find(t => t.id.toString() === selectedTermId)?.nom || t.studentAttendance.fullYear;

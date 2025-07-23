@@ -37,6 +37,7 @@ import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Loader2 } from 'lucide-react';
+import apiClient from '@/lib/apiClient';
 
 // Types
 export interface Chapter {
@@ -83,9 +84,6 @@ interface AffectationApiResponse {
   classe: { id: number; nom: string; niveau: string };
   annee_scolaire: { id: number; libelle: string; dateDebut: string; dateFin: string };
 }
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const API_BASE_URL = `${API_URL}/api`;
 
 export function ChapterPlanning() {
   const { t, language } = useLanguage();
@@ -144,10 +142,9 @@ export function ChapterPlanning() {
   useEffect(() => {
     const fetchActiveYear = async () => {
       try {
-        const configRes = await fetch(`${API_BASE_URL}/configuration`);
-        if (!configRes.ok) throw new Error(t.common.missingConfig);
-        
-        const configData = await configRes.json();
+        const response = await apiClient.get('/configuration');
+        const configData = response.data;
+
         let fetchedAnneeScolaire: AnneeScolaire | null = null;
         
         if (Array.isArray(configData) && configData.length > 0) {
@@ -204,16 +201,13 @@ export function ChapterPlanning() {
 
       setIsLoading(true);
       try {
-        const [affectationsRes, matieresRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/affectations?annee_scolaire_id=${activeAnneeScolaire.id}`),
-          fetch(`${API_BASE_URL}/matieres`)
+        const [affectationsResponse, matieresResponse] = await Promise.all([
+          apiClient.get(`/affectations?annee_scolaire_id=${activeAnneeScolaire.id}`),
+          apiClient.get('/matieres')
         ]);
 
-        if (!affectationsRes.ok) throw new Error(t.common.errorLoadingData('affectations', affectationsRes.statusText));
-        if (!matieresRes.ok) throw new Error(t.common.errorLoadingData('matieres', matieresRes.statusText));
-
-        const fetchedAffectations: AffectationApiResponse[] = await affectationsRes.json();
-        const fetchedMatieres: Matiere[] = await matieresRes.json();
+        const fetchedAffectations: AffectationApiResponse[] = affectationsResponse.data;
+        const fetchedMatieres: Matiere[] = matieresResponse.data;
 
         const affectationsFilteredForActiveYear = fetchedAffectations.filter(
           aff => aff.annee_scolaire && aff.annee_scolaire.id === activeAnneeScolaire.id
@@ -300,16 +294,12 @@ export function ChapterPlanning() {
     }
     setIsLoading(true);
     try {
-      let url = `${API_BASE_URL}/chapitres`;
       const queryParams = new URLSearchParams();
       if (selectedClasseId) queryParams.append('classe_id', selectedClasseId.toString());
       if (selectedMatiereId) queryParams.append('matiere_id', selectedMatiereId.toString());
-      if (queryParams.toString()) url += `?${queryParams.toString()}`;
       
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(t.common.errorLoadingChapters);
-      
-      const data: Chapter[] = await response.json();
+      const response = await apiClient.get(`/chapitres?${queryParams.toString()}`);
+      const data: Chapter[] = response.data || [];
       const chaptersWithNames: ChapterDisplay[] = data.map(ch => ({
         ...ch,
         id: Number(ch.id),
@@ -399,43 +389,13 @@ export function ChapterPlanning() {
     };
 
     setIsLoading(true);
-    let url = `${API_BASE_URL}/chapitres`;
-    let method = 'POST';
-
-    if (editingChapter) {
-      url += `/${editingChapter.id}`;
-      method = 'PUT';
-    } else {
-      payload.statut = 'planifié';
-    }
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(url, {
-        method: method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        let backendError = t.chapterPlanning.saveError;
-        try {
-          const errorData = await response.json();
-          if (errorData.message) {
-            backendError = Array.isArray(errorData.message) 
-              ? errorData.message.join(', ') 
-              : errorData.message;
-          } else if (typeof errorData === 'string') {
-            backendError = errorData;
-          }
-        } catch (e) {
-          const textError = await response.text();
-          backendError = textError || response.statusText || backendError;
-        }
-        throw new Error(backendError);
+      if (editingChapter) {
+        await apiClient.put(`/chapitres/${editingChapter.id}`, payload);
+      } else {
+        payload.statut = 'planifié';
+        await apiClient.post('/chapitres', payload);
       }
       
       await fetchChaptersCallback();
@@ -446,10 +406,10 @@ export function ChapterPlanning() {
           : t.chapterPlanning.chapterAdded 
       });
       setDialogOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       toast({ 
         title: t.common.error, 
-        description: error instanceof Error ? error.message : t.common.unknownError, 
+        description: error.response?.data?.message || (error instanceof Error ? error.message : t.common.unknownError), 
         variant: "destructive" 
       });
     } finally {
@@ -484,26 +444,17 @@ export function ChapterPlanning() {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/chapitres/${chapterId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) throw new Error(t.chapterPlanning.statusUpdateFailed);
+      await apiClient.put(`/chapitres/${chapterId}`, payload);
 
       await fetchChaptersCallback();
       toast({ 
         title: t.common.success, 
         description: t.chapterPlanning.statusUpdated 
       });
-    } catch (error) {
+    } catch (error: any) {
       toast({ 
         title: t.common.error, 
-        description: error instanceof Error ? error.message : t.chapterPlanning.statusUpdateError, 
+        description: error.response?.data?.message || (error instanceof Error ? error.message : t.chapterPlanning.statusUpdateError), 
         variant: "destructive" 
       });
     } finally {

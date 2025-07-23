@@ -13,6 +13,7 @@ import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
+import apiClient from '@/lib/apiClient';
 
 interface StudentMaterialsProps {
   initialCourseId?: number;
@@ -40,9 +41,6 @@ interface Document {
   subject: string;
   chapter: string;
 }
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const API_BASE_URL = `${API_URL}/api`;
 
 export function StudentMaterials({ initialCourseId, onBack }: StudentMaterialsProps) {
   const { user } = useAuth();
@@ -83,10 +81,8 @@ export function StudentMaterials({ initialCourseId, onBack }: StudentMaterialsPr
     setError(null);
     
     try {
-      const configRes = await fetch(`${API_BASE_URL}/configuration`);
-      if (!configRes.ok) throw new Error(t.common.errorLoadingConfig);
-
-      const configData: any | any[] = await configRes.json();
+      const configRes = await apiClient.get('/configuration');
+      const configData: any | any[] = configRes.data;
       let activeAnneeId: number | undefined;
 
       if (Array.isArray(configData) && configData.length > 0) {
@@ -96,10 +92,8 @@ export function StudentMaterials({ initialCourseId, onBack }: StudentMaterialsPr
       }
       if (!activeAnneeId) throw new Error(t.common.missingYearConfig);
 
-      const inscriptionsRes = await fetch(`${API_BASE_URL}/inscriptions?utilisateurId=${user.id}&anneeScolaireId=${activeAnneeId}`);
-      if (!inscriptionsRes.ok) throw new Error(t.common.errorLoadingEnrollments);
-
-      const inscriptions = await inscriptionsRes.json();
+      const inscriptionsRes = await apiClient.get(`/inscriptions?utilisateurId=${user.id}&anneeScolaireId=${activeAnneeId}`);
+      const inscriptions = inscriptionsRes.data;
       const studentInscription = inscriptions.find((insc: any) => insc.actif);
       if (!studentInscription || !studentInscription.classe?.id) {
         throw new Error(t.common.noActiveRegistration);
@@ -108,13 +102,10 @@ export function StudentMaterials({ initialCourseId, onBack }: StudentMaterialsPr
       const studentClassId = studentInscription.classe.id;
       setStudentContext({ classId: studentClassId, anneeScolaireId: activeAnneeId });
 
-      const affectationsRes = await fetch(`${API_BASE_URL}/affectations?classe_id=${studentClassId}&annee_scolaire_id=${activeAnneeId}`);
-      if (!affectationsRes.ok) throw new Error(t.common.errorLoadingData('affectations', affectationsRes.statusText));
-
-      const affectations = await affectationsRes.json();
+      const affectationsRes = await apiClient.get(`/affectations?classe_id=${studentClassId}&annee_scolaire_id=${activeAnneeId}`);
+      const affectations = affectationsRes.data;
       const uniqueCourses = new Map<number, Course>();
       affectations.forEach((aff: any) => {
-        // Ensure the assignment has a subject and it's not already in our map
         if (aff.matiere && !uniqueCourses.has(aff.matiere.id)) {
           uniqueCourses.set(aff.matiere.id, {
             id: aff.matiere.id,
@@ -124,10 +115,11 @@ export function StudentMaterials({ initialCourseId, onBack }: StudentMaterialsPr
       });
       setCourses(Array.from(uniqueCourses.values()));
     } catch (err: any) {
-      setError(err.message || t.common.errorLoadingData('materials', ''));
+      const errorMessage = err.response?.data?.message || err.message || t.common.errorLoadingData('materials', '');
+      setError(errorMessage);
       toast({ 
         title: t.common.error, 
-        description: err.message || t.common.errorLoadingData('materials', ''), 
+        description: errorMessage, 
         variant: "destructive" 
       });
     } finally {
@@ -150,18 +142,24 @@ export function StudentMaterials({ initialCourseId, onBack }: StudentMaterialsPr
       setIsLoading(true);
       try {
         const { classId, anneeScolaireId } = studentContext;
-        const url = `${API_BASE_URL}/chapitres?matiereId=${selectedCourse}&classeId=${classId}&annee_scolaire_id=${anneeScolaireId}`;
-        const chaptersRes = await fetch(url);
-        if (!chaptersRes.ok) throw new Error(t.common.errorLoadingChapters);
+        const url = `/chapitres?matiereId=${selectedCourse}&classeId=${classId}&annee_scolaire_id=${anneeScolaireId}`;
+        const chaptersRes = await apiClient.get(url);
 
-        const chaptersData = await chaptersRes.json();
+        const chaptersData = chaptersRes.data;
         const filteredChapters = chaptersData.filter((ch: any) => 
           String(ch.matiereId) === String(selectedCourse) &&
           String(ch.classeId) === String(classId)
         );
         setChapters(filteredChapters.map((ch: any) => ({ id: ch.id, titre: ch.titre })));
-      } catch (err) {
+      } catch (err: any) {
+        const errorMessage = err.response?.data?.message || err.message || t.common.errorLoadingChapters;
+        setError(errorMessage);
         setChapters([]);
+        toast({
+          title: t.common.error,
+          description: errorMessage,
+          variant: "destructive",
+        });
       } finally {
         setIsLoading(false);
       }

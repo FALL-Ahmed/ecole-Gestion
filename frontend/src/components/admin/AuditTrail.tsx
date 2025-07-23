@@ -32,10 +32,9 @@ import { format, subDays, isWithinInterval } from 'date-fns';
 import { fr, ar } from 'date-fns/locale';
 import { toast } from '@/hooks/use-toast';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { Separator } from '@radix-ui/react-dropdown-menu';
+import { Separator } from '@/components/ui/separator';
+import apiClient from '@/lib/apiClient';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const API_BASE_URL = `${API_URL}/api`;
 
 interface AuditLog {
   id: number;
@@ -47,7 +46,11 @@ interface AuditLog {
   description: string;
   details?: any;
 }
-
+interface User {
+    id: number;
+    nom: string;
+    prenom: string;
+}
 export function AuditTrail() {
   const { t, language } = useLanguage();
   const isRTL = language === 'ar';
@@ -83,22 +86,34 @@ export function AuditTrail() {
     DELETE: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
   };
 
-  
-
   const actionTranslations = {
     CREATE: t.common.add,
     UPDATE: t.common.edit,
     DELETE: t.common.delete,
   };
-
   useEffect(() => {
     const fetchLogs = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(`${API_BASE_URL}/historique`);
-        if (!response.ok) throw new Error(t.settings.errorFetchingAuditLogs);
-        const data = await response.json();
-        setLogs(data);
+         const params = new URLSearchParams();
+        if (filters.dateRange.from) {
+          params.append('startDate', filters.dateRange.from.toISOString());
+        }
+        if (filters.dateRange.to) {
+          params.append('endDate', filters.dateRange.to.toISOString());
+        }
+        if (filters.user !== 'all') {
+          params.append('utilisateurId', filters.user);
+        }
+        if (filters.action !== 'all') {
+          params.append('action', filters.action);
+        }
+        if (filters.entity !== 'all') {
+          params.append('entite', filters.entity);
+        }
+
+        const response = await apiClient.get(`/historique?${params.toString()}`);
+        setLogs(response.data);
       } catch (error) {
         toast({
           title: t.common.error,
@@ -110,31 +125,19 @@ export function AuditTrail() {
       }
     };
     fetchLogs();
-  }, [t]);
+  }, [t, filters.dateRange, filters.user, filters.action, filters.entity]);
 
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
-      const searchMatch = filters.search === '' ||
+      return filters.search === '' ||
         log.description.toLowerCase().includes(filters.search.toLowerCase()) ||
         `${log.utilisateur.prenom} ${log.utilisateur.nom}`.toLowerCase().includes(filters.search.toLowerCase()) ||
         log.entite.toLowerCase().includes(filters.search.toLowerCase());
 
-      const userMatch = filters.user === 'all' || String(log.utilisateur.id) === filters.user;
-      const actionMatch = filters.action === 'all' || log.action === filters.action;
-      const entityMatch = filters.entity === 'all' || log.entite === filters.entity;
       
-      const logDate = new Date(log.timestamp);
-      const startDate = new Date(filters.dateRange.from);
-      startDate.setHours(0, 0, 0, 0);
-      
-      const endDate = new Date(filters.dateRange.to);
-      endDate.setHours(23, 59, 59, 999);
-
-      const dateMatch = logDate >= startDate && logDate <= endDate;
-
-      return searchMatch && userMatch && actionMatch && entityMatch && dateMatch;
     });
-  }, [logs, filters]);
+  }, [logs, filters.search]);
+
 
   const uniqueUsers = useMemo(() => {
     const users = new Map<number, { id: number; nom: string; prenom: string }>();
@@ -160,7 +163,7 @@ export function AuditTrail() {
             <div key={key} className="grid grid-cols-3 gap-2">
               <span className="font-medium text-right">{key}:</span>
               <span className="col-span-2">
-                {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
               </span>
             </div>
           ))}
@@ -173,31 +176,34 @@ export function AuditTrail() {
         {log.action === 'UPDATE' && (
           <>
             <div className="space-y-2">
-              <h4 className="font-medium">{t.audit.changes}</h4>
-              {renderDiff(log.details.changes)}
+                           <h4 className="font-medium">{t.audit.changes || 'Changements'}</h4>
+              <pre className="mt-2 p-3 bg-gray-100 dark:bg-gray-800 rounded-md text-xs whitespace-pre-wrap">{JSON.stringify(log.details.changes, null, 2)}</pre>
             </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <h4 className="font-medium">{t.audit.before}</h4>
-                <div className="mt-2 p-3 bg-gray-100 dark:bg-gray-800 rounded-md text-xs">
-                  {renderDiff(log.details.before)}
-                </div>
+                              <h4 className="font-medium">{t.audit.before || 'Avant'}</h4>
+                <pre className="mt-2 p-3 bg-gray-100 dark:bg-gray-800 rounded-md text-xs whitespace-pre-wrap">
+                  {JSON.stringify(log.details.before, null, 2)}
+                </pre>
+
               </div>
               <div>
-                <h4 className="font-medium">{t.audit.after}</h4>
-                <div className="mt-2 p-3 bg-gray-100 dark:bg-gray-800 rounded-md text-xs">
-                  {renderDiff(log.details.after)}
-                </div>
+                <h4 className="font-medium">{t.audit.after || 'Après'}</h4>
+                <pre className="mt-2 p-3 bg-gray-100 dark:bg-gray-800 rounded-md text-xs whitespace-pre-wrap">
+                  {JSON.stringify(log.details.after, null, 2)}
+                </pre>
               </div>
             </div>
           </>
         )}
         {(log.action === 'CREATE' || log.action === 'DELETE') && (
           <div>
-            <h4 className="font-medium">{t.audit.details}</h4>
-            <div className="mt-2 p-3 bg-gray-100 dark:bg-gray-800 rounded-md text-xs">
-              {renderDiff(log.details)}
-            </div>
+                       <h4 className="font-medium">{t.audit.details || 'Détails'}</h4>
+            <pre className="mt-2 p-3 bg-gray-100 dark:bg-gray-800 rounded-md text-xs whitespace-pre-wrap">
+              {JSON.stringify(log.details, null, 2)}
+            </pre>
+
           </div>
         )}
       </div>
@@ -217,7 +223,7 @@ export function AuditTrail() {
               {formatDate(log.timestamp)}
             </CardDescription>
           </div>
-          <Badge className={`${actionColors[log.action]} ${isRTL ? 'ml-2' : 'mr-2'}`}>
+          <Badge className={`${actionColors[log.action]} ${isRTL ? 'mr-auto' : 'ml-auto'}`}>
             {actionTranslations[log.action]}
           </Badge>
         </div>
@@ -250,7 +256,7 @@ export function AuditTrail() {
           </DialogTrigger>
           <DialogContent className="max-w-[90vw]" dir={textDirection}>
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
+              <DialogTitle className={`flex items-center gap-2 ${flexDirection}`}>
                
                 <span>{t.audit.actionDetails}</span>
               </DialogTitle>
@@ -297,7 +303,7 @@ export function AuditTrail() {
 
       <Card className="shadow-lg">
         <CardHeader>
-          <div className="flex flex-col space-y-1.5">
+          <div className={`flex flex-col space-y-1.5 ${isRTL ? 'text-right' : 'text-left'}`}>
             <CardTitle className={`flex ${flexDirection} justify-between items-center`}>
               <div className={`flex ${flexDirection} items-center gap-2`}>
                 <span className="text-primary">{t.audit.auditLog}</span>
@@ -323,7 +329,7 @@ export function AuditTrail() {
         </CardHeader>
         <CardContent>
           {showFilters && (
-            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 ${isRTL ? 'text-right' : 'text-left'}`}>
+            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 ${isRTL ? 'text-right' : 'text-left'}`} dir={textDirection}>
               <Input
                 placeholder={t.common.search}
                 value={filters.search}
@@ -336,10 +342,10 @@ export function AuditTrail() {
                 onValueChange={(value) => setFilters(prev => ({ ...prev, user: value }))}
                 dir={textDirection}
               >
-                <SelectTrigger dir={textDirection}>
+                <SelectTrigger>
                   <SelectValue placeholder={t.audit.filterByUser} />
                 </SelectTrigger>
-                <SelectContent dir={textDirection}>
+                <SelectContent>
                   <SelectItem value="all">{t.common.allUsers}</SelectItem>
                   {uniqueUsers.map(user => (
                     <SelectItem key={user.id} value={String(user.id)}>
@@ -353,10 +359,10 @@ export function AuditTrail() {
                 onValueChange={(value) => setFilters(prev => ({ ...prev, action: value }))}
                 dir={textDirection}
               >
-                <SelectTrigger dir={textDirection}>
+                <SelectTrigger>
                   <SelectValue placeholder={t.audit.filterByAction} />
                 </SelectTrigger>
-                <SelectContent dir={textDirection}>
+                <SelectContent>
                   <SelectItem value="all">{t.common.allActions}</SelectItem>
                   <SelectItem value="CREATE">{t.common.add}</SelectItem>
                   <SelectItem value="UPDATE">{t.common.edit}</SelectItem>
@@ -368,10 +374,10 @@ export function AuditTrail() {
                 onValueChange={(value) => setFilters(prev => ({ ...prev, entity: value }))}
                 dir={textDirection}
               >
-                <SelectTrigger dir={textDirection}>
+                <SelectTrigger>
                   <SelectValue placeholder={t.audit.filterByEntity} />
                 </SelectTrigger>
-                <SelectContent dir={textDirection}>
+                <SelectContent>
                   <SelectItem value="all">{t.common.allEntities}</SelectItem>
                   {uniqueEntities.map(entity => (
                     <SelectItem key={entity} value={entity}>{entity}</SelectItem>
@@ -549,7 +555,7 @@ export function AuditTrail() {
                               </DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4">
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${isRTL ? 'text-right' : 'text-left'}`}>
                                 <div className="space-y-2">
                                   <h4 className="font-medium">{t.common.user}</h4>
                                   <p>{log.utilisateur.prenom} {log.utilisateur.nom}</p>

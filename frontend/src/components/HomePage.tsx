@@ -35,7 +35,7 @@ const HomePage: React.FC = () => {
                     loop
                     muted
                     playsInline
-                    className="w-full h-full object-contain"
+                    className="w-full h-full object-cover"
                     style={{
                         transform: 'scale(1)',
                         display: 'block'

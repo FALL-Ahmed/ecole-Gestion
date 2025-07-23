@@ -22,6 +22,7 @@ import { toast } from '@/hooks/use-toast';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import apiClient from '@/lib/apiClient';
 
 // --- Interfaces de Données ---
 interface AnneeAcademique {
@@ -128,8 +129,6 @@ interface ClassAverages {
   };
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
 interface StudentGradesProps {
   userId: number;
 }
@@ -171,11 +170,8 @@ const SubjectGradeCard = ({ grade, headers, t }: { grade: StudentSubjectGrades, 
 
 const fetchTaughtSubjects = async (classId: number, anneeScolaireId: number): Promise<Matiere[]> => {
   try {
-    const response = await fetch(`${API_URL}/api/affectations?classe_id=${classId}&annee_scolaire_id=${anneeScolaireId}&_expand=matiere`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const affectations = await response.json();
+    const response = await apiClient.get(`/affectations?classe_id=${classId}&annee_scolaire_id=${anneeScolaireId}&_expand=matiere`);
+    const affectations = response.data;
     const taughtMatieresMap = new Map<number, Matiere>();
     affectations.forEach((aff: any) => {
       if (aff.matiere && aff.matiere.id) {
@@ -183,7 +179,7 @@ const fetchTaughtSubjects = async (classId: number, anneeScolaireId: number): Pr
       }
     });
     return Array.from(taughtMatieresMap.values());
-  } catch (error) {
+  } catch (error: any) {
     toast({
       title: "Erreur de chargement",
       description: "Impossible de charger les matières enseignées.",
@@ -251,19 +247,15 @@ export function StudentGrades({ userId }: StudentGradesProps) {
 
   const fetchCoefficientsForClass = async (classId: number): Promise<Coefficient[]> => {
     try {
-      const response = await fetch(`${API_URL}/api/coefficientclasse?classeId=${classId}`);
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status} for coefficients. Response: ${errorText}`);
-      }
-      const rawCoefficients: any[] = await response.json();
+      const response = await apiClient.get(`/coefficientclasse?classeId=${classId}`);
+      const rawCoefficients: any[] = response.data;
       return rawCoefficients.map(cc => ({
         id: cc.id,
         matiere_id: cc.matiere?.id || cc.matiere_id,
         classe_id: cc.classe?.id || cc.classe_id,
         coefficient: parseFloat(cc.coefficient),
       }));
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: t.gradeManagement.errorLoadingCoefficients,
         description: `${t.gradeManagement.errorLoadingCoefficientsDesc} ${error instanceof Error ? error.message : String(error)}`,
@@ -275,12 +267,8 @@ export function StudentGrades({ userId }: StudentGradesProps) {
 
   const fetchActiveAcademicYearId = async (): Promise<number | null> => {
     try {
-      const response = await fetch(`${API_URL}/api/configuration`);
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status} for configuration. Response: ${errorText}`);
-      }
-      const configData: Configuration | Configuration[] = await response.json();
+      const response = await apiClient.get('/configuration');
+      const configData: Configuration | Configuration[] = response.data;
 
       let activeAnneeScolaireId: number | undefined;
       if (Array.isArray(configData) && configData.length > 0) {
@@ -290,7 +278,7 @@ export function StudentGrades({ userId }: StudentGradesProps) {
       }
 
       return activeAnneeScolaireId !== undefined ? activeAnneeScolaireId : null;
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: t.settings.errorLoadingCurrentYear,
         description: `${t.settings.errorFetchingCurrentYear} ${error instanceof Error ? error.message : String(error)}`,
@@ -302,16 +290,10 @@ export function StudentGrades({ userId }: StudentGradesProps) {
 
   const fetchUserInscriptionAndClassInfo = async (userId: number, activeAnneeAcademiqueId: number): Promise<{ studentName: string; className: string; classId: number; anneeScolaireId: number; eleveId: number } | null> => {
     try {
-      const userResponse = await fetch(`${API_URL}/api/users/${userId}`);
-      if (!userResponse.ok) {
-        throw new Error(`HTTP error! status: ${userResponse.status} for user ${userId}`);
-      }
-      const user: AuthUser = await userResponse.json();
-      const inscriptionResponse = await fetch(`${API_URL}/api/inscriptions?utilisateurId=${userId}&anneeAcademiqueId=${activeAnneeAcademiqueId}&_expand=classe&_expand=annee_scolaire&_expand=utilisateur`);
-      if (!inscriptionResponse.ok) {
-        throw new Error(`HTTP error! status: ${inscriptionResponse.status} for inscription`);
-      }
-      const inscriptions: Inscription[] = await inscriptionResponse.json();
+      const userResponse = await apiClient.get(`/users/${userId}`);
+      const user: AuthUser = userResponse.data;
+      const inscriptionResponse = await apiClient.get(`/inscriptions?utilisateurId=${userId}&anneeAcademiqueId=${activeAnneeAcademiqueId}&_expand=classe&_expand=annee_scolaire&_expand=utilisateur`);
+      const inscriptions: Inscription[] = inscriptionResponse.data;
 
       if (inscriptions.length === 0) {
         toast({
@@ -342,7 +324,7 @@ export function StudentGrades({ userId }: StudentGradesProps) {
         anneeScolaireId: anneeScolaireId,
         eleveId: eleveId,
       };
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: t.common.errorLoading,
         description: `${t.studentMaterials.errorLoadingStudents} ${error instanceof Error ? error.message : String(error)}`,
@@ -356,12 +338,8 @@ export function StudentGrades({ userId }: StudentGradesProps) {
 
   const fetchAllTrimestresNames = async (): Promise<string[]> => {
     try {
-      const response = await fetch(`${API_URL}/api/trimestres`);
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
-      }
-      const trimestres: TrimestreData[] = await response.json();
+      const response = await apiClient.get('/trimestres');
+      const trimestres: TrimestreData[] = response.data;
       const terms = Array.from(new Set(trimestres.map(t => t.nom))).filter(Boolean) as string[];
 
       terms.sort((a, b) => {
@@ -373,7 +351,7 @@ export function StudentGrades({ userId }: StudentGradesProps) {
         return a.localeCompare(b);
       });
       return terms;
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: t.common.errorLoading,
         description: `${t.reports.errorLoadingTerms} ${error instanceof Error ? error.message : String(error)}`,
@@ -385,13 +363,9 @@ export function StudentGrades({ userId }: StudentGradesProps) {
 
   const fetchAllTrimestreObjects = async (): Promise<TrimestreData[]> => {
     try {
-      const response = await fetch(`${API_URL}/api/trimestres`);
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
-      }
-      return await response.json();
-    } catch (error) {
+      const response = await apiClient.get('/trimestres');
+      return response.data;
+    } catch (error: any) {
       toast({
         title: t.common.errorLoading,
         description: `${t.reports.errorLoadingTerms} ${error instanceof Error ? error.message : String(error)}`,
@@ -403,13 +377,9 @@ export function StudentGrades({ userId }: StudentGradesProps) {
 
   const fetchAllStudentsInClass = async (classId: number, anneeScolaireId: number): Promise<Inscription[]> => {
     try {
-      const response = await fetch(`${API_URL}/api/inscriptions?classeId=${classId}&anneeAcademiqueId=${anneeScolaireId}&_expand=utilisateur`);
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}. Response: ${errorText}`);
-      }
-      return await response.json();
-    } catch (error) {
+      const response = await apiClient.get(`/inscriptions?classeId=${classId}&anneeAcademiqueId=${anneeScolaireId}&_expand=utilisateur`);
+      return response.data;
+    } catch (error: any) {
       toast({
         title: t.common.errorLoading,
         description: `${t.userManagement.errorLoadingEnrollments} ${error instanceof Error ? error.message : String(error)}`,
@@ -422,28 +392,20 @@ export function StudentGrades({ userId }: StudentGradesProps) {
   const fetchAllNotesForClass = async (classId: number, anneeScolaireId: number): Promise<Note[]> => {
     try {
       // 1. Fetch evaluations filtered by class and year for reliability
-   const evalUrl = `${API_URL}/api/evaluations?classe_id=${classId}&annee_scolaire_id=${anneeScolaireId}`;
+      const evalUrl = `/evaluations?classe_id=${classId}&annee_scolaire_id=${anneeScolaireId}`;
       console.log(`[StudentGrades] Fetching evaluations from: ${evalUrl}`);
-      const evaluationsResponse = await fetch(evalUrl);
-         if (!evaluationsResponse.ok) {
-        throw new Error(`HTTP error fetching evaluations! status: ${evaluationsResponse.status}`);
-      }
-      const evaluationsForClass: { id: number }[] = await evaluationsResponse.json();
- console.log(`[StudentGrades] Évaluations trouvées pour la classe ${classId}:`, evaluationsForClass);
+      const evaluationsResponse = await apiClient.get(evalUrl);
+      const evaluationsForClass: { id: number }[] = evaluationsResponse.data;
+      console.log(`[StudentGrades] Évaluations trouvées pour la classe ${classId}:`, evaluationsForClass);
       const evaluationIds = evaluationsForClass.map(e => e.id);
 
     
       if (evaluationIds.length === 0) {
         return []; // No evaluations for this class, so no notes.
       }
-
       // 2. Fetch all notes and filter them by the relevant evaluation IDs
-      const notesResponse = await fetch(`${API_URL}/api/notes?_expand=evaluation&_expand=evaluation.matiere&_expand=evaluation.classe&_cacheBust=${Date.now()}`);
-      if (!notesResponse.ok) {
-        const errorText = await notesResponse.text();
-        throw new Error(`HTTP error fetching notes! status: ${notesResponse.status}. Response: ${errorText}`);
-      }
-      const allNotesFromApi: any[] = await notesResponse.json();
+      const notesResponse = await apiClient.get(`/notes?_expand=evaluation&_expand=evaluation.matiere&_expand=evaluation.classe&_cacheBust=${Date.now()}`);
+      const allNotesFromApi: any[] = notesResponse.data;
 
       const classNotesFromApi = allNotesFromApi.filter(note => evaluationIds.includes(note.evaluation?.id));
       console.log(`[StudentGrades] Notes trouvées pour la classe ${classId} (après filtrage):`, classNotesFromApi);

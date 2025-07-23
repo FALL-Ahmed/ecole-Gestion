@@ -3,11 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus, Users, Award, Calendar, User, ArrowRightIcon, SaveIcon, ClipboardListIcon, Pencil, Trash2, Landmark, ChevronDown, Book } from "lucide-react";
-import { toast, Toaster } from "sonner";
 import { Input } from "@/components/ui/input";
 import { CheckedState } from "@radix-ui/react-checkbox";
 
-import { Eye, EyeOff } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,10 +14,13 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"; 
+import { useToast } from "@/components/ui/use-toast";
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import apiClient from "@/lib/apiClient";
+import { Toaster } from "sonner";
 
 interface SchoolManagementProps {
   onNavigate: (sectionId: string) => void;
@@ -62,6 +63,7 @@ interface Affectation {
 export default function SchoolManagement({ onNavigate }: SchoolManagementProps) {
   const { t, language } = useLanguage();
   const isRTL = language === 'ar';
+  const { toast } = useToast();
   
   const translateNiveau = useCallback((niveauToTranslate: string) => {
     if (!niveauToTranslate) return t.common.unknown;
@@ -98,6 +100,8 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
   const [anneeToConfirm, setAnneeToConfirm] = useState<{ libelle: string; debut: string; fin: string } | null>(null);
   const [isConfirmTrimestresOpen, setIsConfirmTrimestresOpen] = useState(false);
   const [trimestresToConfirm, setTrimestresToConfirm] = useState<Array<{ nom: string; date_debut: string; date_fin: string }>>([]);
+  const [updateAllSimilarClasses, setUpdateAllSimilarClasses] = useState(true);
+  const [addGroupCoefficients, setAddGroupCoefficients] = useState(true);
   const [isDeleteAnneeDialogOpen, setIsDeleteAnneeDialogOpen] = useState(false);
   const [anneeToDelete, setAnneeToDelete] = useState<{ id: string; libelle: string } | null>(null);
   const [isEditCoeffDialogOpen, setIsEditCoeffDialogOpen] = useState(false);
@@ -158,7 +162,6 @@ const [affectations, setAffectations] = useState<Affectation[]>([]);
       date_fin: string;
     };
   }[]>([]);
-  const [successMsg, setSuccessMsg] = useState("");
  
   const getRTLStyles = (isRTL: boolean) => ({
     direction: isRTL ? 'rtl' : 'ltr',
@@ -246,68 +249,57 @@ const [affectations, setAffectations] = useState<Affectation[]>([]);
   };
 
 const refreshCoefficients = useCallback(() => {
-  fetch(`${API_URL}/api/coefficientclasse?distinct=matiere_id,classe_id`)
-    .then(res => res.json())
-    .then(data => setCoefficients(data))
-    .catch(error => toast.error(error.message));
-}, [API_URL]);
+  apiClient.get('/coefficientclasse?distinct=matiere_id,classe_id')
+    .then(response => setCoefficients(response.data))
+    .catch(error => toast({ title: t.common.error, description: error.message, variant: "destructive" }));
+}, [t, toast]);
   const refreshClasses = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/classes`);
-      if (!res.ok) throw new Error(t.common.errorLoading as string);
-      const data = await res.json();
-      setClasses(data);
+      const response = await apiClient.get('/classes');
+      setClasses(response.data);
     } catch (error: any) {
-      toast.error(error.message || t.common.errorLoading);
+      toast({ title: t.common.error, description: error.message || t.common.errorLoading, variant: "destructive" });
     }
-  }, [API_URL, t]);
+  }, [t]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        let res, data;
 
         await refreshClasses();
 
-        res = await fetch(`${API_URL}/api/matieres`);
-        if (!res.ok) throw new Error(t.common.errorLoading);
-        data = await res.json();
-        setMatieres(data);
+        const [
+          matieresRes,
+          anneesRes,
+          usersRes,
+          trimestresRes,
+          affectationsRes,
+          configRes
+        ] = await Promise.all([
+          apiClient.get('/matieres'),
+          apiClient.get('/annees-academiques'),
+          apiClient.get('/users'),
+          apiClient.get('/trimestres'),
+          apiClient.get('/affectations?_expand=professeur&_expand=matiere&_expand=classe&_expand=annee_scolaire'),
+          apiClient.get('/configuration').catch(() => null) // Catch error if config doesn't exist
+        ]);
 
-        res = await fetch(`${API_URL}/api/annees-academiques`);
-        if (!res.ok) throw new Error(t.common.errorLoading);
-        data = await res.json();
-        setAnnees(data);
-
-        res = await fetch(`${API_URL}/api/users`);
-        if (!res.ok) throw new Error(t.common.errorLoading);
-        data = await res.json();
-        setProfs(data.filter(u => u.role === "professeur"));
-
-        res = await fetch(`${API_URL}/api/trimestres`);
-        if (!res.ok) throw new Error(t.common.errorLoading);
-        data = await res.json();
-        setTrimestres(data);
-
-        res = await fetch(`${API_URL}/api/affectations?_expand=professeur&_expand=matiere&_expand=classe&_expand=annee_scolaire`);
-        if (!res.ok) throw new Error(t.common.errorLoading);
-        data = await res.json();
-        setAffectations(data);
+        setMatieres(matieresRes.data);
+        setAnnees(anneesRes.data);
+        setProfs(usersRes.data.filter((u: any) => u.role === "professeur"));
+        setTrimestres(trimestresRes.data);
+        setAffectations(affectationsRes.data);
 
         refreshCoefficients();
 
-        const configRes = await fetch(`${API_URL}/api/configuration`);
-        if (configRes.ok) {
-          const configData = await configRes.json();
+        if (configRes) {
+          const configData = configRes.data;
           if (configData && configData.annee_scolaire && configData.annee_scolaire.id) {
             setCurrentConfiguredAcademicYearId(String(configData.annee_scolaire.id));
           } else {
             setCurrentConfiguredAcademicYearId(null);
           }
-        } else if (configRes.status === 404) {
-          setCurrentConfiguredAcademicYearId(null);
         } else {
-          console.error(t.common.errorLoading);
           setCurrentConfiguredAcademicYearId(null);
         }
 
@@ -416,30 +408,21 @@ const groupCoefficientsByNiveauEtAnnee = () => {
     ].filter(t => t.date_debut && t.date_fin);
 
     if (trimestresPayload.length !== 3) {
-      toast.error(t.schoolManagement.trimesters.errorMissingDates);
+      toast({ title: t.common.error, description: t.schoolManagement.trimesters.errorMissingDates, variant: "destructive" });
       setIsConfirmTrimestresOpen(false);
       return;
     }
 
     try {
-            const token = localStorage.getItem('token');
-
-      const results = await Promise.all(trimestresPayload.map(trimestre =>
-        fetch(`${API_URL}/api/trimestres`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(trimestre)
-        }).then(res => {
-          if (!res.ok) return res.json().then(err => Promise.reject(err));
-          return res.json();
-        })
-      ));
+      const results = await Promise.all(
+        trimestresPayload.map(trimestre =>
+          apiClient.post('/trimestres', trimestre).then(res => res.data)
+        )
+      );
 
       setTrimestres(prev => [...prev, ...results]);
-      toast.success(t.schoolManagement.trimesters.successAdd);
+      toast({ title: t.common.success, description: t.schoolManagement.trimesters.successAdd });
+
       
       setTrimestre1Debut("");
       setTrimestre1Fin("");
@@ -452,7 +435,7 @@ const groupCoefficientsByNiveauEtAnnee = () => {
       setAnneeFin("");
 
     } catch (error: any) {
-      toast.error(`${t.schoolManagement.trimesters.errorAdd}: ${error.message || t.common.unknownError}`);
+      toast({ title: t.common.error, description: `${t.schoolManagement.trimesters.errorAdd}: ${error.message || t.common.unknownError}`, variant: "destructive" });
     } finally {
       setIsConfirmTrimestresOpen(false);
       setIsAddTrimestreOpen(false);
@@ -464,30 +447,20 @@ const groupCoefficientsByNiveauEtAnnee = () => {
     if (!anneeToConfirm) return;
 
     try {
-            const token = localStorage.getItem('token');
-
-      const response = await fetch(`${API_URL}/api/annees-academiques`, {
-        method: "POST",
-headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ libelle: anneeToConfirm.libelle, date_debut: anneeToConfirm.debut, date_fin: anneeToConfirm.fin })
+      const response = await apiClient.post('/annees-academiques', {
+        libelle: anneeToConfirm.libelle,
+        date_debut: anneeToConfirm.debut,
+        date_fin: anneeToConfirm.fin
       });
 
-      if (response.ok) {
-        const newAnnee = await response.json();
-        setAnnees(prev => [...prev, newAnnee]);
-        setAnneeScolaireId(String(newAnnee.id));
-        toast.success(t.schoolManagement.schoolYears.addDialog.successAdd);
-        setIsAddAnneeOpen(false);
-        setIsAddTrimestreOpen(true);
-      } else {
-        const errorData = await response.json();
-        toast.error(`${t.schoolManagement.schoolYears.addDialog.errorAdd}: ${errorData.message || response.statusText}`);
-      }
+      const newAnnee = response.data;
+      setAnnees(prev => [...prev, newAnnee]);
+      setAnneeScolaireId(String(newAnnee.id));
+      toast({ title: t.common.success, description: t.schoolManagement.schoolYears.addDialog.successAdd });
+      setIsAddAnneeOpen(false);
+      setIsAddTrimestreOpen(true);
     } catch (error: any) {
-      toast.error(`${t.schoolManagement.schoolYears.addDialog.errorAdd}: ${error.message}`);
+      toast({ title: t.common.error, description: `${t.schoolManagement.schoolYears.addDialog.errorAdd}: ${error.message}`, variant: "destructive" });
     } finally {
       setIsConfirmAnneeOpen(false);
       setAnneeToConfirm(null);
@@ -498,20 +471,7 @@ headers: {
     if (!anneeToDelete) return;
 
     try {
-            const token = localStorage.getItem('token');
-
-      const response = await fetch(`${API_URL}/api/annees-academiques/${anneeToDelete.id}`, {
-        method: 'DELETE',
-                headers: {
-          Authorization: `Bearer ${token}`,
-        },
-
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: t.common.unknownError }));
-        throw new Error(errorData.message || t.schoolManagement.schoolYears.deleteDialog.errorDelete);
-      }
+      await apiClient.delete(`/annees-academiques/${anneeToDelete.id}`);
 
       setAnnees(prev => prev.filter(a => a.id !== anneeToDelete.id));
       setTrimestres(prev => prev.filter(t => String(t.anneeScolaire?.id) !== anneeToDelete.id));
@@ -521,10 +481,10 @@ headers: {
       const remainingClassIds = new Set(classes.filter(c => c.annee_scolaire_id !== anneeToDelete.id).map(c => c.id));
       setCoefficients(prev => prev.filter(coeff => remainingClassIds.has(String(coeff.classe?.id))));
 
-      toast.success(t.schoolManagement.schoolYears.deleteDialog.successDelete);
+      toast({ title: t.common.success, description: t.schoolManagement.schoolYears.deleteDialog.successDelete });
     } catch (error) {
       console.error(t.schoolManagement.schoolYears.deleteDialog.errorDelete, error);
-      toast.error(error instanceof Error ? error.message : t.common.unknownError);
+      toast({ title: t.common.error, description: error instanceof Error ? error.message : t.common.unknownError, variant: "destructive" });
     } finally {
       setIsDeleteAnneeDialogOpen(false);
       setAnneeToDelete(null);
@@ -654,12 +614,6 @@ headers: {
 </Button>
 
                 </div>
-
-                {successMsg && (
-                  <div className="mb-4 px-6 text-center font-semibold text-green-700 dark:text-green-300">
-                    {successMsg}
-                  </div>
-                )}
 
                 <div className="px-6">
                   {!anneeScolaireFiltre ? (
@@ -823,42 +777,43 @@ headers: {
 
                 {openNiveaux[niveau] && (
                   <div className="p-4 pt-0 space-y-4">
-                    {niveauxClasses.map(([annee, coefficients]) => {
-                      // Créer un Map pour éliminer les doublons (même matière dans la même classe)
-                      const uniqueCoefficients = new Map<string, Coefficient>();
-                      coefficients.forEach(coeff => {
-                        const key = `${coeff.classe.id}_${coeff.matiere.id}`;
-                        if (!uniqueCoefficients.has(key)) {
-                          uniqueCoefficients.set(key, coeff);
-                        }
-                      });
+                    {niveauxClasses.map(([annee, coefficients]) => (
+                      <div key={annee} className="border rounded-lg overflow-hidden dark:border-gray-600">
+                        <button
+                          className="w-full flex justify-between items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                          onClick={() => setOpenClasses(prev => ({
+                            ...prev,
+                            [annee]: !prev[annee]
+                          }))}
+                        >
+                          <div className="flex items-center gap-3">
+                            <Book className="h-5 w-5 text-blue-400 dark:text-blue-300" />
+                            <span className="font-medium dark:text-gray-200">
+                              {annee}
+                            </span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              ({
+                                // Calculer le nombre de matières uniques pour cet 'annee'
+                                new Set(coefficients.map(c => c.matiere.id)).size
+                              } matières)
+                            </span>
+                          </div>
+                          <ChevronDown className={`h-5 w-5 transition-transform ${openClasses[annee] ? 'rotate-180' : ''} text-gray-500`} />
+                        </button>
 
-                      return (
-                        <div key={annee} className="border rounded-lg overflow-hidden dark:border-gray-600">
-                          <button
-                            className="w-full flex justify-between items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                            onClick={() => setOpenClasses(prev => ({
-                              ...prev,
-                              [annee]: !prev[annee]
-                            }))}
-                          >
-                            <div className="flex items-center gap-3">
-                              <Book className="h-5 w-5 text-blue-400 dark:text-blue-300" />
-                              <span className="font-medium dark:text-gray-200">
-                                {annee} - {coefficients[0]?.classe?.nom}
-                              </span>
-                              <span className="text-xs text-gray-500 dark:text-gray-400">
-                                ({uniqueCoefficients.size} matières)
-                              </span>
-                            </div>
-                            <ChevronDown className={`h-5 w-5 transition-transform ${openClasses[annee] ? 'rotate-180' : ''} text-gray-500`} />
-                          </button>
+                        {openClasses[annee] && (
+                          <div className="p-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {(() => {
+                                const uniqueCoefficientsByMatiere = new Map<string, Coefficient>();
+                                coefficients.forEach(coeff => {
+                                  if (!uniqueCoefficientsByMatiere.has(coeff.matiere.id)) {
+                                    uniqueCoefficientsByMatiere.set(coeff.matiere.id, coeff);
+                                  }
+                                });
 
-                          {openClasses[annee] && (
-                            <div className="p-3">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                {Array.from(uniqueCoefficients.values()).map((coeff) => (
-                                  <div key={`${coeff.classe.id}_${coeff.matiere.id}`} className="p-3 border rounded-lg dark:border-gray-500">
+                                return Array.from(uniqueCoefficientsByMatiere.values()).map((coeff) => (
+                                  <div key={coeff.matiere.id} className="p-3 border rounded-lg dark:border-gray-500">
                                     <div className="flex justify-between items-start gap-2">
                                       <div className="flex items-center gap-2 truncate">
                                         <Award className="h-5 w-5 text-indigo-500 dark:text-indigo-400 flex-shrink-0" />
@@ -870,24 +825,19 @@ headers: {
                                         <span className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900 rounded-full text-xs font-bold whitespace-nowrap">
                                           {coeff.coefficient}
                                         </span>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-8 w-8 p-0"
-                                          onClick={() => handleOpenEditCoefficientDialog(coeff)}
-                                        >
+                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => handleOpenEditCoefficientDialog(coeff)}>
                                           <Pencil className="h-4 w-4" />
                                         </Button>
                                       </div>
                                     </div>
                                   </div>
-                                ))}
-                              </div>
+                                ));
+                              })()}
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1264,30 +1214,15 @@ headers: {
           <form
             onSubmit={async (e) => {
               e.preventDefault();
-              const token = localStorage.getItem('token');
-
-              const res = await fetch(`${API_URL}/api/classes`, {
-                method: "POST",
- headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${token}`,
-                },
-                                             body: JSON.stringify({ 
-                  nom: classeNom, 
-                  niveau: classeNiveau, 
-                  anneeScolaireId,
-                  frais_scolarite: Number(fraisScolarite) 
-                }),
+              
+              const response = await apiClient.post('/classes', {
+                nom: classeNom,
+                niveau: classeNiveau,
+                anneeScolaireId,
+                frais_scolarite: Number(fraisScolarite)
               });
 
-              if (!res.ok) {
-                const errorData = await res.json().catch(() => ({ message: t.schoolManagement.classes.addDialog.errorAdd }));
-                toast.error(`${t.schoolManagement.classes.addDialog.errorAdd}: ${errorData.message || res.statusText}`);
-                return;
-              }
-
-
-              const nouvelleClasse = await res.json();
+              const nouvelleClasse = response.data;
 
               let message = t.schoolManagement.classes.successAdd;
 
@@ -1303,28 +1238,15 @@ headers: {
     );
 
                   if (classeExistante) {
-                    const cloneRes = await fetch(`${API_URL}/api/coefficientclasse/clone`, {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                      },
-                      body: JSON.stringify({
+                    try {
+                      await apiClient.post('/coefficientclasse/clone', {
                         fromClasseId: String(classeExistante.id),
                         toClasseId: String(nouvelleClasse.id),
-                      }),
-                    });
-
-                    if (cloneRes.ok) {
+                      });
                       message = t.schoolManagement.classes.successAddWithCoefficients;
-                      // Rafraîchir la liste des coefficients après le clonage réussi
                       refreshCoefficients();
-                    } else {
-                      // Le clonage a échoué, mais la classe a été créée.
-                      // On informe l'utilisateur de l'échec partiel.
-                      const cloneError = await cloneRes.json().catch(() => ({ message: t.schoolManagement.coefficients.errorCloningUnknown }));
-                      toast.warning(`${t.schoolManagement.classes.successAdd} ${t.schoolManagement.coefficients.errorCloning}: ${cloneError.message}`);
-                      // Le message de succès reste celui de la création simple.
+                    } catch (cloneError: any) {
+                      toast({ title: t.common.warning, description: `${t.schoolManagement.classes.successAdd} ${t.schoolManagement.coefficients.errorCloning}: ${cloneError.message}` });
                     }
                   }
                 }
@@ -1335,10 +1257,9 @@ headers: {
               setClasseNom("");
               setClasseNiveau("Primaire");
                             setFraisScolarite('');
-
               setIsAddClasseOpen(false);
               
-              toast.success(message);
+              toast({ title: t.common.success, description: message });
             }}
             className="space-y-6 p-6"
           >
@@ -1486,44 +1407,41 @@ headers: {
                 return;
               }
 
-             const payload = Object.entries(coeffData)
-  .filter(([_, coefficient]) => coefficient !== '' && !isNaN(Number(coefficient)))
-  .map(([matiere_id, coefficient]) => ({
-    classe_id: Number(coeffClasse),
-    matiere_id: Number(matiere_id),
-    coefficient: Number(coefficient),
-  }));
-                if (payload.length === 0) {
-                  setCoeffError(t.schoolManagement.coefficients.errorInvalidCoefficients);
-                  return;
-                }
+              const coefficientsPayload = Object.entries(coeffData)
+                .filter(([_, coefficient]) => coefficient !== '' && !isNaN(Number(coefficient)))
+                .map(([matiere_id, coefficient]) => ({
+                  matiere_id: Number(matiere_id),
+                  coefficient: Number(coefficient),
+                }));
+
+              if (coefficientsPayload.length === 0) {
+                setCoeffError(t.schoolManagement.coefficients.errorInvalidCoefficients);
+                return;
+              }
 
               try {
-                                const token = localStorage.getItem('token');
-
-                const response = await fetch(`${API_URL}/api/coefficientclasse`, {
-                  method: "POST",
- headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                  },                  body: JSON.stringify(payload),
-                });
-
-                if (!response.ok) {
-                  throw new Error(t.common.error);
+                if (addGroupCoefficients) {
+                  await apiClient.post('/coefficientclasse/create-group', {
+                    classe_id: Number(coeffClasse),
+                    coefficients: coefficientsPayload,
+                  });
+                  toast({ title: t.common.success, description: t.schoolManagement.coefficients.successAddGroup });
+                } else {
+                  const simplePayload = coefficientsPayload.map(c => ({
+                    ...c,
+                    classe_id: Number(coeffClasse),
+                  }));
+                  await apiClient.post('/coefficientclasse', simplePayload);
+                  toast({ title: t.common.success, description: t.schoolManagement.coefficients.successAdd });
                 }
-
-                await response.json();
 
                 setIsAddCoeffOpen(false);
                 setCoeffClasse("");
                 setCoeffData({});
                 refreshCoefficients();
-                setSuccessMsg(t.schoolManagement.coefficients.successAdd);
-                setTimeout(() => setSuccessMsg(""), 3000);
               } catch (error) {
-                console.error(error);
-                setCoeffError(error.message || t.common.unknownError);
+                const errorMessage = (error as any).response?.data?.message || (error as Error).message || t.common.unknownError;
+                setCoeffError(errorMessage);
               }
             }} 
             className="space-y-6 p-6"
@@ -1646,6 +1564,20 @@ headers: {
               )}
             </div>
 
+            <div className={`flex items-center gap-2 pt-2 ${isRTL ? 'flex-row-reverse' : 'flex-row'}`}>
+              <Checkbox
+                id="add-group-coeffs"
+                checked={addGroupCoefficients}
+                onCheckedChange={(checked: CheckedState) => setAddGroupCoefficients(checked === true)}
+              />
+              <label
+                htmlFor="add-group-coeffs"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                {t.schoolManagement.coefficients.addAllSimilarClassesLabel}
+              </label>
+            </div>
+
             <div className="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
               <Button
                 type="button"
@@ -1667,7 +1599,12 @@ headers: {
       </Dialog>
 
       {/* Edit Coefficient Dialog */}
-      <Dialog open={isEditCoeffDialogOpen} onOpenChange={setIsEditCoeffDialogOpen}>
+      <Dialog open={isEditCoeffDialogOpen} onOpenChange={(isOpen) => {
+        setIsEditCoeffDialogOpen(isOpen);
+        if (isOpen) {
+          setUpdateAllSimilarClasses(true); // Réinitialiser à coché par défaut
+        }
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{t.schoolManagement.coefficients.editDialogTitle}</DialogTitle>
@@ -1680,30 +1617,29 @@ headers: {
             onSubmit={async (e) => {
               e.preventDefault();
               if (!currentEditingCoeff || currentEditingCoeff.coefficient === '' || isNaN(Number(currentEditingCoeff.coefficient))) {
-                toast.error(t.schoolManagement.coefficients.errorInvalidCoefficient);
+                toast({ title: t.common.error, description: t.schoolManagement.coefficients.errorInvalidCoefficient, variant: "destructive" });
                 return;
               }
-              
-              try {
-                                const token = localStorage.getItem('token');
 
-                const response = await fetch(`${API_URL}/api/coefficientclasse/${currentEditingCoeff.id}`, {
-                  method: 'PUT',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                  },                  body: JSON.stringify({ coefficient: Number(currentEditingCoeff.coefficient) }),
-                });
-                if (!response.ok) {
-                  const errorData = await response.json();
-                  throw new Error(errorData.message || t.common.error);
+              try {
+                if (updateAllSimilarClasses && currentEditingCoeff.classeId && currentEditingCoeff.matiereId) {
+                  await apiClient.put(`/coefficientclasse/update-group`, {
+                    classeId: currentEditingCoeff.classeId,
+                    matiereId: currentEditingCoeff.matiereId,
+                    coefficient: Number(currentEditingCoeff.coefficient),
+                  });
+                  toast({ title: t.common.success, description: t.schoolManagement.coefficients.successUpdateGroup });
+                } else {
+                  await apiClient.put(`/coefficientclasse/${currentEditingCoeff.id}`, {
+                    coefficient: Number(currentEditingCoeff.coefficient)
+                  });
+                  toast({ title: t.common.success, description: t.schoolManagement.coefficients.successUpdate });
                 }
-                toast.success(t.schoolManagement.coefficients.successUpdate);
                 refreshCoefficients();
                 setIsEditCoeffDialogOpen(false);
                 setCurrentEditingCoeff(null);
               } catch (error: any) {
-                toast.error(error.message || t.common.unknownError);
+                toast({ title: t.common.error, description: error.message || t.common.unknownError, variant: "destructive" });
               }
             }}
             className="space-y-4"
@@ -1725,6 +1661,19 @@ headers: {
                 step="1"
                 required
               />
+            </div>
+            <div className={`flex items-center gap-2 pt-2 ${isRTL ? 'flex-row-reverse' : 'flex-row'}`}>
+              <Checkbox
+                id="update-all-classes"
+                checked={updateAllSimilarClasses}
+                onCheckedChange={(checked: CheckedState) => setUpdateAllSimilarClasses(checked === true)}
+              />
+              <label
+                htmlFor="update-all-classes"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                {t.schoolManagement.coefficients.updateAllSimilarClassesLabel}
+              </label>
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setIsEditCoeffDialogOpen(false)}>
@@ -1752,24 +1701,21 @@ headers: {
             onSubmit={(e) => {
               e.preventDefault();
               if (!affectProf || !affectMatiere || affectClasses.length === 0 || !affectAnnee) {
-                toast.error(t.common.requiredFieldsError);
+                toast({
+                  title: t.common.error,
+                  description: t.common.requiredFieldsError,
+                  variant: "destructive",
+                });
                 return;
               }
-              const token = localStorage.getItem('token');
 
               const affectationPromises = affectClasses.map(classeId => {
-                return fetch(`${API_URL}/api/affectations`, {
-                  method: "POST",
- headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                  },                  body: JSON.stringify({
-                    professeur_id: affectProf,
-                    matiere_id: affectMatiere,
-                    classe_id: classeId,
-                    annee_id: affectAnnee,
-                  }),
-                }).then(res => res.json());
+                return apiClient.post('/affectations', {
+                  professeur_id: affectProf,
+                  matiere_id: affectMatiere,
+                  classe_id: classeId,
+                  annee_id: affectAnnee,
+                }).then(res => res.data);
               });
 
               Promise.all(affectationPromises)
@@ -1780,11 +1726,15 @@ headers: {
                   setAffectClasses([]);
                   setAffectAnnee("");
                   setIsAffectProfOpen(false);
-                  toast.success(t.schoolManagement.teacherAssignments.successAssign);
+                  toast({ title: t.common.success, description: t.schoolManagement.teacherAssignments.successAssign });
                 })
                 .catch(error => {
                   console.error(t.common.error, error);
-                  toast.error(t.common.error);
+                  toast({
+                    title: t.common.error,
+                    description: (error as Error).message || t.common.unknownError,
+                    variant: "destructive",
+                  });
                 });
             }}
             className="space-y-4 p-6"

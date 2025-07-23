@@ -27,6 +27,7 @@ import { toast } from '@/hooks/use-toast';
 import { useEstablishmentInfo } from '@/contexts/EstablishmentInfoContext';
 import { useDebounce } from 'use-debounce';
 import ReactDOMServer from 'react-dom/server';
+import apiClient from '@/lib/apiClient';
 
 import { calculateGeneralAverage, termEvaluationMap } from '../../lib/grades';
 
@@ -131,6 +132,7 @@ interface EvaluationDetailBulletin {
 
 interface MatiereDetailBulletin {
   matiere: string;
+  matiereArabe?: string;
   coefficient: number;
   notesEvaluations: EvaluationDetailBulletin[];
   moyenneMatiere: number;
@@ -160,32 +162,10 @@ interface PrintableReportProps {
   t: (key: string) => string;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const API_BASE_URL = `${API_URL}/api`;
-
-const fetchData = async (url: string) => {
+const fetchApiData = async (endpoint: string, params?: Record<string, any>) => {
   try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    return await response.json();
-  } catch (error) {
-    console.error(`Error fetching data from ${url}:`, error);
-    throw error;
-  }
-};
-
-const fetchApiData = async (endpoint: string, params?: Record<string, string>) => {
-  const url = new URL(`${API_BASE_URL}/${endpoint}`);
-  if (params) {
-    Object.entries(params).forEach(([key, value]) => {
-      url.searchParams.append(key, value);
-    });
-  }
-
-  try {
-    const response = await fetch(url.toString());
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    return await response.json();
+    const response = await apiClient.get(`/${endpoint}`, { params });
+    return response.data;
   } catch (error) {
     console.error(`API Error (${endpoint}):`, error);
     throw error;
@@ -279,12 +259,12 @@ const fetchNotesForEvaluations = async (evaluationIds: number[], etudiantId?: nu
 
   try {
     // On récupère toutes les notes et on filtre côté client, comme dans les autres composants.
-    const url = `${API_BASE_URL}/notes?_expand=evaluation&_expand=etudiant`;
-    const response = await fetch(url);
-
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-    const allNotesFromApi = await response.json();
+    const response = await apiClient.get('/notes', {
+      params: {
+        '_expand': 'evaluation,etudiant'
+      }
+    });
+    const allNotesFromApi = response.data;
     console.log(`[fetchNotesForEvaluations] ${allNotesFromApi.length} notes récupérées depuis l'API avant le filtrage.`);
 
     // Filtrage côté client
@@ -558,8 +538,43 @@ const allEvaluationsForYear = await fetchEvaluationsForClassAndYear(classIdNum, 
         }
       });
 
+      // Tri des matières selon l'ordre spécifié
+      const subjectOrder = [
+        'Arabe',
+        'Éducation Islamique',
+        'Mathématiques',
+        'Français',
+        'Anglais',
+        'Sciences Naturelles',
+        'Physique Chimie',
+      ];
+
+      const sortedMatieres = [...matieres].sort((a, b) => {
+        const indexA = subjectOrder.indexOf(a.nom);
+        const indexB = subjectOrder.indexOf(b.nom);
+
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+        return a.nom.localeCompare(b.nom);
+      });
       // Notes par matière
-      const matieresDetails = matieres.map((matiere) => {
+      const subjectTranslationMap: { [key: string]: string } = {
+        'Arabe': 'اللغة العربية',
+        'Éducation Islamique': 'التربية الإسلامية',
+        'Mathématiques': 'الرياضيات',
+        'Français': 'اللغة الفرنسية',
+        'Anglais': 'اللغة الإنجليزية',
+        'Sciences Naturelles': 'علوم الطبيعة والحياة',
+        'Physique Chimie': 'الفيزياء والكيمياء',
+        'Histoire Géographie': 'التاريخ والجغرافيا',
+        'Éducation Civique': 'التربية المدنية',
+        'Éducation Physique et Sportive': 'التربية البدنية والرياضية',
+        'Philosophie': 'الفلسفة',
+        'Technologie/Informatique': 'التكنولوجيا/الإعلام الآلي',
+      };
+
+      const matieresDetails = sortedMatieres.map((matiere) => {
         const coefficient = coefficients.find(c => c.matiere_id === matiere.id)?.coefficient || 1;
         const matiereId = matiere.id;
         
@@ -718,6 +733,7 @@ subjectAverage = poids > 0 ? somme / poids : null;
 
         return {
           matiere: matiere.nom,
+          matiereArabe: subjectTranslationMap[matiere.nom] || matiere.nom,
           coefficient,
           notesEvaluations,
           moyenneMatiere: subjectAverage !== null ? subjectAverage : 0,
@@ -837,7 +853,7 @@ useEffect(() => {
         }
       </style>
     </head>
-    <body ${isRTL ? 'dir="rtl"' : ''}>
+    <body ${isRTL ? 'dir="rtl"' : ''} style="font-family: Arial, sans-serif;">
   `;
 
   // Générer le HTML pour chaque bulletin

@@ -44,9 +44,8 @@ import {
   endOfWeek,
   isSameDay,
 } from 'date-fns';
-import { fr, ar } from 'date-fns/locale';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { fr, arSA as ar } from 'date-fns/locale';
+import apiClient from '@/lib/apiClient';
 
 interface AnneeAcademique { id: number; libelle: string; date_debut: string; date_fin: string; }
 interface Classe { id: number; nom: string; niveau: string; annee_scolaire_id: number; }
@@ -377,17 +376,17 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
       setIsLoading(true);
       try {
         const [
-          anneesRes,
-          classesRes,
-          matieresRes,
-          usersRes,
-          affectationsRes,
+          { data: anneesRes },
+          { data: classesRes },
+          { data: matieresRes },
+          { data: usersRes },
+          { data: affectationsRes },
         ] = await Promise.all([
-          fetch(`${API_URL}/api/annees-academiques`).then(res => res.json()),
-          fetch(`${API_URL}/api/classes`).then(res => res.json()),
-          fetch(`${API_URL}/api/matieres`).then(res => res.json()),
-          fetch(`${API_URL}/api/users`).then(res => res.json()),
-          fetch(`${API_URL}/api/affectations`).then(res => res.json()),
+          apiClient.get('/annees-academiques'),
+          apiClient.get('/classes'),
+          apiClient.get('/matieres'),
+          apiClient.get('/users'),
+          apiClient.get('/affectations'),
         ]);
 
         setAnneesAcademiques(anneesRes);
@@ -426,11 +425,8 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
     if (selectedAnneeAcademiqueId) {
       const fetchTrimestres = async () => {
         try {
-          const response = await fetch(`${API_URL}/api/trimestres?anneeScolaireId=${selectedAnneeAcademiqueId}`);
-          if (!response.ok) {
-            throw new Error('Failed to fetch trimesters');
-          }
-          const data = await response.json();
+          const response = await apiClient.get(`/trimestres?anneeScolaireId=${selectedAnneeAcademiqueId}`);
+          const data = response.data;
           setTrimestresAnnee(data);
         } catch (error) {
           console.error(error);
@@ -463,27 +459,25 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
 
     setIsLoading(true);
     try {
-      let baseScheduleUrl = `${API_URL}/api/emploi-du-temps?annee_scolaire_id=${currentAnneeIdNum}`;
-      if (scheduleView === 'class') baseScheduleUrl += `&classe_id=${currentClassIdNum}`;
-      else baseScheduleUrl += `&professeur_id=${currentTeacherIdNum}`;
+      const baseParams: any = { annee_scolaire_id: currentAnneeIdNum };
+      if (scheduleView === 'class') baseParams.classe_id = currentClassIdNum;
+      else baseParams.professeur_id = currentTeacherIdNum;
 
-      const etdRes: EmploiDuTempsEntry[] = await fetch(baseScheduleUrl).then(res => res.json());
-      setEmploisDuTemps(etdRes);
+      const etdRes = await apiClient.get('/emploi-du-temps', { params: baseParams });
+      setEmploisDuTemps(etdRes.data);
 
       const weekStartDate = format(currentWeekStart, 'yyyy-MM-dd');
       const weekEndDate = format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'yyyy-MM-dd');
-      // Ajout de annee_scolaire_id pour filtrer les exceptions par année également.
-      // C'est crucial pour les exceptions globales comme les jours fériés.
-      let exceptionsUrl = `${API_URL}/api/exception-emploi-du-temps?start_date=${weekStartDate}&end_date=${weekEndDate}&annee_scolaire_id=${currentAnneeIdNum}`;
-
+      const exceptionsParams: any = { start_date: weekStartDate, end_date: weekEndDate, annee_scolaire_id: currentAnneeIdNum };
+      
       if (scheduleView === 'class' && !isNaN(currentClassIdNum)) {
-        exceptionsUrl += `&classe_id=${currentClassIdNum}`;
+        exceptionsParams.classe_id = currentClassIdNum;
       } else if (scheduleView === 'teacher' && !isNaN(currentTeacherIdNum)) {
-        exceptionsUrl += `&professeur_id=${currentTeacherIdNum}`;
+        exceptionsParams.professeur_id = currentTeacherIdNum;
       }
 
-      const exceptionsRes: ExceptionEmploiDuTempsEntry[] = await fetch(exceptionsUrl).then(res => res.json());
-      setExceptionsEmploisDuTemps(exceptionsRes);
+      const exceptionsRes = await apiClient.get('/exception-emploi-du-temps', { params: exceptionsParams });
+      setExceptionsEmploisDuTemps(exceptionsRes.data);
 
     } catch (error) {
       toast({
@@ -779,30 +773,13 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
 
   setIsSaving(true);
   try {
-    const token = localStorage.getItem('token');
     let response;
     if (modalMode === 'add') {
-      response = await fetch(`${API_URL}/api/emploi-du-temps`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      response = await apiClient.post('/emploi-du-temps', payload);
     } else {
       if (!editingBaseEntryId) throw new Error(t.schedule.missingEntryId);
-      response = await fetch(`${API_URL}/api/emploi-du-temps/${editingBaseEntryId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      response = await apiClient.put(`/emploi-du-temps/${editingBaseEntryId}`, payload);
     }
-
-    if (!response.ok) throw new Error(await response.text());
 
     toast({
       title: t.schedule.successSaveTitle,
@@ -813,7 +790,7 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
   } catch (error: any) {
     toast({
       title: t.common.error,
-      description: error.message || t.schedule.errorSave,
+      description: error.response?.data?.message || error.message || t.schedule.errorSave,
       variant: "destructive",
     });
   } finally {
@@ -828,16 +805,7 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
 
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/emploi-du-temps/${editingBaseEntryId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) throw new Error(await response.text());
-
+      await apiClient.delete(`/emploi-du-temps/${editingBaseEntryId}`);
       toast({
         title: t.schedule.successDeleteTitle,
         description: t.schedule.successDeleteDescription,
@@ -847,7 +815,7 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
     } catch (error: any) {
       toast({
         title: t.common.error,
-        description: error.message || t.schedule.errorDelete,
+        description: error.response?.data?.message || error.message || t.schedule.errorDelete,
         variant: "destructive",
       });
     } finally {
@@ -920,30 +888,13 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
 
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('token');
       let response;
       if (modalMode === 'add') {
-        response = await fetch(`${API_URL}/api/exception-emploi-du-temps`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(payload),
-        });
+        response = await apiClient.post('/exception-emploi-du-temps', payload);
       } else {
         if (!editingExceptionId) throw new Error(t.schedule.missingExceptionId);
-        response = await fetch(`${API_URL}/api/exception-emploi-du-temps/${editingExceptionId}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(payload),
-        });
+        response = await apiClient.put(`/exception-emploi-du-temps/${editingExceptionId}`, payload);
       }
-
-      if (!response.ok) throw new Error(await response.text());
 
       toast({
         title: t.schedule.successSaveTitle,
@@ -954,7 +905,7 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
     } catch (error: any) {
       toast({
         title: t.common.error,
-        description: error.message || t.schedule.errorSave,
+        description: error.response?.data?.message || error.message || t.schedule.errorSave,
         variant: "destructive",
       });
     } finally {
@@ -969,16 +920,7 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
 
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/exception-emploi-du-temps/${editingExceptionId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) throw new Error(await response.text());
-
+      await apiClient.delete(`/exception-emploi-du-temps/${editingExceptionId}`);
       toast({
         title: t.schedule.successDeleteTitle,
         description: t.schedule.successDeleteDescription,
@@ -988,7 +930,7 @@ const formatAcademicYearDisplay = (annee: { libelle: string; date_debut: string;
     } catch (error: any) {
       toast({
         title: t.common.error,
-        description: error.message || t.schedule.errorDelete,
+        description: error.response?.data?.message || error.message || t.schedule.errorDelete,
         variant: "destructive",
       });
     } finally {

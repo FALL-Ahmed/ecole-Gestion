@@ -19,6 +19,7 @@ import { toast } from '@/hooks/use-toast';
 import { Save, Loader2, BookOpen, CalendarDays, Users, Bookmark, School, ClipboardList, User, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import apiClient from '@/lib/apiClient';
 
 // Types
 type AnneeScolaire = { id: number; libelle: string; dateDebut?: string; dateFin?: string; };
@@ -76,7 +77,6 @@ type NoteEntry = { eleveId: number; nom: string; prenom: string; note: string };
 
 export function GradeInput() {
   const { t, language } = useLanguage();
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
   const { user } = useAuth();
 
   // States
@@ -101,31 +101,26 @@ export function GradeInput() {
     const fetchAllBaseData = async () => {
       setLoadingInitialData(true);
       try {
-        const configRes = await fetch(`${API_URL}/api/configuration`);
-        if (!configRes.ok) {
-          const errorText = await configRes.text();
-throw new Error(t.gradeInput.errorLoadingConfig(errorText));
-        }
-        
-        const configData: Configuration | Configuration[] = await configRes.json();
+        const configResponse = await apiClient.get('/configuration');
+        const configData: Configuration | Configuration[] = configResponse.data;
         let fetchedAnneeScolaire: AnneeScolaire | null = null;
-        
+
         if (Array.isArray(configData) && configData.length > 0) {
           if (configData[0].annee_scolaire) {
             fetchedAnneeScolaire = configData[0].annee_scolaire;
           } else if (configData[0].annee_academique_active_id) {
-            fetchedAnneeScolaire = { 
-              id: configData[0].annee_academique_active_id, 
-              libelle: t.common.activeYear 
+            fetchedAnneeScolaire = {
+              id: configData[0].annee_academique_active_id,
+              libelle: t.common.activeYear
             };
           }
         } else if (configData && !Array.isArray(configData)) {
           if (configData.annee_scolaire) {
             fetchedAnneeScolaire = configData.annee_scolaire;
           } else if (configData.annee_academique_active_id) {
-            fetchedAnneeScolaire = { 
-              id: configData.annee_academique_active_id, 
-              libelle: t.common.activeYear 
+            fetchedAnneeScolaire = {
+              id: configData[0].annee_academique_active_id,
+              libelle: t.common.activeYear
             };
           }
         }
@@ -142,34 +137,19 @@ throw new Error(t.gradeInput.errorLoadingConfig(errorText));
           return;
         }
 
-        const [affectationsRes, allClassesRes, utilisateursRes] = await Promise.all([
-          fetch(`${API_URL}/api/affectations?include=professeur,matiere,classe,annee_scolaire`),
-          fetch(`${API_URL}/api/classes`),
-          fetch(`${API_URL}/api/users`),
+        const [affectationsResponse, allClassesResponse, utilisateursResponse] = await Promise.all([
+          apiClient.get('/affectations?include=professeur,matiere,classe,annee_scolaire'),
+          apiClient.get('/classes'),
+          apiClient.get('/users'),
         ]);
 
-        const checkResponse = async (res: Response, name: string) => {
-          if (!res.ok) {
-            const errorText = await res.text();
-throw new Error(t.gradeInput.errorLoadingData(name, errorText));
-          }
-        };
-
-        await Promise.all([
-          checkResponse(affectationsRes, 'affectations'),
-          checkResponse(allClassesRes, 'classes'),
-          checkResponse(utilisateursRes, 'utilisateurs'),
-        ]);
-
-        const [rawAffectations, rawAllClasses, rawUtilisateurs] = await Promise.all([
-          affectationsRes.json(),
-          allClassesRes.json(),
-          utilisateursRes.json(),
-        ]);
+        const rawAffectations = affectationsResponse.data;
+        const rawAllClasses = allClassesResponse.data;
+        const rawUtilisateurs = utilisateursResponse.data;
 
         const processed = rawAffectations.map(aff => {
           if (!aff.professeur || !aff.matiere || !aff.classe || !aff.annee_scolaire) {
-console.log('WARN:', t.gradeInput.invalidAssignment(aff));
+            console.warn('WARN:', t.gradeInput.invalidAssignment(aff));
             return null;
           }
           return {
@@ -188,15 +168,14 @@ console.log('WARN:', t.gradeInput.invalidAssignment(aff));
         setProcessedAffectations(processed);
         setAllClasses(rawAllClasses);
         setAllUsers(rawUtilisateurs);
-      const uniqueMatieres = Array.from(
-  new Map(rawAffectations.map(aff => [aff.matiere.id, aff.matiere])).values()
-) as Matiere[];
-setAllMatieres(uniqueMatieres);
-      } catch (error) {
-console.log('ERROR:', t.gradeInput.globalError(String(error)));
+        const uniqueMatieres = Array.from(
+          new Map(rawAffectations.map(aff => [aff.matiere.id, aff.matiere])).values()
+        ) as Matiere[];
+        setAllMatieres(uniqueMatieres);
+      } catch (error: any) {
         toast({
           title: t.common.loadingError,
-          description: error instanceof Error ? error.message : t.gradeInput.unknownLoadingError,
+          description: error.response?.data?.message || (error instanceof Error ? error.message : t.gradeInput.unknownLoadingError),
           variant: 'destructive',
         });
       } finally {
@@ -278,29 +257,17 @@ console.log('ERROR:', t.gradeInput.globalError(String(error)));
       }
 
       try {
-        const trimestreRes = await fetch(`${API_URL}/api/trimestres/by-date?date=${date}&anneeId=${activeAnneeScolaire.id}`);
-        
-        if (!trimestreRes.ok) {
-          if (trimestreRes.status === 404 || trimestreRes.status === 204) {
-            setCurrentTrimestre(null);
-            return;
-          }
-          const errorText = await trimestreRes.text();
-          throw new Error(t.gradeInput.errorDeterminingTerm(errorText));
-        }
-
-        const responseText = await trimestreRes.text();
-        if (!responseText) {
+        const response = await apiClient.get(`/trimestres/by-date?date=${date}&anneeId=${activeAnneeScolaire.id}`);
+        setCurrentTrimestre(response.data || null);
+      } catch (error: any) {
+        if (error.response && (error.response.status === 404 || error.response.status === 204)) {
           setCurrentTrimestre(null);
           return;
         }
-        const trimestreData = JSON.parse(responseText);
-        setCurrentTrimestre(trimestreData);
-      } catch (error) {
-console.log('ERROR:', t.gradeInput.errorFetchingTerm(String(error)));
+        console.error('ERROR:', t.gradeInput.errorFetchingTerm(String(error)));
         toast({
           title: t.gradeInput.termError,
-          description: error instanceof Error ? error.message : t.gradeInput.unknownTermError,
+          description: error.response?.data?.message || (error instanceof Error ? error.message : t.gradeInput.unknownTermError),
           variant: 'destructive',
         });
         setCurrentTrimestre(null);
@@ -361,16 +328,11 @@ console.log('ERROR:', t.gradeInput.errorFetchingTerm(String(error)));
       setNotes([]);
 
       try {
-        const res = await fetch(
-          `${API_URL}/api/inscriptions?classeId=${selectedClassId}&anneeScolaireId=${activeAnneeScolaire.id}`
+        const response = await apiClient.get(
+          `/inscriptions?classeId=${selectedClassId}&anneeScolaireId=${activeAnneeScolaire.id}`
         );
 
-        if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(t.gradeInput.errorLoadingEnrollments(errorText));
-        }
-
-        const data: InscriptionApiResponse[] = await res.json();
+        const data: InscriptionApiResponse[] = response.data;
 
         const fetchedEleves: Eleve[] = data
           .map((inscription: InscriptionApiResponse) => {
@@ -385,19 +347,19 @@ console.log('ERROR:', t.gradeInput.errorFetchingTerm(String(error)));
           .filter(Boolean) as Eleve[];
 
         setEleves(fetchedEleves);
-        const initialNotes = fetchedEleves.map(e => ({ 
-          eleveId: e.id, 
-          nom: e.nom, 
-          prenom: e.prenom, 
-          note: '' 
+        const initialNotes = fetchedEleves.map(e => ({
+          eleveId: e.id,
+          nom: e.nom,
+          prenom: e.prenom,
+          note: ''
         }));
         setNotes(initialNotes);
-
-      } catch (error) {
-        console.log('ERROR:', t.gradeInput.errorLoadingStudents(error));
+      } catch (e: any) {
+        console.error('ERROR:', t.gradeInput.errorLoadingStudents(e));
+        
         toast({
           title: t.common.error,
-          description: error instanceof Error ? error.message : t.gradeInput.unknownStudentError,
+          description: e instanceof Error ? e.message : t.gradeInput.unknownStudentError,
           variant: 'destructive'
         });
         setEleves([]);
@@ -495,22 +457,10 @@ console.log('ERROR:', t.gradeInput.errorFetchingTerm(String(error)));
         anneeScolaire: { id: activeAnneeScolaire.id }
       };
 
-      const token = localStorage.getItem('token');
-      const evalRes = await fetch(`${API_URL}/api/evaluations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(evaluationPayload)
-      });
+            const evalRes = await apiClient.post('/evaluations', evaluationPayload);
 
-      if (!evalRes.ok) {
-        const errorText = await evalRes.text();
-        throw new Error(t.gradeInput.errorCreatingEval(errorText));
-      }
-
-      const evalData = await evalRes.json();
+      const evalData = evalRes.data;
+      
       const evaluationId = evalData?.id;
       if (!evaluationId) throw new Error(t.gradeInput.noEvalIdReturned);
 
@@ -521,19 +471,10 @@ console.log('ERROR:', t.gradeInput.errorFetchingTerm(String(error)));
         note: parseFloat(n.note),
       }));
 
-      const noteRes = await fetch(`${API_URL}/api/notes`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(notesToSave)
-      });
+    // Re-introducing `noteRes` for clarity as requested
+      const noteRes = await apiClient.post('/notes', notesToSave);
 
-      if (!noteRes.ok) {
-        const errorText = await noteRes.text();
-        throw new Error(t.gradeInput.errorSavingNotes(errorText));
-      }
+
 
       toast({
         title: t.common.success,
@@ -546,11 +487,12 @@ console.log('ERROR:', t.gradeInput.errorFetchingTerm(String(error)));
       setDate('');
       setNotes(prev => prev.map(n => ({ ...n, note: '' })));
 
-    } catch (error) {
-      console.log('ERROR:', t.gradeInput.savingError(error));
+      } catch (e: any) {
+      console.error('ERROR:', t.gradeInput.savingError(e));
+      
       toast({
         title: t.common.error,
-        description: error instanceof Error ? error.message : t.gradeInput.unknownSavingError,
+        description: e.response?.data?.message || (e instanceof Error ? e.message : t.gradeInput.unknownSavingError),
         variant: 'destructive'
       });
     } finally {

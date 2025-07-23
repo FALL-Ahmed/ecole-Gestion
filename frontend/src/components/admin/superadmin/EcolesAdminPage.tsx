@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Ecole } from '@/types/ecole';
-import api from '@/lib/api'; // Assurez-vous d'avoir un client API configuré
+import api from '@/lib/apiClient'; // Assurez-vous d'avoir un client API configuré
 
 // Importez vos composants UI et hooks
 import { Button } from "@/components/ui/button";

@@ -1,4 +1,4 @@
-import { Injectable, Inject, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, Inject, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { AuditSubscriber } from '../subscribers/audit.subscriber';
@@ -7,6 +7,7 @@ import * as path from 'path';
 @Injectable()
 export class TenantConnectionManager {
   private readonly connections = new Map<string, DataSource>();
+  private readonly logger = new Logger(TenantConnectionManager.name);
 
   constructor(
     @Inject('central') private readonly centralDataSource: DataSource,
@@ -40,10 +41,10 @@ export class TenantConnectionManager {
     try {
       await newDataSource.initialize();
       this.connections.set(tenantId, newDataSource);
-      console.log(`[TenantConnectionManager] New connection established for tenant '${tenantId}' on db '${dbName}'`);
+      this.logger.log(`New connection established for tenant '${tenantId}' on db '${dbName}'`);
       return newDataSource;
     } catch (error) {
-      console.error(`[TenantConnectionManager] Failed to initialize connection for tenant '${tenantId}' on db '${dbName}'`, error);
+      this.logger.error(`Failed to initialize connection for tenant '${tenantId}' on db '${dbName}'`, error.stack);
       throw new HttpException('Failed to connect to tenant database.', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -57,7 +58,7 @@ export class TenantConnectionManager {
   private async getTenantDbNameFromCentralDB(tenantId: string): Promise<string | null> {
     // Case 1: Local development or a default tenant
     if (tenantId === 'default') {
-      return this.configService.get<string>('DB_NAME') || 'school_management';
+      return this.configService.get<string>('DB_DATABASE') || 'school_management';
     }
 
     // Case 2: Special identifier for the central admin portal.
@@ -70,7 +71,7 @@ export class TenantConnectionManager {
     if (tenantId.startsWith('bloc_')) {
       const blocId = parseInt(tenantId.replace('bloc_', ''), 10);
       if (isNaN(blocId)) {
-        console.error(`[TenantConnectionManager] Invalid blocId format: ${tenantId}`);
+        this.logger.error(`Invalid blocId format: ${tenantId}`);
         return null;
       }
 
@@ -86,17 +87,12 @@ export class TenantConnectionManager {
         );
 
         if (!queryResult || queryResult.length === 0) {
-          console.warn(
-            `[TenantConnectionManager] No ecole/db_name found in 'bloc_ecole_mapping' for blocId: ${blocId}`,
-          );
+          this.logger.warn(`No ecole/db_name found in 'bloc_ecole_mapping' for blocId: ${blocId}`);
           return null;
         }
         return queryResult[0].db_name;
       } catch (error) {
-        console.error(
-          `[TenantConnectionManager] Error querying central DB for blocId '${blocId}'`,
-          error,
-        );
+        this.logger.error(`Error querying central DB for blocId '${blocId}'`, error.stack);
         throw new HttpException(
           'Error resolving tenant from bloc.',
           HttpStatus.SERVICE_UNAVAILABLE,
@@ -112,13 +108,13 @@ export class TenantConnectionManager {
       );
 
       if (!queryResult || queryResult.length === 0) {
-        console.warn(`[TenantConnectionManager] No ecole/db_name found for subdomain: ${tenantId}`);
+        this.logger.warn(`No ecole/db_name found for subdomain: ${tenantId}`);
         return null;
       }
 
       return queryResult[0].db_name;
     } catch (error) {
-      console.error(`[TenantConnectionManager] Error querying central DB for subdomain '${tenantId}'`, error);
+      this.logger.error(`Error querying central DB for subdomain '${tenantId}'`, error.stack);
       throw new HttpException('Error connecting to central database to resolve tenant.', HttpStatus.SERVICE_UNAVAILABLE);
     }
   }
@@ -137,7 +133,7 @@ export class TenantConnectionManager {
       username: this.configService.get<string>('DB_USER'),
       password: this.configService.get<string>('DB_PASSWORD'),
       database,
-      entities: [path.join(__dirname, '/../**/*.entity{.ts,.js}')],
+      entities: [path.join(__dirname, '/../**/*.entity{.ts,.js}')], // Trouve correctement toutes les entités
       synchronize: false,
       logging: false,
       subscribers: [AuditSubscriber],

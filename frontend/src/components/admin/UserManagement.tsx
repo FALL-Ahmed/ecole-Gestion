@@ -29,6 +29,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { cn } from '../../lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { User, UserRole, Classe, AnneeScolaire, Inscription } from '@/types/user';
+import apiClient from '@/lib/apiClient';
 
 interface PasswordRevealProps {
   password: string;
@@ -130,20 +131,23 @@ const initialInscriptionFormData = {
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
 const handlePrintClassStudents = async (classeId: number) => {
   try {
-    // Récupération des informations de l'établissement
-    const establishmentResponse = await fetch(`${API_URL}/api/establishment-info`);
     let schoolName = "Nom de l'École";
     let schoolLogo = "";
-
-    if (establishmentResponse.ok) {
-      const establishmentData = await establishmentResponse.json();
+    try {
+      const establishmentResponse = await apiClient.get('/establishment-info');
+      const establishmentData = establishmentResponse.data;
       schoolName = establishmentData.schoolName || schoolName;
       schoolLogo = establishmentData.logoUrl || schoolLogo;
+    } catch (infoError) {
+      console.warn("Could not fetch establishment info, using defaults.", infoError);
     }
 
     const selectedClass = classes.find(c => c.id === classeId);
     const studentsInClass = inscriptions
-      .filter(insc => insc.classe.id === classeId && insc.utilisateur.role === 'eleve')
+      .filter(
+        (insc) =>
+          insc.classe.id === classeId && insc.utilisateur.role === "eleve"
+      )
       .sort((a, b) => a.utilisateur.nom.localeCompare(b.utilisateur.nom))
       .map(insc => `${insc.utilisateur.nom} ${insc.utilisateur.prenom}`);
 
@@ -407,37 +411,26 @@ const handleEditInscription = (inscription: Inscription) => {
 
   const { toast } = useToast();
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
   useEffect(() => {
     async function fetchData() {
       setIsLoadingUsers(true);
       setIsLoadingInscriptions(true);
       try {
-        const [usersRes, classesRes, yearsRes] = await Promise.all([
-          fetch(`${API_URL}/api/users`),
-          fetch(`${API_URL}/api/classes`),
-          fetch(`${API_URL}/api/annees-academiques`),
+        const [usersRes, classesRes, yearsRes, inscriptionsRes] = await Promise.all([
+          apiClient.get('/users'),
+          apiClient.get('/classes'),
+          apiClient.get('/annees-academiques'),
+          apiClient.get('/inscriptions?_expand=utilisateur&_expand=classe&_expand=annee_scolaire'),
         ]);
 
-        if (!usersRes.ok || !classesRes.ok || !yearsRes.ok) {
-          throw new Error(t.userManagement.toasts.initialDataError);
-        }
-
-        const [usersData, classesData, yearsData] = await Promise.all([
-          usersRes.json(),
-          classesRes.json(),
-          yearsRes.json(),
-        ]);
-
+        const usersData = usersRes.data;
+        const classesData = classesRes.data;
+        const yearsData = yearsRes.data;
+        const inscriptionsData: Inscription[] = inscriptionsRes.data;
+        
         setClasses(classesData);
         setAcademicYears(yearsData);
 
-        const inscriptionsRes = await fetch(`${API_URL}/api/inscriptions`);
-        if (!inscriptionsRes.ok) {
-          throw new Error(t.userManagement.toasts.initialDataError);
-        }
-        const inscriptionsData: Inscription[] = await inscriptionsRes.json();
         const linkedInscriptions = inscriptionsData.map(inscription => ({
           ...inscription,
           utilisateur: usersData.find((u: User) => u.id === inscription.utilisateur.id) || inscription.utilisateur,
@@ -452,7 +445,7 @@ const handleEditInscription = (inscription: Inscription) => {
         setUsers(usersWithInscriptions);
 
       } catch (error) {
-        console.error(error);
+        console.error("Error fetching initial data:", error);
         toast({
           title: t.common.error,
           description: t.userManagement.toasts.initialDataError,
@@ -478,32 +471,22 @@ useEffect(() => {
             let tuteurFound = false;
 
             try {
-                const token = localStorage.getItem('token');
-                
                 // Normalisation du nom (minuscules, sans accents, sans espaces superflus)
                 const normalizedNom = userFormData.tuteurNom
                     .trim()
                     .toLowerCase()
                     .normalize("NFD")
                     .replace(/[\u0300-\u036f]/g, "");
-                
+
                 // Nettoyage du téléphone (garder seulement les chiffres)
                 const cleanedTelephone = userFormData.tuteurTelephone.replace(/\D/g, '');
 
-                const response = await fetch(
-                    `${API_URL}/api/parents/find/by-details?nom=${encodeURIComponent(normalizedNom)}&telephone=${encodeURIComponent(cleanedTelephone)}`,
-                    {
-                        headers: {
-                            'Content-Type': 'application/json',
-                            Authorization: `Bearer ${token}`,
-                        },
-                    }
-                );
+                const response = await apiClient.get('/parents/find/by-details', {
+                    params: { nom: normalizedNom, telephone: cleanedTelephone }
+                });
 
-                if (response.ok) {
-                    const responseText = await response.text();
-                    if (responseText) {
-                        const tuteurData = JSON.parse(responseText);
+                if (response.data) {
+                    const tuteurData = response.data;
                         if (tuteurData && tuteurData.email) {
                             setUserFormData(prev => ({
                                 ...prev,
@@ -517,7 +500,6 @@ useEffect(() => {
                             });
                             tuteurFound = true;
                         }
-                    }
                 }
             } catch (error) {
                 console.error("Erreur lors de la vérification des informations du tuteur:", error);
@@ -536,29 +518,19 @@ useEffect(() => {
 
                     // Vérifier si l'email existe déjà (insensible à la casse)
                     try {
-                        const token = localStorage.getItem('token');
                         const normalizedEmail = generatedEmail.toLowerCase();
                         
-                        const checkEmailResponse = await fetch(
-                            `${API_URL}/api/parents/find/by-details?email=${encodeURIComponent(normalizedEmail)}`,
-                            {
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    Authorization: `Bearer ${token}`,
-                                },
-                            }
-                        );
+                        const checkEmailResponse = await apiClient.get('/parents/find/by-details', {
+                            params: { email: normalizedEmail }
+                        });
 
-                        if (checkEmailResponse.ok) {
-                            const responseText = await checkEmailResponse.text();
-                            if (responseText) {
-                                const existingParent = JSON.parse(responseText);
+                        if (checkEmailResponse.data) {
+                            const existingParent = checkEmailResponse.data;
                                 if (existingParent) {
                                     // Si l'email existe, on incrémente
                                     generatedEmail = `${base}${compteur}@parent.com`;
                                     compteur++;
                                 }
-                            }
                         }
                     } catch (error) {
                         console.error("Erreur lors de la vérification de l'email:", error);
@@ -620,23 +592,10 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
       if (userFormData.parentId) userData.parentEmail = userFormData.email; // Pour la recherche de parent
     }
 
-    const token = localStorage.getItem('token');
-    let response: Response;
-
     // Gestion de l'édition
     if (editUser) {
-      response = await fetch(`${API_URL}/api/users/${editUser.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(userData),
-      });
-
-      if (!response.ok) throw new Error((await response.json()).message);
-
-      const updatedUser: User = await response.json();
+      const res = await apiClient.patch(`/users/${editUser.id}`, userData);
+      const updatedUser: User = res.data;
       setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
 
       toast({
@@ -652,18 +611,8 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
     }
 
     // Création d'un nouvel utilisateur
-    response = await fetch(`${API_URL}/api/users`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(userData),
-    });
-
-    if (!response.ok) throw new Error((await response.json()).message);
-
-    const responseData = await response.json();
+    const res = await apiClient.post('/users', userData);
+    const responseData = res.data;
     const newUser = responseData.user || responseData;
 
     // Mise à jour de la liste des utilisateurs
@@ -725,28 +674,15 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
         throw new Error(t.userManagement.toasts.selectStudentClassYearError);
       }
 
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/inscriptions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          utilisateur_id: parseInt(inscriptionFormData.utilisateur_id),
-          classe_id: parseInt(inscriptionFormData.classe_id),
-          annee_scolaire_id: parseInt(inscriptionFormData.annee_scolaire_id),
-          date_inscription: inscriptionFormData.date_inscription,
-          actif: inscriptionFormData.actif,
-        }),
+      const res = await apiClient.post('/inscriptions', {
+        utilisateur_id: parseInt(inscriptionFormData.utilisateur_id),
+        classe_id: parseInt(inscriptionFormData.classe_id),
+        annee_scolaire_id: parseInt(inscriptionFormData.annee_scolaire_id),
+        date_inscription: inscriptionFormData.date_inscription,
+        actif: inscriptionFormData.actif,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || t.userManagement.toasts.registrationAddError);
-      }
-
-      const newInscription: Inscription = await response.json();
+      const newInscription: Inscription = res.data;
       const linkedInscription = {
         ...newInscription,
         utilisateur: users.find(u => u.id === newInscription.utilisateur.id) || newInscription.utilisateur,
@@ -790,27 +726,14 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
   try {
     if (!editInscription) return;
 
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/api/inscriptions/${editInscription.id}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        utilisateur_id: parseInt(inscriptionFormData.utilisateur_id),
-        classe_id: parseInt(inscriptionFormData.classe_id),
-        annee_scolaire_id: parseInt(inscriptionFormData.annee_scolaire_id),
-        actif: inscriptionFormData.actif,
-      }),
+    const res = await apiClient.patch(`/inscriptions/${editInscription.id}`, {
+      utilisateur_id: parseInt(inscriptionFormData.utilisateur_id),
+      classe_id: parseInt(inscriptionFormData.classe_id),
+      annee_scolaire_id: parseInt(inscriptionFormData.annee_scolaire_id),
+      actif: inscriptionFormData.actif,
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || t.userManagement.toasts.registrationUpdateError);
-    }
-
-    const updatedInscription: Inscription = await response.json();
+    const updatedInscription: Inscription = res.data;
     
     // Mettre à jour l'état local
     setInscriptions(prev => 

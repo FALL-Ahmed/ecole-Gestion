@@ -47,9 +47,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
-
-// API Configuration
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import apiClient from '@/lib/apiClient';
 
 // Types for API Data
 interface AnneeAcademique {
@@ -425,10 +423,8 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
       setLoading(true);
       setError(null);
       try {
-        const configRes = await fetch(`${API_URL}/api/configuration`);
-        if (!configRes.ok) throw new Error(t.common.errorLoadingConfig);
-        
-        const configData: any | any[] = await configRes.json();
+        const configRes = await apiClient.get('/configuration');
+        const configData: any | any[] = configRes.data;
         let activeAnneeId: number | undefined;
 
         if (Array.isArray(configData) && configData.length > 0) {
@@ -440,45 +436,39 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
         let anneePourRequete: AnneeAcademique | null = null;
 
         if (activeAnneeId) {
-          const anneeDetailsRes = await fetch(`${API_URL}/api/annees-academiques/${activeAnneeId}`);
-          if (!anneeDetailsRes.ok) {
-            throw new Error(t.common.errorLoadingYear);
-          }
-          anneePourRequete = await anneeDetailsRes.json();
+          const anneeDetailsRes = await apiClient.get(`/annees-academiques/${activeAnneeId}`);
+          anneePourRequete = anneeDetailsRes.data;
         } else {
           toast({
             title: t.common.configuration,
             description: t.common.missingConfig,
             variant: "default",
           });
-          const anneesRes: AnneeAcademique[] = await fetch(`${API_URL}/api/annees-academiques`).then(res => res.json());
-          anneePourRequete = anneesRes.find((an: AnneeAcademique) =>
+          const anneesRes = await apiClient.get('/annees-academiques');
+          const allAnnees: AnneeAcademique[] = anneesRes.data;
+          anneePourRequete = allAnnees.find((an: AnneeAcademique) =>
             new Date() >= parseISO(an.date_debut) && new Date() <= parseISO(an.date_fin)
           ) || null;
 
           if (!anneePourRequete) {
-            const sortedAnnees = anneesRes.sort((a, b) => parseISO(b.date_fin).getTime() - parseISO(a.date_fin).getTime());
+            const sortedAnnees = allAnnees.sort((a, b) => parseISO(b.date_fin).getTime() - parseISO(a.date_fin).getTime());
             anneePourRequete = sortedAnnees.length > 0 ? sortedAnnees[0] : null;
           }
         }
 
         if (!anneePourRequete) {
-          setError(t.common.missingYearConfig);
-          setLoading(false);
-          return;
+          throw new Error(t.common.missingYearConfig);
         }
         
         setCurrentAnneeAcademique(anneePourRequete);
 
-        const inscriptionsRes: Inscription[] = await fetch(
-          `${API_URL}/api/inscriptions?utilisateurId=${studentId}&anneeScolaireId=${anneePourRequete.id}`
-        ).then(res => res.json());
+        const inscriptionsRes = await apiClient.get(`/inscriptions?utilisateurId=${studentId}&anneeScolaireId=${anneePourRequete.id}`);
+        const studentInscriptions: Inscription[] = inscriptionsRes.data;
         
-        const studentInscription = inscriptionsRes.find(inscription => inscription.actif === true);
+        const studentInscription = studentInscriptions.find(inscription => inscription.actif === true);
 
         if (!studentInscription) {
-          setError(t.userManagement.noActiveRegistration);
-          return;
+          throw new Error(t.userManagement.noActiveRegistration);
         }
         
         setStudentClassId(studentInscription.classeId);
@@ -487,9 +477,8 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
         const anneeScolaireId = anneePourRequete.id;
 
         // Fetch affectations to get taught subjects
-        const affectationsRes = await fetch(`${API_URL}/api/affectations?classe_id=${studentClassId}&annee_scolaire_id=${anneeScolaireId}`);
-        if (!affectationsRes.ok) throw new Error(t.schedule.errorLoading);
-        const affectations = await affectationsRes.json();
+        const affectationsRes = await apiClient.get(`/affectations?classe_id=${studentClassId}&annee_scolaire_id=${anneeScolaireId}`);
+        const affectations = affectationsRes.data;
         
         const taughtMatieresMap = new Map<number, Matiere>();
         affectations.forEach((aff: any) => {
@@ -500,21 +489,22 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
         const taughtMatieres = Array.from(taughtMatieresMap.values());
 
         const [classesRes, usersRes] = await Promise.all([
-          fetch(`${API_URL}/api/classes`).then(res => res.json()),
-          fetch(`${API_URL}/api/users`).then(res => res.json()),
+          apiClient.get('/classes'),
+          apiClient.get('/users'),
         ]);
 
         setAllMatieres(taughtMatieres);
-        setAllClasses(classesRes);
-        setAllProfessors(usersRes.filter((u: UserData) => u.role === 'professeur'));
-      } catch (err) {
+        setAllClasses(classesRes.data);
+        setAllProfessors(usersRes.data.filter((u: UserData) => u.role === 'professeur'));
+      } catch (err: any) {
+        const errorMessage = err.response?.data?.message || err.message || t.common.errorLoadingInitialData;
         console.error(t.common.errorLoadingInitialData, err);
         toast({
           title: t.common.errorLoading,
-          description: t.common.errorLoadingInitialData,
+          description: errorMessage,
           variant: "destructive",
         });
-        setError(t.common.errorLoadingInitialData);
+        setError(errorMessage);
       }
     };
 
@@ -532,23 +522,22 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
 
     try {
       const [scheduleRes, exceptionsRes] = await Promise.all([
-        fetch(`${API_URL}/api/emploi-du-temps?classe_id=${studentClassId}&annee_academique_id=${currentAnneeAcademique.id}`)
-          .then(res => res.json()),
-        fetch(`${API_URL}/api/exception-emploi-du-temps?classe_id=${studentClassId}&start_date=${weekStartDate}&end_date=${weekEndDate}`)
-          .then(res => res.json()),
+        apiClient.get(`/emploi-du-temps?classe_id=${studentClassId}&annee_academique_id=${currentAnneeAcademique.id}`),
+        apiClient.get(`/exception-emploi-du-temps?classe_id=${studentClassId}&start_date=${weekStartDate}&end_date=${weekEndDate}`),
       ]);
 
-      setBaseScheduleEntries(scheduleRes);
-      setExceptionEntries(exceptionsRes);
+      setBaseScheduleEntries(scheduleRes.data);
+      setExceptionEntries(exceptionsRes.data);
 
-    } catch (err) {
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || err.message || t.schedule.errorLoading;
       console.error(t.schedule.errorLoading, err);
       toast({
         title: t.common.errorLoading,
-        description: t.schedule.errorLoading,
+        description: errorMessage,
         variant: "destructive",
       });
-      setError(t.schedule.errorLoading);
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

@@ -13,9 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { PaymentForm } from '../PaymentForm';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const API_BASE_URL = `${API_URL}/api`;
+import apiClient from '@/lib/apiClient';
 
 // Types
 interface AnneeScolaire {
@@ -98,29 +96,6 @@ export function AccountingManagement() {
     paiements: false
   });
 
-  // Helper function for API calls
-  const fetchData = async (url: string, options?: RequestInit) => {
-    try {
-      const response = await fetch(url, {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        credentials: 'include'
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Fetch error:', error);
-      throw error;
-    }
-  };
-
   useEffect(() => {
     const today = new Date();
     const locale = language === 'ar' ? arSA : fr;
@@ -146,7 +121,7 @@ export function AccountingManagement() {
         return;
       }
       
-      await fetchData(`${API_BASE_URL}/paiements/envoyer-rappel?eleveId=${eleveId}&mois=${mois}`);
+      await apiClient.get(`/paiements/envoyer-rappel?eleveId=${eleveId}&mois=${mois}`);
       
       toast({
         title: t.common.success,
@@ -191,7 +166,7 @@ export function AccountingManagement() {
     const fetchAnnees = async () => {
       setIsLoading(prev => ({ ...prev, annees: true }));
       try {
-        const data = await fetchData(`${API_BASE_URL}/annees-academiques`);
+        const { data } = await apiClient.get('/annees-academiques');
         setAnneesScolaires(data);
       } catch (error) {
         console.error("Error fetching academic years:", error);
@@ -216,7 +191,7 @@ export function AccountingManagement() {
       }
       setIsLoading(prev => ({ ...prev, classes: true }));
       try {
-        const data = await fetchData(`${API_BASE_URL}/classes?anneeScolaireId=${selectedAnneeId}`);
+        const { data } = await apiClient.get(`/classes?anneeScolaireId=${selectedAnneeId}`);
         setClasses(data);
       } catch (error) {
         console.error("Error fetching classes:", error);
@@ -240,13 +215,13 @@ export function AccountingManagement() {
     }
     setIsLoading(prev => ({ ...prev, eleves: true, paiements: true }));
     try {
-      const inscriptionsRes = await fetchData(
-        `${API_BASE_URL}/inscriptions?classeId=${selectedClasseId}&anneeScolaireId=${selectedAnneeId}`
+      const inscriptionsRes = await apiClient.get(
+        `/inscriptions?classeId=${selectedClasseId}&anneeScolaireId=${selectedAnneeId}`
       );
       
-      const formattedElevesPromises = Array.isArray(inscriptionsRes)
-        ? inscriptionsRes.map(async (ins: InscriptionResponse) => {
-          const userDetails = await fetchData(`${API_BASE_URL}/users/${ins.utilisateur.id}`);
+      const formattedElevesPromises = Array.isArray(inscriptionsRes.data)
+        ? inscriptionsRes.data.map(async (ins: InscriptionResponse) => {
+          const { data: userDetails } = await apiClient.get(`/users/${ins.utilisateur.id}`);
           return {
             id: ins.utilisateur.id,
             nom: ins.utilisateur.nom,
@@ -265,12 +240,12 @@ export function AccountingManagement() {
       
       if (formattedEleves.length > 0) {
         try {
-          const paiementsRes = await fetchData(
-            `${API_BASE_URL}/paiements?classeId=${selectedClasseId}&anneeScolaireId=${selectedAnneeId}`
+          const paiementsRes = await apiClient.get(
+            `/paiements?classeId=${selectedClasseId}&anneeScolaireId=${selectedAnneeId}`
           );
           
-          const formattedPaiements: Paiement[] = Array.isArray(paiementsRes)
-            ? paiementsRes.map((p: PaiementResponse) => ({
+          const formattedPaiements: Paiement[] = Array.isArray(paiementsRes.data)
+            ? paiementsRes.data.map((p: PaiementResponse) => ({
               ...p,
               resteAPayer: Math.max(0, p.montantAttendu - p.montantPaye),
               eleve: formattedEleves.find(e => e.id === p.eleveId),
@@ -354,15 +329,9 @@ export function AccountingManagement() {
       };
       
       if (formData.id === 0) {
-        await fetchData(`${API_BASE_URL}/paiements/enregistrer`, {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        });
+        await apiClient.post('/paiements/enregistrer', payload);
       } else {
-        await fetchData(`${API_BASE_URL}/paiements/${formData.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload)
-        });
+        await apiClient.put(`/paiements/${formData.id}`, payload);
       }
       
       toast({

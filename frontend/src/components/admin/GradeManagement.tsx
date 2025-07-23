@@ -20,6 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { BookOpen, FileDown, Printer, Save, Info, AlertCircle } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useLanguage } from '@/contexts/LanguageContext';
+import apiClient from '@/lib/apiClient';
 
 // Define types for API data
 interface AnneeAcademique {
@@ -66,14 +67,10 @@ interface Note {
   note: number;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const API_BASE_URL = `${API_URL}/api`;
-
 const fetchAnneesAcademiques = async (): Promise<AnneeAcademique[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/annees-academiques`);
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    return await response.json();
+    const response = await apiClient.get('/annees-academiques');
+    return response.data;
   } catch (error) {
     console.error("Error fetching academic years:", error);
     toast({ title: "Erreur de chargement", description: "Impossible de charger les années académiques.", variant: "destructive" });
@@ -83,9 +80,8 @@ const fetchAnneesAcademiques = async (): Promise<AnneeAcademique[]> => {
 
 const fetchClasses = async (anneeAcademiqueId: number): Promise<Classe[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/classes?annee_scolaire_id=${anneeAcademiqueId}`);
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    return await response.json();
+    const response = await apiClient.get(`/classes?annee_scolaire_id=${anneeAcademiqueId}`);
+    return response.data;
   } catch (error) {
     console.error(`Error fetching classes for year ${anneeAcademiqueId}:`, error);
     toast({ title: "Erreur de chargement", description: "Impossible de charger les classes pour l'année sélectionnée.", variant: "destructive" });
@@ -95,9 +91,8 @@ const fetchClasses = async (anneeAcademiqueId: number): Promise<Classe[]> => {
 
 const fetchMatieresByClasse = async (classeId: number): Promise<Matiere[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/coefficientclasse?classeId=${classeId}`);
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const coefficientClasses = await response.json();
+    const response = await apiClient.get(`/coefficientclasse?classeId=${classeId}`);
+    const coefficientClasses = response.data;
     // Utiliser une Map pour dédoublonner les matières basées sur leur ID
     const matieresMap = new Map<number, Matiere>();
     coefficientClasses.forEach((cc: any) => {
@@ -115,9 +110,8 @@ const fetchMatieresByClasse = async (classeId: number): Promise<Matiere[]> => {
 
 const fetchElevesByClasse = async (classeId: number, anneeScolaireId: number): Promise<Eleve[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/inscriptions?classeId=${classeId}&anneeScolaireId=${anneeScolaireId}`);
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const inscriptions = await response.json();
+    const response = await apiClient.get(`/inscriptions?classeId=${classeId}&anneeScolaireId=${anneeScolaireId}`);
+    const inscriptions = response.data;
     return inscriptions.map(inscription => ({
       id: inscription.utilisateur.id,
       nom: inscription.utilisateur.nom || 'Nom Inconnu',
@@ -134,16 +128,15 @@ const fetchElevesByClasse = async (classeId: number, anneeScolaireId: number): P
 
 const fetchEvaluations = async (classeId: number, matiereId: number, trimestreNum: number, anneeAcademiqueId: number): Promise<Evaluation[]> => {
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/evaluations?classeId=${classeId}&matiereId=${matiereId}&trimestre=${trimestreNum}&anneeScolaireId=${anneeAcademiqueId}`
+    const response = await apiClient.get(
+      `/evaluations?classeId=${classeId}&matiereId=${matiereId}&trimestre=${trimestreNum}&anneeScolaireId=${anneeAcademiqueId}`
     );
-    if (!response.ok) {
-      if (response.status === 404 || response.status === 204) return [];
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const data = await response.json();
+    const data = response.data;
     return Array.isArray(data) ? data : [];
-  } catch (error) {
+  } catch (error: any) {
+    if (error.response && (error.response.status === 404 || error.response.status === 204)) {
+      return [];
+    }
     console.error(`Error fetching evaluations for class ${classeId}, subject ${matiereId}, trimestre ${trimestreNum}, year ${anneeAcademiqueId}:`, error);
     toast({ title: "Erreur de chargement", description: "Impossible de charger les évaluations pour la matière sélectionnée.", variant: "destructive" });
     return [];
@@ -152,12 +145,13 @@ const fetchEvaluations = async (classeId: number, matiereId: number, trimestreNu
 
 const fetchNote = async (evaluationId: number, eleveId: number): Promise<Note | null> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/notes?evaluation_id=${evaluationId}&etudiant_id=${eleveId}`);
-    if (response.status === 404 || response.status === 204) return null;
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const data = await response.json();
+    const response = await apiClient.get(`/notes?evaluation_id=${evaluationId}&etudiant_id=${eleveId}`);
+    const data = response.data;
     return Array.isArray(data) && data.length > 0 ? data[0] : data || null;
-  } catch (error) {
+  } catch (error: any) {
+    if (error.response && (error.response.status === 404 || error.response.status === 204)) {
+      return null;
+    }
     console.error(`Error fetching note for evaluation ${evaluationId}, student ${eleveId}:`, error);
     return null;
   }
@@ -165,13 +159,15 @@ const fetchNote = async (evaluationId: number, eleveId: number): Promise<Note | 
 
 const saveNote = async (noteData: Note): Promise<Note> => {
   try {
-    const method = noteData.id ? 'PUT' : 'POST';
-    const url = noteData.id ? `${API_BASE_URL}/notes/${noteData.id}` : `${API_BASE_URL}/notes`;
     const payload = { evaluation_id: noteData.evaluationId, etudiant_id: noteData.eleveId, note: noteData.note };
-    const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    return await response.json();
-  } catch (error) {
+    let response;
+    if (noteData.id) {
+      response = await apiClient.put(`/notes/${noteData.id}`, payload);
+    } else {
+      response = await apiClient.post('/notes', payload);
+    }
+    return response.data;
+  } catch (error: any) {
     console.error("Error saving note:", noteData, error);
     toast({ title: "Erreur de sauvegarde", description: `Impossible de sauvegarder la note. ${error.message || 'Erreur inconnue.'}`, variant: "destructive" });
     throw error;

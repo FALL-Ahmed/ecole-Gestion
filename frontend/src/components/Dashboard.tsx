@@ -6,7 +6,7 @@ import { Users, BookOpen, GraduationCap, TrendingUp, Calendar as CalendarIcon, L
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import axios from 'axios';
+import apiClient from '@/lib/apiClient';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
@@ -150,8 +150,6 @@ interface ProfessorStudentTrackingItem {
   unjustifiedAbsencesT3: number;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const API_BASE_URL = `${API_URL}/api`;
 const NOTIFIED_ABSENCE_IDS_KEY_PREFIX = 'notified_absence_ids_';
 
 export function Dashboard() {
@@ -204,7 +202,7 @@ export function Dashboard() {
   useEffect(() => {
     const fetchInitialConfig = async () => {
       try {
-        const configRes = await axios.get<ConfigurationApiData>(`${API_BASE_URL}/configuration`);
+        const configRes = await apiClient.get<ConfigurationApiData>('/configuration');
         let activeAnneeId: number | undefined;
         if (Array.isArray(configRes.data) && configRes.data.length > 0) {
           activeAnneeId = configRes.data[0].annee_academique_active_id || configRes.data[0].annee_scolaire?.id;
@@ -213,10 +211,10 @@ export function Dashboard() {
         }
 
         if (activeAnneeId) {
-          const yearDetailsRes = await axios.get<AnneeAcademiqueDetails>(`${API_BASE_URL}/annees-academiques/${activeAnneeId}`);
+          const yearDetailsRes = await apiClient.get<AnneeAcademiqueDetails>(`/annees-academiques/${activeAnneeId}`);
           setActiveAcademicYearDetails(yearDetailsRes.data);
 
-          const trimestersRes = await axios.get<TrimestreData[]>(`${API_BASE_URL}/trimestres?anneeScolaireId=${activeAnneeId}`);
+          const trimestersRes = await apiClient.get<TrimestreData[]>(`/trimestres?anneeScolaireId=${activeAnneeId}`);
           setAllTrimesters(trimestersRes.data);
         } else {
           console.warn("No active academic year found in configuration.");
@@ -239,14 +237,14 @@ export function Dashboard() {
       setAdminError(null);
       try {
         const [usersRes, classesRes, inscriptionsRes, affectationsRes, notesRes, evaluationsRes, coefficientsRes, matieresRes] = await Promise.all([
-          axios.get<UserData[]>(`${API_BASE_URL}/users`),
-          axios.get<ClasseData[]>(`${API_BASE_URL}/classes`),
-          axios.get<InscriptionData[]>(`${API_BASE_URL}/inscriptions?anneeScolaireId=${activeAcademicYearDetails.id}&_expand=classe&_expand=utilisateur`),
-          axios.get<AffectationData[]>(`${API_BASE_URL}/affectations?annee_scolaire_id=${activeAcademicYearDetails.id}&_expand=professeur`),
-          axios.get<NoteApiData[]>(`${API_BASE_URL}/notes?_expand=evaluation`),
-          axios.get<EvaluationApiData[]>(`${API_BASE_URL}/evaluations?anneeScolaire.id=${activeAcademicYearDetails.id}`),
-          axios.get<Coefficient[]>(`${API_BASE_URL}/coefficientclasse`),
-          axios.get<MatiereApiData[]>(`${API_BASE_URL}/matieres`),
+          apiClient.get<UserData[]>('/users'),
+          apiClient.get<ClasseData[]>('/classes'),
+          apiClient.get<InscriptionData[]>(`/inscriptions?anneeScolaireId=${activeAcademicYearDetails.id}&_expand=classe&_expand=utilisateur`),
+          apiClient.get<AffectationData[]>(`/affectations?annee_scolaire_id=${activeAcademicYearDetails.id}&_expand=professeur`),
+          apiClient.get<NoteApiData[]>('/notes?_expand=evaluation'),
+          apiClient.get<EvaluationApiData[]>(`/evaluations?anneeScolaire.id=${activeAcademicYearDetails.id}`),
+          apiClient.get<Coefficient[]>('/coefficientclasse'),
+          apiClient.get<MatiereApiData[]>('/matieres'),
         ]);
 
         const allUsers = usersRes.data;
@@ -422,7 +420,7 @@ export function Dashboard() {
         const professorId = user.id;
         const yearId = activeAcademicYearDetails.id;
 
-        const affectationsRes = await axios.get<AffectationData[]>(`${API_BASE_URL}/affectations?professeurId=${professorId}&annee_scolaire_id=${yearId}&_expand=classe`);
+        const affectationsRes = await apiClient.get<AffectationData[]>(`/affectations?professeurId=${professorId}&annee_scolaire_id=${yearId}&_expand=classe`);
         const affectations = affectationsRes.data;
         setProfessorAffectations(affectations);
 
@@ -438,13 +436,13 @@ export function Dashboard() {
 
         if (uniqueClasses.length > 0) {
           const classIdsQuery = uniqueClasses.map(c => `classeId=${c.id}`).join('&');
-          const inscriptionsRes = await axios.get<InscriptionData[]>(`${API_BASE_URL}/inscriptions?${classIdsQuery}&anneeScolaireId=${yearId}`);
+          const inscriptionsRes = await apiClient.get<InscriptionData[]>(`/inscriptions?${classIdsQuery}&anneeScolaireId=${yearId}`);
           setProfessorInscriptions(inscriptionsRes.data);
         } else {
           setProfessorInscriptions([]);
         }
 
-        const emploiDuTempsRes = await axios.get<EmploiDuTempsEntry[]>(`${API_BASE_URL}/emploi-du-temps?professeur_id=${professorId}&annee_academique_id=${yearId}`);
+        const emploiDuTempsRes = await apiClient.get<EmploiDuTempsEntry[]>(`/emploi-du-temps?professeur_id=${professorId}&annee_academique_id=${yearId}`);
         setProfessorEmploiDuTemps(emploiDuTempsRes.data);
 
       } catch (err) {
@@ -496,12 +494,12 @@ export function Dashboard() {
         const yearId = activeAcademicYearDetails.id;
 
         const [affectationsRes, notesRes, evaluationsRes, coefficientsRes, inscriptionsRes, absencesRes] = await Promise.all([
-          axios.get<AffectationData[]>(`${API_BASE_URL}/affectations?professeurId=${professorId}&annee_scolaire_id=${yearId}&_expand=classe&_expand=matiere`),
-          axios.get<NoteApiData[]>(`${API_BASE_URL}/notes?_expand=evaluation`),
-          axios.get<EvaluationApiData[]>(`${API_BASE_URL}/evaluations?anneeScolaire.id=${yearId}`),
-          axios.get<Coefficient[]>(`${API_BASE_URL}/coefficientclasse`),
-          axios.get<InscriptionData[]>(`${API_BASE_URL}/inscriptions?anneeScolaireId=${yearId}&_expand=utilisateur&_expand=classe`),
-          axios.get<AbsenceAPI[]>(`${API_BASE_URL}/absences?annee_scolaire_id=${yearId}&_expand=etudiant&_expand=matiere`),
+          apiClient.get<AffectationData[]>(`/affectations?professeurId=${professorId}&annee_scolaire_id=${yearId}&_expand=classe&_expand=matiere`),
+          apiClient.get<NoteApiData[]>('/notes?_expand=evaluation'),
+          apiClient.get<EvaluationApiData[]>(`/evaluations?anneeScolaire.id=${yearId}`),
+          apiClient.get<Coefficient[]>('/coefficientclasse'),
+          apiClient.get<InscriptionData[]>(`/inscriptions?anneeScolaireId=${yearId}&_expand=utilisateur&_expand=classe`),
+          apiClient.get<AbsenceAPI[]>(`/absences?annee_scolaire_id=${yearId}&_expand=etudiant&_expand=matiere`),
         ]);
 
         const professorAffectations = affectationsRes.data;
@@ -752,9 +750,9 @@ export function Dashboard() {
         }
 
         const [notesResponse, evaluationsResponse, matieresResponse] = await Promise.all([
-          axios.get<NoteApiData[]>(`${API_BASE_URL}/notes`),
-          axios.get<EvaluationApiData[]>(`${API_BASE_URL}/evaluations?annee_scolaire_id=${activeYearId}`),
-          axios.get<MatiereApiData[]>(`${API_BASE_URL}/matieres`),
+          apiClient.get<NoteApiData[]>('/notes'),
+          apiClient.get<EvaluationApiData[]>(`/evaluations?annee_scolaire_id=${activeYearId}`),
+          apiClient.get<MatiereApiData[]>('/matieres'),
         ]);
 
         const allNotes = notesResponse.data;
@@ -831,7 +829,7 @@ export function Dashboard() {
 
       } catch (err) {
         console.error('ERROR during student notes fetch:', err);
-        setErrorNotes(`${t.dashboard.student.errorGrades}: ${axios.isAxiosError(err) ? err.message : t.common.unknownError}.`);
+        setErrorNotes(`${t.dashboard.student.errorGrades}: ${err instanceof Error ? err.message : t.common.unknownError}.`);
         setLatestNotes([]);
       } finally {
         setLoadingNotes(false);
@@ -874,7 +872,7 @@ export function Dashboard() {
           date_fin: format(parseISO(activeAcademicYearDetails.date_fin), 'yyyy-MM-dd'),
         });
 
-        const response = await axios.get<AbsenceAPI[]>(`${API_BASE_URL}/absences?${params.toString()}`);
+        const response = await apiClient.get<AbsenceAPI[]>(`/absences?${params.toString()}`);
 
         if (response.data && response.data.length > 0) {
           const newAbsencesToNotify = new Set<number>();
@@ -896,7 +894,7 @@ export function Dashboard() {
           }
         }
       } catch (err) {
-        if (axios.isAxiosError(err) && err.response?.status === 404) {
+        if (err.response?.status === 404) {
           // No absences found, not an error for notifications.
         } else {
           console.error('ERROR during student absence fetch for dashboard notifications:', err);

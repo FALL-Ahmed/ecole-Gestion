@@ -15,6 +15,7 @@ import { toast } from '@/hooks/use-toast';
 import { format, isValid, parseISO } from 'date-fns';
 import { fr, ar } from 'date-fns/locale';
 import { Loader2 } from 'lucide-react';
+import apiClient from '@/lib/apiClient';
 import { cn } from '@/lib/utils';
 
 interface ChapterProgressProps {
@@ -72,9 +73,6 @@ interface Configuration {
   annee_academique_active_id?: number;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const API_BASE_URL = `${API_URL}/api`;
-
 export function ChapterProgress({ courseId }: ChapterProgressProps) {
   const { user } = useAuth();
   const { t, language } = useLanguage();
@@ -128,10 +126,8 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
       setError(null);
       
       try {
-        const configRes = await fetch(`${API_BASE_URL}/configuration`);
-        if (!configRes.ok) throw new Error(t.common.errorLoadingConfig);
-
-        const configData: Configuration | Configuration[] = await configRes.json();
+        const configRes = await apiClient.get('/configuration');
+        const configData: Configuration | Configuration[] = configRes.data;
         let activeAnneeId: number | undefined;
 
         if (Array.isArray(configData) && configData.length > 0) {
@@ -144,12 +140,11 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
           throw new Error(t.common.missingYearConfig);
         }
 
-        const inscriptionsRes = await fetch(
-          `${API_BASE_URL}/inscriptions?utilisateurId=${user.id}&anneeScolaireId=${activeAnneeId}&_expand=classe&_expand=annee_scolaire`
+        const inscriptionsRes = await apiClient.get(
+          `/inscriptions?utilisateurId=${user.id}&anneeScolaireId=${activeAnneeId}&_expand=classe&_expand=annee_scolaire`
         );
-        if (!inscriptionsRes.ok) throw new Error(t.common.errorLoadingEnrollments);
 
-        const inscriptions: Inscription[] = await inscriptionsRes.json();
+        const inscriptions: Inscription[] = inscriptionsRes.data;
         const studentInscription = inscriptions.find(insc => 
           insc.utilisateurId === user.id && 
           insc.anneeScolaireId === activeAnneeId && 
@@ -163,16 +158,16 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
         setStudentClassId(studentInscription.classeId);
         setStudentAnneeScolaireId(studentInscription.anneeScolaireId);
 
-        const [matieresRes, classesRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/matieres`).then(res => res.json()),
-          fetch(`${API_BASE_URL}/classes`).then(res => res.json()),
+        const [matieresResponse, classesResponse] = await Promise.all([
+          apiClient.get('/matieres'),
+          apiClient.get('/classes'),
         ]);
 
-        setAllMatieres(matieresRes);
-        setAllClasses(classesRes);
+        setAllMatieres(matieresResponse.data);
+        setAllClasses(classesResponse.data);
       } catch (err: any) {
         console.error('Error fetching initial data:', err);
-        setError(err.message || t.common.errorLoadingInitialData);
+        setError(err.response?.data?.message || err.message || t.common.errorLoadingInitialData);
         toast({
           title: t.common.error,
           description: err.message || t.common.errorLoadingInitialData,
@@ -209,19 +204,10 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
         }
         setCurrentCourseName(matiere.nom);
 
-        const url = `${API_BASE_URL}/chapitres?classeId=${studentClassId}&annee_scolaire_id=${studentAnneeScolaireId}&matiereId=${matiere.id}`;
-        const response = await fetch(url);
+        const url = `/chapitres?classeId=${studentClassId}&annee_scolaire_id=${studentAnneeScolaireId}&matiereId=${matiere.id}`;
+        const response = await apiClient.get(url);
 
-        if (!response.ok) {
-          if (response.status === 404 || response.status === 204) {
-            setChapters([]);
-            return;
-          }
-          const errorText = await response.text();
-          throw new Error(`${t.common.errorLoadingData('chapters', response.statusText)} - ${errorText}`);
-        }
-
-        const data: ChapterDisplay[] = await response.json();
+        const data: ChapterDisplay[] = response.data || [];
         const filteredData = data.filter(ch => 
           Number(ch.matiereId) === Number(courseId) &&
           Number(ch.classeId) === Number(studentClassId)
@@ -239,12 +225,16 @@ export function ChapterProgress({ courseId }: ChapterProgressProps) {
 
         setChapters(chaptersWithNames);
       } catch (err: any) {
+        if (err.response && (err.response.status === 404 || err.response.status === 204)) {
+          setChapters([]);
+          return;
+        }
         console.error('Error fetching chapters:', err);
-        setError(err.message || t.common.errorLoadingChapters);
+        setError(err.response?.data?.message || err.message || t.common.errorLoadingChapters);
         setChapters([]);
         toast({
           title: t.common.error,
-          description: err.message || t.common.errorLoadingChapters,
+          description: err.response?.data?.message || err.message || t.common.errorLoadingChapters,
           variant: "destructive",
         });
       } finally {

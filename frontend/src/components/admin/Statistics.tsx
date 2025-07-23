@@ -22,10 +22,7 @@ import { toast } from '@/hooks/use-toast';
 import { format, parseISO, getMonth, getYear } from 'date-fns';
 import { fr, ar } from 'date-fns/locale';
 import { useLanguage } from '@/contexts/LanguageContext';
-
-// Utilisez la variable d'environnement VITE_API_BASE_URL configurée sur Vercel
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const API_BASE_URL = `${API_URL}/api`;
+import apiClient from '@/lib/apiClient';
 
 // --- Interface Definitions ---
 interface AnneeAcademique {
@@ -254,20 +251,16 @@ const translateSubject = (subjectName: string): string => {
     }
   };
 
-  const fetchData = useCallback(async (endpoint: string, setLoadingKey?: keyof typeof loading) => {
+  const fetchData = useCallback(async (endpoint: string, setLoadingKey?: keyof typeof loading, params?: Record<string, any>) => {
     if (setLoadingKey) setLoading(prev => ({ ...prev, [setLoadingKey]: true }));
     try {
-      const response = await fetch(`${API_BASE_URL}/${endpoint}`);
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to fetch ${endpoint}: ${response.status} - ${errorText}`);
-      }
-      return await response.json();
+      const response = await apiClient.get(`/${endpoint}`, { params });
+      return response.data;
     } catch (err: any) {
       console.error(`Error fetching ${endpoint}:`, err);
       toast({ 
         title: t.common.error, 
-        description: err.message, 
+        description: err.response?.data?.message || err.message, 
         variant: "destructive" 
       });
       setError(`${t.common.errorLoading}: ${endpoint}`);
@@ -326,11 +319,11 @@ const translateSubject = (subjectName: string): string => {
       setClassesForYear(filteredClasses);
 
       // 2. Fetch Terms
-      fetchData(`trimestres?anneeScolaireId=${yearId}`, 'terms').then(setTermsForYear);
+      fetchData('trimestres', 'terms', { anneeScolaireId: yearId }).then(setTermsForYear);
 
       // 3. Fetch Students
       setLoading(prev => ({ ...prev, students: true }));
-      fetchData(`inscriptions?anneeScolaireId=${yearId}&_expand=utilisateur&_expand=classe`)
+      fetchData('inscriptions', undefined, { anneeScolaireId: yearId, _expand: 'utilisateur,classe' })
         .then((inscriptions: Inscription[]) => {
           const students: StudentWithClass[] = inscriptions.map(insc => ({
             ...insc.utilisateur,
@@ -342,7 +335,7 @@ const translateSubject = (subjectName: string): string => {
 
       // 4. Fetch Grades
       setLoading(prev => ({ ...prev, grades: true }));
-      fetchData(`notes?_expand=evaluation`)
+      fetchData('notes', undefined, { _expand: 'evaluation' })
         .then(data => {
           setGradesInYear(data);
         })
@@ -352,14 +345,18 @@ const translateSubject = (subjectName: string): string => {
       const selectedYear = academicYears.find(ay => ay.id === yearId);
       if (selectedYear) {
         setLoading(prev => ({ ...prev, absences: true }));
-        fetchData(`absences?annee_scolaire_id=${yearId}&date_gte=${selectedYear.date_debut}&date_lte=${selectedYear.date_fin}`)
+        fetchData('absences', 'absences', {
+          annee_scolaire_id: yearId,
+          date_gte: selectedYear.date_debut,
+          date_lte: selectedYear.date_fin
+        })
           .then(setAbsencesInYear)
           .finally(() => setLoading(prev => ({ ...prev, absences: false })));
       }
 
       // 6. Fetch Coefficients
       setLoading(prev => ({ ...prev, coefficients: true }));
-      const allCoeffs: CoefficientClasse[] = await fetchData(`coefficientclasse?_expand=matiere&_expand=classe`);
+      const allCoeffs: CoefficientClasse[] = await fetchData('coefficientclasse', undefined, { _expand: 'matiere,classe' });
       const mappedCoeffs = allCoeffs.map(c => ({
         ...c,
         classe_id: c.classe?.id ?? c.classe_id,
@@ -372,7 +369,7 @@ const translateSubject = (subjectName: string): string => {
 
       // 7. Fetch Affectations
       setLoading(prev => ({ ...prev, affectations: true }));
-      fetchData(`affectations?annee_scolaire_id=${yearId}&_expand=matiere&_expand=classe`)
+      fetchData('affectations', 'affectations', { annee_scolaire_id: yearId, _expand: 'matiere,classe' })
         .then(setAffectations)
         .finally(() => setLoading(prev => ({ ...prev, affectations: false })));
     };

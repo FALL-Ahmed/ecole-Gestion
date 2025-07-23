@@ -226,7 +226,12 @@ export const PrintableReport = React.forwardRef<HTMLDivElement, PrintableReportP
               <TableBody>
                 {report.notesParMatiere.map(matiere => (
                   <TableRow key={matiere.matiere} className="even:bg-gray-50 print:even:bg-white">
-                    <TableCell>{matiere.matiere}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex justify-between items-center">
+                        <span>{matiere.matiere}</span>
+                        {matiere.matiereArabe && matiere.matiereArabe !== matiere.matiere && <span className="text-sm" dir="rtl">{matiere.matiereArabe}</span>}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-center">{matiere.coefficient}</TableCell>
                     {dynamicEvaluationHeaders
                       .filter(header => header.toLowerCase().includes('devoir'))

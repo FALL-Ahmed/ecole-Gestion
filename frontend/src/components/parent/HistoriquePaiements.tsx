@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useParentChildren } from '@/hooks/useParentChildren';
 import { useCurrentAnneeScolaire } from '@/hooks/useCurrentAnneeScolaire';
-import api from '@/lib/api';
+import api from '@/lib/apiClient';
 import { Paiement } from '@/types/paiement';
 import { cn } from '@/lib/utils';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";

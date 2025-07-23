@@ -27,6 +27,28 @@ export class CoefficientClasseController {
     return this.coefficientClasseService.createMany(body);
   }
 
+  @Post('create-group')
+  async createGrouped(
+    @Body() body: { classe_id: number; coefficients: { matiere_id: number; coefficient: number }[] }
+  ) {
+    const { classe_id, coefficients } = body;
+    if (!classe_id || !Array.isArray(coefficients) || coefficients.length === 0) {
+      throw new BadRequestException("Les champs 'classe_id' et 'coefficients' (tableau non vide) sont requis.");
+    }
+    return this.coefficientClasseService.createGroupedCoefficients(classe_id, coefficients);
+  }
+
+    @Put("update-group")
+  async updateGroup(
+    @Body() body: { classeId: number; matiereId: number; coefficient: number }
+  ) {
+    const { classeId, matiereId, coefficient } = body;
+    if (!classeId || !matiereId || coefficient === undefined) {
+        throw new BadRequestException("Les IDs classeId, matiereId et le coefficient sont requis.");
+    }
+    return this.coefficientClasseService.updateGroupedCoefficients(classeId, matiereId, coefficient);
+  }
+
   @Put(':id')
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -38,6 +60,7 @@ export class CoefficientClasseController {
     return this.coefficientClasseService.update(id, body.coefficient);
   }
 
+ 
 
   // Nouvelle route POST /api/coefficientclasse/clone
   @Post("clone")

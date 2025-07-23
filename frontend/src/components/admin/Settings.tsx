@@ -29,8 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useEstablishmentInfo } from '@/contexts/EstablishmentInfoContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import apiClient from '@/lib/apiClient';
 
 export function Settings() {
   const { toast } = useToast();
@@ -102,12 +101,8 @@ export function Settings() {
 
   const fetchAcademicYears = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/annees-academiques`);
-      if (!response.ok) {
-        throw new Error(t.settings.errorFetchingAcademicYears);
-      }
-      const data = await response.json();
-      setAcademicYearsList(data);
+      const response = await apiClient.get('/annees-academiques');
+      setAcademicYearsList(response.data);
     } catch (error: any) {
       console.error('Error fetching academic years:', error);
       toast({
@@ -121,20 +116,8 @@ export function Settings() {
   const fetchEstablishmentInfo = async () => {
     setIsLoadingEstablishmentInfo(true);
     try {
-      const response = await fetch(`${API_URL}/api/establishment-info`);
-      if (!response.ok) {
-        if (response.status === 404) {
-          setAccountForm({ schoolName: "", directorName: "", email: "", phone: "", address: "", website: "" });
-          toast({ 
-            title: t.common.information, 
-            description: t.settings.noEstablishmentInfoFound,
-            variant: "default" 
-          });
-          return;
-        }
-        throw new Error(t.settings.errorFetchingEstablishmentInfo);
-      }
-      const data = await response.json();
+      const response = await apiClient.get('/establishment-info');
+      const data = response.data;
       setAccountForm({
         schoolName: data.schoolName || "",
         directorName: data.directorName || "",
@@ -144,6 +127,14 @@ export function Settings() {
         website: data.website || ""
       });
     } catch (error: any) {
+      if (error.response && error.response.status === 404) {
+          setAccountForm({ schoolName: "", directorName: "", email: "", phone: "", address: "", website: "" });
+          toast({ 
+            title: t.common.information, 
+            description: t.settings.noEstablishmentInfoFound,
+            variant: "default" 
+          });
+      } else {
       console.error('Error fetching establishment information:', error);
       toast({ 
         title: t.common.error, 
@@ -151,6 +142,7 @@ export function Settings() {
         variant: "destructive" 
       });
       setAccountForm({ schoolName: t.settings.errorLoading, directorName: "", email: "", phone: "", address: "", website: "" });
+      }
     } finally {
       setIsLoadingEstablishmentInfo(false);
     }
@@ -158,15 +150,8 @@ export function Settings() {
 
   const fetchCurrentAcademicYearConfiguration = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/configuration`);
-      if (!response.ok) {
-        if (response.status === 404) {
-          setCurrentAcademicYearId(null);
-          return;
-        }
-        throw new Error(t.settings.errorFetchingCurrentYear);
-      }
-      const data = await response.json();
+      const response = await apiClient.get('/configuration');
+      const data = response.data;
       // Handle both object and array responses from the API
       const config = Array.isArray(data) ? data[0] : data;
 
@@ -179,13 +164,17 @@ export function Settings() {
       }
 
     } catch (error: any) {
-      console.error('Error fetching current academic year configuration:', error);
-      toast({
-        title: t.common.error,
-        description: `${t.settings.errorLoadingCurrentYear}: ${error.message}.`,
-        variant: "destructive",
-      });
-      setCurrentAcademicYearId(null);
+      if (error.response && error.response.status === 404) {
+        setCurrentAcademicYearId(null);
+      } else {
+        console.error('Error fetching current academic year configuration:', error);
+        toast({
+          title: t.common.error,
+          description: `${t.settings.errorLoadingCurrentYear}: ${error.message}.`,
+          variant: "destructive",
+        });
+        setCurrentAcademicYearId(null);
+      }
     }
   };
 
@@ -254,23 +243,12 @@ export function Settings() {
 
     setIsSavingPassword(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/users/${user.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          ancienMotDePasse: ancienMotDePasse,
-          nouveauMotDePasse: nouveauMotDePasse,
-        }),
+      await apiClient.patch(`/users/${user.id}`, {
+        ancienMotDePasse: ancienMotDePasse,
+        nouveauMotDePasse: nouveauMotDePasse,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || t.settings.passwordChangeFailed);
-      }
+      // The apiClient will throw an error on non-2xx responses, so we don't need to check response.ok
 
       toast({ 
         title: t.common.success, 
@@ -282,7 +260,7 @@ export function Settings() {
     } catch (error: any) {
       toast({ 
         title: t.common.error, 
-        description: error.message, 
+        description: error.response?.data?.message || error.message, 
         variant: "destructive" 
       });
     } finally {
@@ -296,22 +274,13 @@ export function Settings() {
 
     if (activeTab === 'account') {
       try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${API_URL}/api/establishment-info`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            ...accountForm,
-            website: accountForm.website === "" ? null : accountForm.website,
-          }),
+        await apiClient.post('/establishment-info', {
+          ...accountForm,
+          website: accountForm.website === "" ? null : accountForm.website,
         });
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || t.settings.errorSavingEstablishmentInfo);
-        }
+
+        // apiClient throws on error, so no need to check response.ok
+
         await fetchEstablishmentInfo();
         await fetchEstablishmentInfoContext();
       } catch (error: any) {
@@ -335,27 +304,15 @@ export function Settings() {
       }
 
       try {
-        const token = localStorage.getItem('token');
-
         const method = currentConfigId ? 'PUT' : 'POST';
         const url = currentConfigId
-          ? `${API_URL}/api/configuration/${currentConfigId}`
-          : `${API_URL}/api/configuration`;
+          ? `/configuration/${currentConfigId}`
+          : `/configuration`;
 
-        const response = await fetch(url, {
-          method: method,
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            annee_scolaire_id: currentAcademicYearId,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || t.settings.errorSavingAcademicYear);
+        if (method === 'PUT') {
+          await apiClient.put(url, { annee_scolaire_id: currentAcademicYearId });
+        } else {
+          await apiClient.post(url, { annee_scolaire_id: currentAcademicYearId });
         }
 
         await fetchCurrentAcademicYearConfiguration();

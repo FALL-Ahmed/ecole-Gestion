@@ -14,8 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Eye, EyeOff } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import apiClient from '@/lib/apiClient';
 
 export function SecuritySettings() {
   const { toast } = useToast();
@@ -61,23 +60,10 @@ export function SecuritySettings() {
 
     setIsSavingPassword(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/users/${user.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          ancienMotDePasse: ancienMotDePasse,
-          nouveauMotDePasse: nouveauMotDePasse,
-        }),
+      await apiClient.patch(`/users/${user.id}`, {
+        ancienMotDePasse: ancienMotDePasse,
+        nouveauMotDePasse: nouveauMotDePasse,
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || t.settings.passwordChangeFailed);
-      }
 
       toast({ 
         title: t.common.success, 
@@ -89,7 +75,7 @@ export function SecuritySettings() {
     } catch (error: any) {
       toast({ 
         title: t.common.error, 
-        description: error.message, 
+        description: error.response?.data?.message || error.message, 
         variant: "destructive" 
       });
     } finally {

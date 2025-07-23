@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '@/lib/api';
+import api from '@/lib/apiClient';
 import { AnneeScolaire } from '@/types/user'; // Assurez-vous que ce type existe
 import { useLanguage } from '@/contexts/LanguageContext';
 import { AxiosError } from 'axios';

@@ -23,6 +23,8 @@ import { fr, ar } from 'date-fns/locale';
 import { toast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import apiClient from '@/lib/apiClient';
+
 
 // --- Type Definitions ---
 export interface ChapterDisplay {
@@ -60,8 +62,7 @@ interface AnneeScolaire {
   date_fin?: string;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const API_BASE_URL = `${API_URL}/api`;
+
 
 interface AffectationApiResponse {
   id: number;
@@ -237,29 +238,21 @@ const getStatusBadgeClasses = (status) => {
     const fetchInitialData = async () => {
       setIsLoadingInitialData(true);
       try {
-        const [anneesRes, classesRes, matieresRes, usersRes, affectationsRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/annees-academiques`),
-          fetch(`${API_BASE_URL}/classes`),
-          fetch(`${API_BASE_URL}/matieres`),
-          fetch(`${API_BASE_URL}/users`),
-          fetch(`${API_BASE_URL}/affectations?include=professeur,matiere,classe,annee_scolaire`),
+      const [anneesResponse, classesResponse, matieresResponse, usersResponse, affectationsResponse] = await Promise.all([
+          apiClient.get('/annees-academiques'),
+          apiClient.get('/classes'),
+          apiClient.get('/matieres'),
+          apiClient.get('/users'),
+          apiClient.get('/affectations?include=professeur,matiere,classe,annee_scolaire'),
         ]);
 
-        const checkAndParseResponse = async (res: Response, name: string) => {
-          if (!res.ok) {
-            const errorBody = await res.text();
-            throw new Error(`Failed to load ${name}: ${res.status} - ${errorBody}`);
-          }
-          return res.json();
-        };
+              const anneesData = anneesResponse.data;
+        const classesData = classesResponse.data;
+        const matieresData = matieresResponse.data;
+        const usersData = usersResponse.data;
+        const affectationsData = affectationsResponse.data;
 
-        const [anneesData, classesData, matieresData, usersData, affectationsData] = await Promise.all([
-          checkAndParseResponse(anneesRes, t.common.academicYears),
-          checkAndParseResponse(classesRes, t.common.classes),
-          checkAndParseResponse(matieresRes, t.common.subjects),
-          checkAndParseResponse(usersRes, t.common.users),
-          checkAndParseResponse(affectationsRes, t.common.assignments),
-        ]);
+
 
         setAnnees(anneesData);
         setAllClasses(classesData);
@@ -305,27 +298,19 @@ const getStatusBadgeClasses = (status) => {
 
   setIsFetchingChapters(true);
   try {
-    let url = `${API_BASE_URL}/chapitres?annee_scolaire_id=${selectedAnneeId}`;
+    const params = new URLSearchParams({ annee_scolaire_id: selectedAnneeId });
     
     if (selectedClasseId !== 'all') {
-      url += `&classe_id=${selectedClasseId}`;
+      params.append('classe_id', selectedClasseId);
     }
     
     if (selectedMatiereId !== 'all') {
-      url += `&matiere_id=${selectedMatiereId}`;
+          params.append('matiere_id', selectedMatiereId);
     }
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      if (response.status === 404 || response.status === 204) {
-        setChapters([]);
-        return;
-      }
-      const errorText = await response.text();
-      throw new Error(`Failed to fetch chapters: ${response.status} - ${errorText}`);
-    }
+    const response = await apiClient.get(`/chapitres?${params.toString()}`);
     
-    const data: ChapterDisplay[] = await response.json();
+    const data: ChapterDisplay[] = response.data || [];
     
     // Filtrer une seconde fois côté client pour être sûr
     const filteredData = data.filter(ch => {
@@ -344,16 +329,21 @@ const getStatusBadgeClasses = (status) => {
     });
 
     setChapters(chaptersWithNames);
-  } catch (error) {
-    console.error('Error fetching chapters:', error);
-    toast({
-      title: t.common.errorLoading,
-      description: error instanceof Error 
-        ? error.message 
-        : t.common.errorLoadingChapters,
-      variant: "destructive"
-    });
-    setChapters([]);
+  }    catch (error: any) {
+    if (error.response && (error.response.status === 404 || error.response.status === 204)) {
+      setChapters([]); // No data found, not an error
+    } else {
+      console.error('Error fetching chapters:', error);
+      toast({
+        title: t.common.errorLoading,
+        description: error.message 
+          ? error.message 
+          : t.common.errorLoadingChapters,
+        variant: "destructive"
+      });
+      setChapters([]);
+    
+    }
   } finally {
     setIsFetchingChapters(false);
   }

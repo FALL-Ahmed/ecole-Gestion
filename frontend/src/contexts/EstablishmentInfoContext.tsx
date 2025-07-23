@@ -6,7 +6,7 @@ import React, {
   useCallback,
   ReactNode,
 } from 'react';
-import axios from 'axios';
+import apiClient from '@/lib/apiClient';
 
 interface EstablishmentInfoContextType {
   schoolName: string;
@@ -19,7 +19,6 @@ interface EstablishmentInfoContextType {
 const EstablishmentInfoContext = createContext<EstablishmentInfoContextType | undefined>(
   undefined
 );
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // Default values for initial state
 const DEFAULT_SCHOOL_NAME = 'Chargement...';
@@ -41,7 +40,7 @@ export const EstablishmentInfoProvider: React.FC<EstablishmentInfoProviderProps>
 
   const fetchEstablishmentInfo = useCallback(async () => {
     try {
-      const response = await axios.get(`${API_URL}/api/establishment-info`);
+      const response = await apiClient.get('/establishment-info');
       if (response.data && response.data.schoolName) {
         setSchoolName(response.data.schoolName);
         setAddress(response.data.address || 'Adresse inconnue');
@@ -53,8 +52,9 @@ export const EstablishmentInfoProvider: React.FC<EstablishmentInfoProviderProps>
         setPhone('');
         setWebsite('');
       }
-    } catch (error) {
-      console.error('Error fetching establishment info:', error);
+    } catch (error: any) {
+      // Use a more specific error message if available from the API response
+      console.error('Error fetching establishment info:', error.response?.data?.message || error.message);
       setSchoolName('Erreur de chargement');
       setAddress('Erreur de chargement');
       setPhone('');

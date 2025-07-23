@@ -16,9 +16,9 @@ import { useEstablishmentInfo } from '@/contexts/EstablishmentInfoContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '@/lib/apiClient';
 
 import { Loader2 } from 'lucide-react';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 interface Bloc {
   id: number;
@@ -146,6 +146,33 @@ export function LoginForm() {
     localStorage.setItem('token', access_token);
   };
 
+  const handleLoginSuccess = (access_token: string, user: any) => {
+    setLoginSuccess(true);
+    setTimeout(() => {
+      setRedirecting(true);
+      setTimeout(() => {
+        login(access_token, user);
+        navigate('/dashboard');
+      }, 1500);
+    }, 1500);
+  };
+
+  const validateStudentEnrollment = async (studentId: number): Promise<void> => {
+    const configRes = await apiClient.get('/configuration');
+    if (configRes.status !== 200) throw new Error(t.login.toast.errorConfig || "Impossible de vérifier la configuration de l'année scolaire.");
+    const configData = configRes.data;
+    const activeAnneeId = Array.isArray(configData) && configData.length > 0 ? (configData[0].annee_academique_active_id || configData[0].annee_scolaire?.id) : (configData?.annee_academique_active_id || configData?.annee_scolaire?.id);
+    if (!activeAnneeId) throw new Error(t.login.toast.errorNoActiveYear || "Aucune année scolaire active n'est configurée.");
+
+    const inscriptionsRes = await apiClient.get(`/inscriptions?utilisateurId=${studentId}&anneeScolaireId=${activeAnneeId}`);
+    if (inscriptionsRes.status === 404) throw new Error(t.login.toast.errorNotEnrolled || "Vous n'êtes pas inscrit pour l'année scolaire en cours. Veuillez contacter l'administration.");
+    if (inscriptionsRes.status !== 200) throw new Error(t.login.toast.errorEnrollment || "Erreur lors de la vérification de votre inscription.");
+    const inscriptions = inscriptionsRes.data;
+    if (!inscriptions.some((insc: any) => insc.actif)) {
+      throw new Error(t.login.toast.errorNotEnrolled || "Vous n'êtes pas inscrit pour l'année scolaire en cours. Veuillez contacter l'administration.");
+    }
+  };
+
   const handleBlocSelect = async (blocId: number) => {
     setSelectedBlocId(blocId);
     if (!preselectionToken) {
@@ -162,33 +189,21 @@ export function LoginForm() {
     setShowBlocSelection(false); // Hide selection while processing
 
     try {
-      const response = await fetch(`${API_URL}/api/auth/select-bloc`, {
-        method: 'POST',
+      const response = await apiClient.post('/auth/select-bloc', { blocId }, {
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${preselectionToken}`,
         },
-        body: JSON.stringify({ blocId }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: t.login.toast.selectionError || "Erreur lors de la sélection de l'établissement." }));
+      if (response.status !== 200 && response.status !== 201) {
+        const errorData = response.data || { message: t.login.toast.selectionError || "Erreur lors de la sélection de l'établissement." };
         throw new Error(errorData.message);
       }
 
-      const data = await response.json();
+      const data = response.data;
       const { access_token, user } = data;
 
-      // Same success flow as direct login
-      setLoginSuccess(true);
-      setTimeout(() => {
-        setRedirecting(true);
-        setTimeout(() => {
-          login(access_token, user);
-          navigate('/dashboard');
-        }, 1500);
-      }, 1500);
-
+      handleLoginSuccess(access_token, user);
     } catch (error: any) {
       toast({
         title: t.login.toast.selectionFailedTitle || "Erreur de sélection",
@@ -205,81 +220,37 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      const response = await apiClient.post('/auth/login', { email, password });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: t.login.errorDescription }));
+      if (response.status !== 200 && response.status !== 201) {
+        const errorData = response.data || { message: t.login.errorDescription };
         throw new Error(errorData.message || t.login.errorDescription);
       }
 
-      const data = await response.json();
+      const data = response.data;
 
       // Gérer la réponse de sélection de bloc
-      if (data.status === 'selection_required') {
+      if (data.status === 'selection_required' && data.blocs) {
         setBlocs(data.blocs);
         setPreselectionToken(data.preselectionToken);
         setShowBlocSelection(true);
-        setIsLoading(false);
         return;
       }
 
       const { access_token, user } = data; // Connexion directe
 
-      // Vérification supplémentaire pour les élèves
       if (user.role === 'eleve') {
-        // 1. Récupérer l'année scolaire active depuis la configuration
-        const configRes = await fetch(`${API_URL}/api/configuration`);
-        if (!configRes.ok) {
-          throw new Error(t.login.toast.errorConfig || "Impossible de vérifier la configuration de l'année scolaire.");
-        }
-        const configData = await configRes.json();
-        let activeAnneeId: number | undefined;
-        if (Array.isArray(configData) && configData.length > 0) {
-          activeAnneeId = configData[0].annee_academique_active_id || configData[0].annee_scolaire?.id;
-        } else if (configData && !Array.isArray(configData)) {
-          activeAnneeId = configData.annee_academique_active_id || configData.annee_scolaire?.id;
-        }
-
-        if (!activeAnneeId) {
-          throw new Error(t.login.toast.errorNoActiveYear || "Aucune année scolaire active n'est configurée. Connexion impossible.");
-        }
-
-        // 2. Vérifier si l'élève a une inscription active pour cette année
-        const inscriptionsRes = await fetch(`${API_URL}/api/inscriptions?utilisateurId=${user.id}&anneeScolaireId=${activeAnneeId}`);
-        if (inscriptionsRes.status === 404) { // Pas d'inscription trouvée
-          throw new Error(t.login.toast.errorNotEnrolled || "Vous n'êtes pas inscrit pour l'année scolaire en cours. Veuillez contacter l'administration.");
-        }
-        if (!inscriptionsRes.ok) { // Autre erreur serveur
-          throw new Error(t.login.toast.errorEnrollment || "Erreur lors de la vérification de votre inscription.");
-        }
-        const inscriptions = await inscriptionsRes.json();
-        const hasActiveInscription = inscriptions.some((insc: any) => insc.actif);
-
-        if (!hasActiveInscription) {
-          throw new Error(t.login.toast.errorNotEnrolled || "Vous n'êtes pas inscrit pour l'année scolaire en cours. Veuillez contacter l'administration.");
-        }
+        await validateStudentEnrollment(user.id);
       }
 
-      setLoginSuccess(true);
-
-      setTimeout(() => {
-        setRedirecting(true);
-        
-        setTimeout(() => {
-          login(access_token, user);
-          navigate('/dashboard');
-        }, 1500);
-      }, 1500);
+      handleLoginSuccess(access_token, user);
     } catch (error: any) {
       toast({
         title: t.login.toast.loginFailedTitle || "Échec de la connexion",
         description: error.message,
         variant: "destructive",
       });
+    } finally {
       setIsLoading(false);
     }
   };
@@ -617,12 +588,13 @@ export function LoginForm() {
                   transition={{ delay: 0.8 }}
                   className={`text-sm ${language === 'ar' ? 'text-left' : 'text-right'} pt-1`}
                 >
-                  <a 
-                    href="/mot-de-passe-oublie" 
+                  <button
+                    type="button"
+                    onClick={() => navigate('/mot-de-passe-oublie')}
                     className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline transition-colors font-medium"
                   >
                     {t.login.forgotPassword}
-                  </a>
+                  </button>
                 </motion.div>
 
                 {/* Submit Button */}

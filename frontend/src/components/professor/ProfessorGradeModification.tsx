@@ -8,6 +8,7 @@ import { BookOpen, Save, Loader2, AlertCircle, CalendarDays } from 'lucide-react
 import { toast } from '@/hooks/use-toast';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
+import apiClient from '@/lib/apiClient';
 
 // --- Interfaces ---
 interface Utilisateur { id: number; nom: string; prenom: string; }
@@ -49,8 +50,6 @@ interface ProcessedAffectation {
   anneeScolaireId: number;
   anneeScolaireLibelle: string;
 }
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const API_BASE_URL = `${API_URL}/api`;
 
 export function ProfessorGradeModification() {
   const { t, language } = useLanguage();
@@ -80,8 +79,8 @@ const [allMatieres, setAllMatieres] = useState<Matiere[]>([]);
       if (!user) return;
       setIsLoading(true);
       try {
-        const configRes = await fetch(`${API_BASE_URL}/configuration`);
-        const configData = await configRes.json();
+        const configRes = await apiClient.get('/configuration');
+        const configData = configRes.data;
         
         let anneeId: number | undefined;
         if (Array.isArray(configData) && configData.length > 0) {
@@ -92,16 +91,16 @@ const [allMatieres, setAllMatieres] = useState<Matiere[]>([]);
 
         if (!anneeId) throw new Error(t.common.missingConfig);
         
-     const [anneeRes, affectationsRes, trimestresRes, allClassesRes, allMatieresRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/annees-academiques/${anneeId}`),
-        fetch(`${API_BASE_URL}/affectations?include=professeur,matiere,classe,annee_scolaire`),
-        fetch(`${API_BASE_URL}/trimestres?anneeScolaireId=${anneeId}`),
-        fetch(`${API_BASE_URL}/classes`),
-        fetch(`${API_BASE_URL}/matieres`), // Nouvelle requête pour les matières
-      ]);
-        setActiveAnnee(await anneeRes.json());
+        const [anneeRes, affectationsRes, trimestresRes, allClassesRes, allMatieresRes] = await Promise.all([
+          apiClient.get(`/annees-academiques/${anneeId}`),
+          apiClient.get('/affectations?include=professeur,matiere,classe,annee_scolaire'),
+          apiClient.get(`/trimestres?anneeScolaireId=${anneeId}`),
+          apiClient.get('/classes'),
+          apiClient.get('/matieres'),
+        ]);
+        setActiveAnnee(anneeRes.data);
 
-        const rawAffectations: AffectationApiResponse[] = await affectationsRes.json();
+        const rawAffectations: AffectationApiResponse[] = affectationsRes.data;
         const processed = rawAffectations.map(aff => {
           if (!aff.professeur || !aff.matiere || !aff.classe || !aff.annee_scolaire) {
             console.warn('WARN:', t.gradeInput.invalidAssignment(aff));
@@ -121,13 +120,12 @@ const [allMatieres, setAllMatieres] = useState<Matiere[]>([]);
         }).filter(Boolean) as ProcessedAffectation[];
         setProcessedAffectations(processed);
 
-        setAllClasses(await allClassesRes.json());
-        setTrimestres(await trimestresRes.json());
-              setAllMatieres(await allMatieresRes.json()); // Initialisez allMatieres
+        setAllClasses(allClassesRes.data);
+        setTrimestres(trimestresRes.data);
+        setAllMatieres(allMatieresRes.data);
 
-
-      } catch (error) {
-        toast({ title: t.common.error, description: (error as Error).message, variant: "destructive" });
+      } catch (error: any) {
+        toast({ title: t.common.error, description: error.response?.data?.message || (error as Error).message, variant: "destructive" });
       } finally {
         setIsLoading(false);
       }
@@ -157,20 +155,19 @@ const [allMatieres, setAllMatieres] = useState<Matiere[]>([]);
     if (!selectedClassId || !currentMatiere || !selectedTermId || !activeAnnee) return;
     setIsLoading(true);
     try {
-      const inscriptionsRes = await fetch(`${API_BASE_URL}/inscriptions?classeId=${selectedClassId}&anneeScolaireId=${activeAnnee.id}`);
-      const inscriptions = await inscriptionsRes.json();
+      const inscriptionsRes = await apiClient.get(`/inscriptions?classeId=${selectedClassId}&anneeScolaireId=${activeAnnee.id}`);
+      const inscriptions = inscriptionsRes.data;
       setEleves(inscriptions.map((i: any) => i.utilisateur));
 
       // Correction : Le paramètre pour filtrer par trimestre est `trimestre`.
-      const evalsRes = await fetch(`${API_BASE_URL}/evaluations?classeId=${selectedClassId}&matiereId=${currentMatiere.id}&trimestre=${selectedTermId}&anneeScolaireId=${activeAnnee.id}`);
-      const evalsData = await evalsRes.json();
+      const evalsRes = await apiClient.get(`/evaluations?classeId=${selectedClassId}&matiereId=${currentMatiere.id}&trimestre=${selectedTermId}&anneeScolaireId=${activeAnnee.id}`);
+      const evalsData = evalsRes.data;
       setEvaluations(evalsData);
 
       const evalIds = evalsData.map((e: Evaluation) => e.id);
       if (evalIds.length > 0) {
-       const notesRes = await fetch(`${API_BASE_URL}/notes?evaluationIds=${evalIds.join(',')}`);
-const notesData: NotePayload[] = await notesRes.json();
-console.log('Fetched notes:', notesData); // Ajoutez ce log
+        const notesRes = await apiClient.get(`/notes?evaluationIds=${evalIds.join(',')}`);
+        const notesData: NotePayload[] = notesRes.data;
         
        const notesMap = notesData.reduce((acc, apiNote) => {
   // Utilisez evaluation_id et etudiant_id directement s'ils existent,
@@ -192,8 +189,8 @@ console.log('Fetched notes:', notesData); // Ajoutez ce log
       } else {
         setNotes({});
       }
-    } catch (error) {
-      toast({ title: t.common.error, description: (error as Error).message, variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: t.common.error, description: error.response?.data?.message || (error as Error).message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -237,37 +234,23 @@ const professorClasses = useMemo(() => {
 
  const handleSaveGrades = async () => {
   setIsSaving(true);
+  const notesToUpdate = Object.values(notes).filter(
+    note => note.id && note.note !== '' && !isNaN(Number(note.note))
+  );
   try {
-    // Ne traiter que les notes valides et existantes (avec un ID)
-    const notesToUpdate = Object.values(notes).filter(
-      note => note.id && note.note !== '' && !isNaN(Number(note.note))
+
+    const promises = notesToUpdate.map(note =>
+      apiClient.put(`/notes/${note.id}`, { note: Number(note.note) })
     );
 
-    const promises = notesToUpdate.map(note => {
-      const token = localStorage.getItem('token');
-      return fetch(`${API_BASE_URL}/notes/${note.id}`, {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}` 
-        },
-        body: JSON.stringify({ 
-          note: Number(note.note) 
-        }),
-      });
-    });
+    await Promise.all(promises);
 
-    const results = await Promise.all(promises);
-    const failed = results.filter(res => !res.ok);
-
-    if (failed.length > 0) {
-      throw new Error(`${failed.length} notes non mises à jour`);
-    }
-
-    toast({ title: 'Succès', description: 'Notes mises à jour !' });
+    toast({ title: t.common.success, description: t.professorGradeView.success.gradesUpdated });
     fetchClassData(); // Recharge les données
-  } catch (error) {
-    toast({ title: 'Erreur', description: error.message, variant: 'destructive' });
+ } catch (error: any) {
+    const errorMessage = error.response?.data?.message || (error as Error).message || t.common.unknownError;
+    const description = `${notesToUpdate.length} ${t.professorGradeView.errors.updateFailed || 'notes non mises à jour'}: ${errorMessage}`;
+    toast({ title: t.common.error, description, variant: "destructive" });
   } finally {
     setIsSaving(false);
   }
