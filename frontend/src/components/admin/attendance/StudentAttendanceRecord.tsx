@@ -263,6 +263,7 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques, t
   const [availableSessions, setAvailableSessions] = useState<{ heure_debut: string, heure_fin: string }[]>([]);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('');
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   const dateFnsLocale = language === 'ar' ? ar : fr;
 
@@ -541,7 +542,7 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques, t
             <label htmlFor="select-date-daily" className="text-sm font-medium text-gray-700 dark:text-gray-300">
               {t.attendance.sessionDate}
             </label>
-            <Popover>
+            <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
               <PopoverTrigger asChild>
                 <Button
                   id="select-date-daily"
@@ -559,7 +560,12 @@ export function ProfessorAttendance({ selectedSchoolYearId, anneesAcademiques, t
   <Calendar
     mode="single"
     selected={date}
-    onSelect={(d) => d && setDate(d)}
+                  onSelect={(d) => {
+                    if (d) {
+                      setDate(d);
+                      setIsCalendarOpen(false);
+                    }
+                  }}
     className="p-3"
     classNames={{
       table: "w-full border-collapse", // s'assure que les jours s'affichent correctement
@@ -790,6 +796,8 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques, t,
   const [absenceRecords, setAbsenceRecords] = useState<AbsenceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingClasses, setIsLoadingClasses] = useState(false);
+  const [isStartDatePickerOpen, setIsStartDatePickerOpen] = useState(false);
+  const [isEndDatePickerOpen, setIsEndDatePickerOpen] = useState(false);
 
   const dateFnsLocale = language === 'ar' ? ar : fr;
 
@@ -978,7 +986,12 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques, t,
                 <Calendar
                   mode="single"
                   selected={startDate}
-                  onSelect={(d) => d && setStartDate(d)}
+                  onSelect={(d) => {
+                    if (d) {
+                      setStartDate(d);
+                      setIsStartDatePickerOpen(false);
+                    }
+                  }}
                   initialFocus
                   locale={dateFnsLocale}
                           className="pointer-events-auto dark:bg-gray-800"
@@ -991,7 +1004,7 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques, t,
           <div className="space-y-2">
 <label htmlFor="filter-end-date-tracking" className="text-sm font-medium text-gray-700 dark:text-gray-300">              {t.common.endDate}
             </label>
-            <Popover>
+            <Popover open={isEndDatePickerOpen} onOpenChange={setIsEndDatePickerOpen}>
               <PopoverTrigger asChild>
                 <Button
                   id="filter-end-date-tracking"
@@ -1009,7 +1022,12 @@ export function AttendanceTracking({ selectedSchoolYearId, anneesAcademiques, t,
                 <Calendar
                   mode="single"
                   selected={endDate}
-                  onSelect={(d) => d && setEndDate(d)}
+                  onSelect={(d) => {
+                    if (d) {
+                      setEndDate(d);
+                      setIsEndDatePickerOpen(false);
+                    }
+                  }}
                   initialFocus
                   locale={dateFnsLocale}
                           className="pointer-events-auto dark:bg-gray-800"

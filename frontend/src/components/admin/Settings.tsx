@@ -20,16 +20,32 @@ import {
 } from '@/components/ui/form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { Eye, EyeOff, Mail, Phone} from 'lucide-react';
+import { Eye, EyeOff, Mail, Phone, Plus, Trash2, Edit, Save, X, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useEstablishmentInfo } from '@/contexts/EstablishmentInfoContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import apiClient from '@/lib/apiClient';
+
+interface Bloc {
+  id: number;
+  nom: string;
+  adresse?: string | null;
+  telephone?: string | null;
+  userCount?: number;
+}
 
 export function Settings() {
   const { toast } = useToast();
@@ -45,6 +61,20 @@ export function Settings() {
     address: "",
     website: ""
   });
+
+  // Blocs state
+  const [blocs, setBlocs] = useState<Bloc[]>([]);
+  const [isLoadingBlocs, setIsLoadingBlocs] = useState(true);
+  const [isAddingBloc, setIsAddingBloc] = useState(false);
+  const [blocFormData, setBlocFormData] = useState({
+    nom: '',
+    adresse: '',
+    telephone: ''
+  });
+  const [editingBloc, setEditingBloc] = useState<Bloc | null>(null);
+  const [deletingBloc, setDeletingBloc] = useState<Bloc | null>(null);
+  const [isSavingBloc, setIsSavingBloc] = useState(false);
+
 
   // Notification settings
   const [notificationSettings, setNotificationSettings] = useState({
@@ -98,6 +128,22 @@ export function Settings() {
     }
     return t.common.unknownYear;
   }, [academicYearsList, t]);
+
+  const fetchBlocs = useCallback(async () => {
+    setIsLoadingBlocs(true);
+    try {
+      const response = await apiClient.get('/blocs');
+      setBlocs(response.data);
+    } catch (error: any) {
+      toast({
+        title: t.common.error,
+        description: `${t.settings.blocManagement?.errorLoading || "Erreur lors du chargement des blocs"}: ${error.message}.`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingBlocs(false);
+    }
+  }, [t, toast]);
 
   const fetchAcademicYears = async () => {
     try {
@@ -182,6 +228,7 @@ export function Settings() {
     const loadAcademicData = async () => {
       setIsLoadingAcademicConfig(true);
       await fetchAcademicYears();
+      await fetchBlocs();
       await fetchEstablishmentInfo();
     };
     loadAcademicData();
@@ -266,6 +313,69 @@ export function Settings() {
     } finally {
       setIsSavingPassword(false);
     }
+  };
+
+  const handleSaveBloc = async () => {
+    if (!blocFormData.nom.trim()) {
+      toast({ title: t.common.error, description: t.settings.blocManagement?.errorNameEmpty || "Le nom du bloc ne peut pas être vide.", variant: "destructive" });
+      return;
+    }
+    setIsSavingBloc(true);
+    try {
+      if (editingBloc) {
+        await apiClient.put(`/blocs/${editingBloc.id}`, blocFormData);
+        toast({ title: t.common.success, description: t.settings.blocManagement?.successUpdate || "Bloc mis à jour avec succès." });
+      } else {
+        await apiClient.post('/blocs', blocFormData);
+        toast({ title: t.common.success, description: t.settings.blocManagement?.successAdd || "Bloc ajouté avec succès." });
+      }
+      await fetchBlocs();
+      handleCancelEdit(); // Réinitialise le formulaire et ferme
+    } catch (error: any) {
+      toast({
+        title: t.common.error,
+        description: error.response?.data?.message || error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingBloc(false);
+    }
+  };
+
+  const handleDeleteBloc = async () => {
+    if (!deletingBloc) return;
+    setIsSavingBloc(true);
+    try {
+      await apiClient.delete(`/blocs/${deletingBloc.id}`);
+      toast({ title: t.common.success, description: t.settings.blocManagement?.successDelete || "Bloc supprimé avec succès." });
+      await fetchBlocs();
+      setDeletingBloc(null);
+    } catch (error: any) {
+      toast({ title: t.common.error, description: error.response?.data?.message || error.message, variant: "destructive" });
+    } finally {
+      setIsSavingBloc(false);
+    }
+  };
+
+    const handleBlocFormChange = (field: keyof typeof blocFormData, value: string) => {
+    setBlocFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleEditBloc = (bloc: Bloc) => {
+    setEditingBloc(bloc);
+    setBlocFormData({
+      nom: bloc.nom,
+      adresse: bloc.adresse || '',
+      telephone: bloc.telephone || ''
+    });
+    setIsAddingBloc(true);
+  };
+
+
+  const handleCancelEdit = () => {
+    setEditingBloc(null);
+    setBlocFormData({ nom: '', adresse: '', telephone: '' }); // Correction ici
+    setIsAddingBloc(false);
   };
 
   const saveSettings = async () => {
@@ -431,18 +541,18 @@ export function Settings() {
             {t.settings.professionalEmail}
           </p>
           <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-            contact@test.com
+            info.madrastak@gmail.com
           </p>
         </div>
       </div>
     </div>
 
     {/* Contact Maroc */}
-    <a
-      href="tel:+212700360608"
+     <a
+      href="tel:+22241070318"
       className="block px-6 py-4 hover:bg-green-50/40 dark:hover:bg-green-900/10 transition-all"
       onClick={(e) => {
-        if (!confirm(t.settings.confirmCall.replace("{{number}}", "+212 700 360 608")))
+        if (!confirm(t.settings.confirmCall.replace("{{number}}", "+222 41 07 03 18")))
           e.preventDefault();
       }}
     >
@@ -452,16 +562,16 @@ export function Settings() {
         </div>
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <img
-            src="https://flagcdn.com/ma.svg"
+            src="https://flagcdn.com/mr.svg"
             width="22"
-            alt={t.settings.morocco}
+            alt={t.settings.mauritania}
             className="rounded-full border border-gray-300 dark:border-gray-600 shadow-sm"
           />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-900 dark:text-white">
-              {t.settings.supportMorocco}
+              {t.settings.supportMauritania}
             </p>
-            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">+212 700 360 608</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">+222 41 07 03 18</p>
           </div>
         </div>
       </div>
@@ -469,7 +579,7 @@ export function Settings() {
 
     {/* Contact Mauritanie */}
     <a
-      href="tel:+22241513211"
+      href="tel:+22249377834"
       className="block px-6 py-4 hover:bg-green-50/40 dark:hover:bg-green-900/10 transition-all"
       onClick={(e) => {
         if (!confirm(t.settings.confirmCall.replace("{{number}}", "+222 41 07 03 18")))
@@ -704,6 +814,121 @@ export function Settings() {
     </CardFooter>
   </Card>
 </TabsContent>
+
+<Card className="w-full mt-6">
+  <CardHeader>
+    <CardTitle>{t.settings.blocManagement?.title || "Gestion des Blocs"}</CardTitle>
+    <CardDescription>
+      {t.settings.blocManagement?.description || "Ajoutez ou modifiez les blocs (campus) de votre établissement."}
+    </CardDescription>
+  </CardHeader>
+  <CardContent>
+    <div className="space-y-4">
+      {isLoadingBlocs ? (
+        <div className="flex items-center justify-center p-4">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      ) : (
+        <>
+          {blocs.map((bloc) => (
+            <div key={bloc.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-gray-900 dark:text-white truncate">{bloc.nom}</p>
+                  {bloc.userCount > 0 && (
+                    <span className="flex-shrink-0 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-0.5 rounded-full">
+                      {bloc.userCount} {t.common.users}
+                    </span>
+                  )}
+                </div>
+                {bloc.adresse && <p className="text-sm text-gray-500 dark:text-gray-400">{bloc.adresse}</p>}
+                {bloc.telephone && <p className="text-sm text-gray-500 dark:text-gray-400">{bloc.telephone}</p>}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" onClick={() => handleEditBloc(bloc)}>
+                  <Edit className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={() => setDeletingBloc(bloc)}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
+             {blocs.length === 0 && (
+            <p className="text-center text-gray-500 dark:text-gray-400 py-4">
+              {t.settings.blocManagement?.noBlocs || "Aucun bloc n'a été ajouté pour le moment."}
+            </p>
+          )}
+        </>
+      )}
+
+      {isAddingBloc ? (
+      <div className="space-y-4 pt-4 border-t dark:border-gray-700">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormItem>
+              <FormLabel>{t.settings.blocManagement?.nameLabel || "Nom du bloc"} *</FormLabel>
+              <Input
+                value={blocFormData.nom}
+                onChange={(e) => handleBlocFormChange('nom', e.target.value)}
+                placeholder={t.settings.blocManagement?.namePlaceholder || "Ex: bloc Principal"}
+              />
+            </FormItem>
+            <FormItem>
+              <FormLabel>{t.settings.blocManagement?.phoneLabel || "Téléphone"}</FormLabel>
+              <Input
+                value={blocFormData.telephone}
+                onChange={(e) => handleBlocFormChange('telephone', e.target.value)}
+                placeholder={t.settings.blocManagement?.phonePlaceholder || "Ex: +222 41 00 00 00"}
+              />
+            </FormItem>
+            <FormItem className="md:col-span-2">
+              <FormLabel>{t.settings.blocManagement?.addressLabel || "Adresse"}</FormLabel>
+              <Input
+                value={blocFormData.adresse}
+                onChange={(e) => handleBlocFormChange('adresse', e.target.value)}
+                placeholder={t.settings.blocManagement?.addressPlaceholder || "Ex: Rue 123, Ville"}
+              />
+            </FormItem>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={handleCancelEdit}>{t.common.cancel}</Button>
+            <Button onClick={handleSaveBloc} disabled={isSavingBloc}>
+              {isSavingBloc ? <Loader2 className="h-4 w-4 animate-spin" /> : t.common.save}
+            </Button>
+          </div>
+
+        </div>
+      ) : (
+        <Button variant="outline" className="w-full mt-4" onClick={() => setIsAddingBloc(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          {t.settings.blocManagement?.addButton || "Ajouter un bloc"}
+        </Button>
+      )}
+    </div>
+  </CardContent>
+</Card>
+<Dialog open={!!deletingBloc} onOpenChange={() => setDeletingBloc(null)}>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>{t.settings.blocManagement?.deleteTitle || "Confirmer la suppression"}</DialogTitle>
+      <DialogDescription>
+        {deletingBloc && deletingBloc.userCount > 0 ? (
+          (t.settings.blocManagement?.deleteConflict || "Impossible de supprimer ce bloc car {count} utilisateur(s) y sont encore affecté(s). Veuillez d'abord réaffecter ces utilisateurs.").replace('{count}', String(deletingBloc.userCount))
+        ) : (
+          `${t.settings.blocManagement?.deleteConfirmation || "Êtes-vous sûr de vouloir supprimer le bloc"} "${deletingBloc?.nom}" ? ${t.settings.blocManagement?.deleteWarning || "Cette action est irréversible."}`
+        )}
+      </DialogDescription>
+    </DialogHeader>
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setDeletingBloc(null)}>{t.common.close}</Button>
+      {deletingBloc && deletingBloc.userCount === 0 && (
+        <Button variant="destructive" onClick={handleDeleteBloc} disabled={isSavingBloc}>
+          {isSavingBloc ? <Loader2 className="h-4 w-4 animate-spin" /> : t.common.delete}
+        </Button>
+      )}
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
       </Tabs>
     </div>
   );

@@ -98,11 +98,15 @@ missingFields: "Champs manquants",
         schoolYear: "Année Scolaire",
         trimester: "Trimestre",
         all: "Tous",
+        allLevels: "Tous les Niveaux",
         allClasses: "Toutes les classes",
         allYears: "Toutes les années",
         allSubjects: "Toutes les matières",
         selectAnOption: "Sélectionner une option",
         selectAClass: "Sélectionner une classe",
+        allBlocs: "Tous les blocs",
+        filterByBloc: "Filtrer par bloc",
+       
         selectASubject: "Sélectionner une matière",
         selectAYear: "Sélectionner une année",
         selectATrimester: "Sélectionner un trimestre",
@@ -302,7 +306,7 @@ accounting: {
             accounting: "Comptabilité",
             payments: "Paiements",
 
-
+        historique: "Historique",
         schedule: "Emploi du Temps", // Moved here from the error context for schedule
         attendance: "Gestion des Absences",
         reports: "Bulletins Scolaires",
@@ -441,18 +445,28 @@ accounting: {
       studentDistribution: "Répartition des élèves par niveau",
       genderDistribution: "Répartition des élèves par genre",
       classAverages: "Moyenne générale par classe",
+      studentDistributionByClass: "Répartition des élèves par classe",
       subjectAverages: "Moyenne par matière",
       averageEvolution: "Évolution des moyennes par trimestre",
       attendanceRate: "Taux d'assiduité par classe",
       attendanceEvolution: "Évolution de l'assiduité au cours de l'année",
       averageOutOf20: "Moyenne sur 20",
       average: "Moyenne",
-      attendanceRatePercent: "Taux d'assiduité (%)"
+      attendanceRatePercent: "Taux d'assiduité (%)",
+      successRates: {
+        title: "Analyse des Taux de Réussite",
+        description: "Visualisez les taux de réussite par matière et par classe pour la période sélectionnée."
+      },
+      subjectSuccessRate: "Taux de réussite par matière",
+      successRate: "Taux de réussite",
+      classSuccessRate: "Taux de réussite par classe"
     },
     noData: {
       studentDistribution: "Aucune donnée de répartition des élèves",
       genderDistribution: "Aucune donnée de répartition par genre",
+      classSuccessRate: "Aucune donnée sur le taux de réussite par classe",
       classAverages: "Aucune donnée de moyenne par classe",
+      subjectSuccessRate: "Aucune donnée sur le taux de réussite par matière",
       subjectAverages: "Aucune donnée de moyenne par matière",
       averageEvolution: "Aucune donnée d'évolution des moyennes",
       attendanceRate: "Aucune donnée d'assiduité par classe",
@@ -467,7 +481,8 @@ accounting: {
       male: "Garçons",
       female: "Filles",
       other: "Autre"
-    }
+    },
+    zeroValueNote: "Note : Une valeur de 0 peut indiquer une absence de données ou une performance réellement nulle."
   },
 
     userManagement: {
@@ -541,6 +556,8 @@ roles: {
             activeAccount: "Compte actif",
             createUser: "Créer l'utilisateur(rice)",
             updateUser: "Mettre à jour l'utilisateur",
+            affectToBlocs: "Affectation aux Blocs",
+
         },
         registrationForm: {
             title: "Ajouter une nouvelle inscription",
@@ -684,6 +701,7 @@ studentAttendance: {
         allClasses: "Toutes les classes",
         loadingAdmin: "Chargement des données administratives...",
         errorAdmin: "Impossible de charger les données administratives.",
+        errorNoYear: "Aucune année scolaire n'a été trouvée ou configurée. Veuillez en créer une dans la gestion scolaire.",
         stats: {
             students: "Élèves",
             professors: "Professeurs",
@@ -854,6 +872,13 @@ whatsappMessage: "🔔 Notification disciplinaire 🔔\n\nÉlève: {student}\nMo
         encouragement: "Encouragements",
         warning: "Avertissement"
       },
+      councilComments: {
+        passedWithHonors: "Passe en classe supérieure avec les félicitations du conseil.",
+        passed: "Passe en classe supérieure.",
+        passedWithEncouragement: "Passe en classe supérieure avec les encouragements du conseil.",
+        retake: "Doit faire ses preuves.",
+        failed: "Redoublement proposé par le conseil de classe."
+      },
       comments: {
         excellent: "Élève excellent, continuez ainsi !",
         veryGood: "Très bon travail, peut encore progresser",
@@ -937,6 +962,12 @@ previewDescription: "Vérifiez le bulletin scolaire avant impression ou exportat
         noStudentOrGrade: "Aucun élève trouvé ou aucune évaluation saisie.",
         noStudentOrGradeHint: "Vérifiez les données d'inscriptions ou les évaluations.",
         generated: "Généré",
+         orientationDialog: {
+      title: "Orientation du bulletin",
+      description: "Choisissez l'orientation pour l'impression du bulletin.",
+      portrait: "Portrait",
+      landscape: "Paysage"
+    },
         preview: "Prévisualiser",
         searchStudent: "Rechercher un élève...",
         selectPrompt: "Veuillez sélectionner une année scolaire, une classe et un trimestre pour consulter les bulletins.",
@@ -1246,6 +1277,7 @@ checkOtherDays: "Vérifiez les autres jours",
     schoolManagement: {
         title: "Gestion Scolaire",
         levels: {
+      title: "Niveau",
       primary: "Primaire",
       middle: "Collège",
       high: "Lycée"
@@ -1306,6 +1338,8 @@ checkOtherDays: "Vérifiez les autres jours",
                 description: "Remplissez les informations requises pour créer une nouvelle classe",
                 personalInfo: "INFORMATIONS PERSONNELLES",
                 nameLabel: "Nom de la classe",
+                tuitionFeesLabel: "Frais de scolarité",
+                tuitionFeeAutofilled: "Frais de scolarité pré-remplis basés sur la classe existante : {className}.",
                       errorAdd: "Une erreur est survenue lors de l'ajout de la classe.",
 
                 namePlaceholder: "Ex: 3AS1, 4ème B, CP2...",
@@ -1491,6 +1525,27 @@ responseTime: "Réponse immédiate",
   availableDays: "6j/7",
   availableHours: "de 9h à 18h",
   
+  blocManagement: {
+    title: "Gestion des Blocs",
+    description: "Ajoutez ou modifiez les blocs (campus) de votre établissement.",
+    errorLoading: "Erreur lors du chargement des blocs",
+    noBlocs: "Aucun bloc n'a été ajouté pour le moment.",
+    nameLabel: "Nom du bloc",
+    namePlaceholder: "Ex: Campus Principal",
+    phoneLabel: "Téléphone",
+    phonePlaceholder: "Ex: +222 41 00 00 00",
+    addressLabel: "Adresse",
+    addressPlaceholder: "Ex: Rue 123, Ville",
+    addButton: "Ajouter un bloc",
+    deleteTitle: "Confirmer la suppression",
+    deleteConfirmation: "Êtes-vous sûr de vouloir supprimer le bloc",
+    deleteWarning: "Cette action est irréversible.",
+    deleteConflict: "Impossible de supprimer ce bloc car {count} utilisateur(s) y sont encore affecté(s). Veuillez d'abord réaffecter ces utilisateurs.",
+    errorNameEmpty: "Le nom du bloc ne peut pas être vide.",
+    successUpdate: "Bloc mis à jour avec succès.",
+    successAdd: "Bloc ajouté avec succès.",
+    successDelete: "Bloc supprimé avec succès.",
+  },
 },
 
   security: {

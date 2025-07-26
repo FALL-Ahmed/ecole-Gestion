@@ -1,16 +1,29 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  Scope,
+  Inject,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, ILike, In } from 'typeorm';
+import { Repository, Between, ILike, In, FindOptionsWhere } from 'typeorm';
 import { Absence } from './absence.entity';
 import { CreateAbsenceDto } from './dto/create-absence.dto';
 import { UpdateAbsenceDto } from './dto/update-absence.dto';
 import { BulkCreateAbsenceDto } from './dto/bulk-create-absence.dto';
-import { AuditLogService } from '../historique/historique.service'; // adapte le chemin
-import { User}from '../users/user.entity';
+import { AuditLogService } from '../historique/historique.service';
+import { User } from '../users/user.entity';
 import { Classe } from '../classe/classe.entity';
+import { REQUEST } from '@nestjs/core';
+import { Request } from 'express';
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class AbsenceService {
+  private readonly logger = new Logger(AbsenceService.name);
+
   constructor(
     @InjectRepository(Absence)
     private readonly absenceRepository: Repository<Absence>,
@@ -20,10 +33,56 @@ export class AbsenceService {
     private readonly utilisateurRepository: Repository<User>,
     @InjectRepository(Classe)
     private readonly classeRepository: Repository<Classe>,
-    
+    @Inject(REQUEST) private readonly request: Request,
   ) {}
 
-  async create(createAbsenceDto: CreateAbsenceDto, utilisateurId: number): Promise<Absence> {
+  private getBlocId(): number | null {
+    const user = this.request.user as any;
+
+    if (user && user.blocId) {
+      return user.blocId;
+    }
+
+    const queryBlocId = this.request.query.blocId;
+    if (queryBlocId && !isNaN(parseInt(queryBlocId as string, 10))) {
+      return parseInt(queryBlocId as string, 10);
+    }
+
+    this.logger.warn(`[getBlocId] Aucun blocId trouvé pour l'utilisateur ${user?.email}.`);
+    return null;
+  }
+
+  private async verifyParentAccess(eleveId: number): Promise<void> {
+    const user = this.request.user as any;
+    if (user.role !== 'parent') {
+      return;
+    }
+
+    const parentId = user.id;
+    const student = await this.utilisateurRepository.findOne({
+      where: { id: eleveId },
+    });
+
+    if (!student || student.parentId !== parentId) {
+      throw new ForbiddenException("Accès non autorisé aux données de cet élève.");
+    }
+  }
+
+  async create(createAbsenceDto: CreateAbsenceDto): Promise<Absence> {
+    const user = this.request.user as any;
+    const utilisateurId = user.id;
+    const blocId = this.getBlocId();
+
+    if (!blocId) {
+      throw new BadRequestException("L'identifiant du bloc est requis.");
+    }
+
+    // Security check: ensure the class belongs to the user's bloc
+    const classe = await this.classeRepository.findOneBy({ id: createAbsenceDto.classe_id, blocId: blocId });
+    if (!classe) {
+      throw new ForbiddenException(`La classe avec l'ID ${createAbsenceDto.classe_id} n'existe pas dans votre établissement.`);
+    }
+
     const absence = this.absenceRepository.create(createAbsenceDto);
     const saved = await this.absenceRepository.save(absence);
 // Re-fetch to get relations for the log
@@ -36,6 +95,7 @@ export class AbsenceService {
     // Audit création
 await this.auditLogService.logAction({
         userId: utilisateurId,
+      blocId,
       action: 'CREATE',
       entite: 'Absence',
       entiteId: saved.id,
@@ -48,15 +108,26 @@ await this.auditLogService.logAction({
 
   async createOrUpdateBulk(
     bulkDto: BulkCreateAbsenceDto,
-    utilisateurId: number,
   ): Promise<{ created: number; updated: number; deleted: number }> {
     let createdCount = 0;
     let updatedCount = 0;
     let deletedCount = 0;
+    const user = this.request.user as any;
+    const utilisateurId = user.id;
+    const blocId = this.getBlocId();
+
+    if (!blocId) {
+      throw new BadRequestException("L'identifiant du bloc est requis.");
+    }
+
 // --- Pré-chargement des données pour l'historique ---
     const studentIds = [...new Set(bulkDto.details.map(d => d.etudiant_id))];
     const students = await this.utilisateurRepository.find({ where: { id: In(studentIds) } });
-    const classe = await this.classeRepository.findOne({ where: { id: bulkDto.classe_id } });
+    // Security check: ensure the class belongs to the user's bloc
+    const classe = await this.classeRepository.findOne({ where: { id: bulkDto.classe_id, blocId: blocId } });
+    if (!classe) {
+      throw new ForbiddenException(`La classe avec l'ID ${bulkDto.classe_id} n'existe pas dans votre établissement.`);
+    }
 
     const studentMap = new Map(students.map(s => [s.id, s]));
     const className = classe ? classe.nom : `ID ${bulkDto.classe_id}`;
@@ -74,6 +145,7 @@ await this.auditLogService.logAction({
           deletedCount++;
 await this.auditLogService.logAction({
             userId: utilisateurId,
+            blocId,
             action: 'DELETE',
             entite: 'Absence',
             entiteId: detail.existingAbsenceId,
@@ -100,6 +172,7 @@ await this.auditLogService.logAction({
           updatedCount++;
 await this.auditLogService.logAction({
               userId: utilisateurId,
+            blocId,
             action: 'UPDATE',
             entite: 'Absence',
             entiteId: detail.existingAbsenceId,
@@ -113,6 +186,7 @@ await this.auditLogService.logAction({
           createdCount++;
 await this.auditLogService.logAction({
             userId: utilisateurId,
+            blocId,
             action: 'CREATE',
             entite: 'Absence',
             entiteId: savedAbsence.id,
@@ -138,7 +212,19 @@ await this.auditLogService.logAction({
     heure_fin_param?: string,
     search?: string,
   ): Promise<Absence[]> {
-    const where: any = {};
+    const blocId = this.getBlocId();
+    if (!blocId) {
+      this.logger.warn("[findAll] Aucun blocId fourni, retour d'une liste vide.");
+      return [];
+    }
+
+    if (etudiant_id) {
+      await this.verifyParentAccess(etudiant_id);
+    }
+
+    const where: FindOptionsWhere<Absence> = {
+      classe: { blocId: blocId }
+    };
 
     if (classe_id) where.classe_id = classe_id;
     if (annee_scolaire_id) where.annee_scolaire_id = annee_scolaire_id;
@@ -152,19 +238,19 @@ await this.auditLogService.logAction({
     } else if (date_debut) {
       where.date = date_debut;
     }
-
+    
     if (search) {
       return this.absenceRepository.find({
         where: [
-          { ...where, etudiant: { nom: ILike(`%${search}%`) } },
-          { ...where, etudiant: { prenom: ILike(`%${search}%`) } },
-          { ...where, justification: ILike(`%${search}%`) },
+          { ...where, etudiant: { nom: ILike(`%${search}%`) } } as any,
+          { ...where, etudiant: { prenom: ILike(`%${search}%`) } } as any,
+          { ...where, justification: ILike(`%${search}%`) } as any,
         ],
         relations: ['etudiant', 'matiere', 'classe', 'anneeScolaire'],
         order: { date: 'DESC', heure_debut: 'ASC' },
       });
     }
-
+    
     return this.absenceRepository.find({
       where,
       relations: ['etudiant', 'matiere', 'classe', 'anneeScolaire'],
@@ -173,18 +259,32 @@ await this.auditLogService.logAction({
   }
 
   async findOne(id: number): Promise<Absence> {
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      throw new NotFoundException(`Absence avec l'ID ${id} non trouvée car aucun bloc n'est sélectionné.`);
+    }
+
     const absence = await this.absenceRepository.findOne({
-      where: { id },
+      where: { id, classe: { blocId } },
       relations: ['etudiant', 'matiere', 'classe', 'anneeScolaire'],
     });
     if (!absence) {
-      throw new NotFoundException(`Absence with ID ${id} not found`);
+      throw new NotFoundException(`Absence avec l'ID ${id} non trouvée dans ce bloc.`);
     }
+
+    await this.verifyParentAccess(absence.etudiant_id);
+
     return absence;
   }
 
-  async update(id: number, updateAbsenceDto: UpdateAbsenceDto, utilisateurId: number): Promise<Absence> {
-    const absence = await this.findOne(id);
+  async update(id: number, updateAbsenceDto: UpdateAbsenceDto): Promise<Absence> {
+    const user = this.request.user as any;
+    const utilisateurId = user.id;
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      throw new UnauthorizedException("Action non autorisée en dehors du contexte d'un bloc.");
+    }
+    const absence = await this.findOne(id); // findOne performs security checks
         const originalAbsence = { ...absence };
 
     if (updateAbsenceDto.justifie !== undefined) {
@@ -201,6 +301,7 @@ await this.auditLogService.logAction({
 
 await this.auditLogService.logAction({
         userId: utilisateurId,
+      blocId,
       action: 'UPDATE',
       entite: 'Absence',
       entiteId: id,
@@ -211,22 +312,32 @@ await this.auditLogService.logAction({
     return updatedAbsence;
     }
 
- async remove(id: number, utilisateurId: number): Promise<void> {
-    // La méthode remove a déjà été mise à jour dans la réponse précédente.
-    // Je la laisse ici pour la cohérence.
-    const absence = await this.findOne(id); // findOne inclut les relations
+  async remove(id: number): Promise<void> {
+    const user = this.request.user as any;
+    const utilisateurId = user.id;
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      throw new UnauthorizedException("Action non autorisée en dehors du contexte d'un bloc.");
+    }
+
+    // findOne will perform security checks (blocId and parent access)
+    const absence = await this.findOne(id);
+
     const nomEleve = absence.etudiant ? `${absence.etudiant.prenom} ${absence.etudiant.nom}` : `ID ${absence.etudiant_id}`;
     const nomClasse = absence.classe ? absence.classe.nom : `ID ${absence.classe_id}`;
 
-await this.auditLogService.logAction({      userId: utilisateurId,
+    await this.auditLogService.logAction({
+      userId: utilisateurId,
+      blocId,
       action: 'DELETE',
       entite: 'Absence',
       entiteId: id,
       description: `Absence pour l'élève ${nomEleve} (Classe: ${nomClasse}) supprimée.`,
       details: absence,
-    });    const result = await this.absenceRepository.delete(id);
+    });
+    const result = await this.absenceRepository.delete(absence.id);
     if (result.affected === 0) {
-      throw new NotFoundException(`Absence with ID ${id} not found`);
+      throw new NotFoundException(`Absence avec l'ID ${id} non trouvée dans ce bloc.`);
     }
   }
 }

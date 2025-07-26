@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, UnprocessableEntityException } from '@nestjs/common';
 import helmet from 'helmet';
 
 async function bootstrap() {
@@ -10,7 +10,25 @@ async function bootstrap() {
 
   // Sécurité
   app.use(helmet());
-  app.useGlobalPipes(new ValidationPipe());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      // Formate les erreurs pour qu'elles soient plus faciles à utiliser sur le frontend
+      exceptionFactory: (errors) => {
+        const formattedErrors = errors.reduce((acc: Record<string, string[]>, err) => {
+          acc[err.property] = err.constraints ? Object.values(err.constraints) : [];
+          return acc;
+        }, {});
+        // Utilise le statut 422, plus sémantique pour les erreurs de validation
+        return new UnprocessableEntityException({
+          message: formattedErrors,
+          error: 'Unprocessable Entity',
+          statusCode: 422,
+        });
+      },
+    }),
+  );
 
   // CORS dynamique
   app.enableCors({

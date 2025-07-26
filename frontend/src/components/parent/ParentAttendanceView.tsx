@@ -3,18 +3,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { StudentAttendance } from '../student/StudentAttendance';
 import { Loader2 } from 'lucide-react';
 import { useParentChildren } from '@/hooks/useParentChildren';
-import { ChildSelector } from './ChildSelector';
-
-
-interface Child {
-  id: number;
-  prenom: string;
-  nom: string;
-  classe: {
-    id: number;
-    nom: string;
-  };
-}
+import { ChildSelector, Child } from './ChildSelector';
 
 export function ParentAttendanceView() {
   const { t, language } = useLanguage();
@@ -66,9 +55,14 @@ export function ParentAttendanceView() {
 
       <ChildSelector children={children} selectedChild={selectedChild} onChildChange={setSelectedChild} />
 
-      {selectedChild && (
-        <StudentAttendance key={selectedChild} userId={selectedChild} />
-      )}
+      {selectedChild && (() => {
+        const selectedChildDetails = children.find(c => c.id === selectedChild);
+        return selectedChildDetails ? (
+          <div className="mt-6">
+            <StudentAttendance key={selectedChild} userId={selectedChild} blocId={selectedChildDetails.blocId} />
+          </div>
+        ) : null;
+      })()}
     </div>
   );
 }

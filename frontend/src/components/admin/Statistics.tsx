@@ -3,6 +3,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
@@ -138,6 +139,11 @@ interface GradeChartItem {
 interface SubjectSuccessRateItem {
   name: string;
   taux: number;
+}
+
+interface SuccessRateChartItem {
+  name: string;
+  tauxReussite: number;
 }
 
 const COLORS_PIE = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#A28CF2', '#FF6699'];
@@ -347,8 +353,8 @@ const translateSubject = (subjectName: string): string => {
         setLoading(prev => ({ ...prev, absences: true }));
         fetchData('absences', 'absences', {
           annee_scolaire_id: yearId,
-          date_gte: selectedYear.date_debut,
-          date_lte: selectedYear.date_fin
+          date_debut: selectedYear.date_debut,
+          date_fin: selectedYear.date_fin
         })
           .then(setAbsencesInYear)
           .finally(() => setLoading(prev => ({ ...prev, absences: false })));
@@ -416,47 +422,45 @@ const translateSubject = (subjectName: string): string => {
       }
     });
 
-    const avgDevoirsCurrentTerm = countDevoirsCurrentTerm > 0 ? totalPointsDevoirsCurrentTerm / countDevoirsCurrentTerm : 0;
+    const avgDevoirsCurrentTerm = countDevoirsCurrentTerm > 0 ? totalPointsDevoirsCurrentTerm / countDevoirsCurrentTerm : null;
     let compoT1Note: number | null = null;
     let compoT2Note: number | null = null;
 
     if (currentTrimestreNumero === 2 || currentTrimestreNumero === 3) {
       const trimestre1Obj = allTermsForAcademicYear.find(t => 
         (t.nom.toLowerCase().includes("trimestre 1") || t.nom.includes("1")) && 
-        t.anneeScolaire.id === academicYearId
+        t.anneeScolaire?.id === academicYearId
       );
       if (trimestre1Obj) {
-        const compoT1Eval = allEvalsForYear.find(e =>
- e.matiere?.id === subjectId &&
-          e.trimestre?.id === trimestre1Obj.id &&
-         
-          (e.type?.toLowerCase().includes("composition") || e.type?.toLowerCase().includes("compo")) &&
-          e.classe?.annee_scolaire_id === academicYearId
-        );
-        if (compoT1Eval) {
-          const noteT1 = allNotesForYear.find(n => n.etudiant?.id === studentId && n.evaluation?.id === compoT1Eval.id);
-          compoT1Note = noteT1 ? noteT1.note : null;
-        }
+        const noteT1Obj = allNotesForYear.find(n => {
+          const evalDate = n.evaluation?.date_eval;
+          if (!evalDate) return false;
+          return n.etudiant?.id === studentId &&
+                 n.evaluation?.matiere?.id === subjectId &&
+                 (n.evaluation?.type?.toLowerCase().includes("composition") || n.evaluation?.type?.toLowerCase().includes("compo")) &&
+                 new Date(evalDate) >= new Date(trimestre1Obj.date_debut) &&
+                 new Date(evalDate) <= new Date(trimestre1Obj.date_fin);
+        });
+        compoT1Note = noteT1Obj ? noteT1Obj.note : null;
       }
     }
 
     if (currentTrimestreNumero === 3) {
       const trimestre2Obj = allTermsForAcademicYear.find(t => 
         (t.nom.toLowerCase().includes("trimestre 2") || t.nom.includes("2")) && 
-        t.anneeScolaire.id === academicYearId
+        t.anneeScolaire?.id === academicYearId
       );
       if (trimestre2Obj) {
-        const compoT2Eval = allEvalsForYear.find(e =>
-                   e.matiere?.id === subjectId &&
-          e.trimestre?.id === trimestre2Obj.id &&
-          
-          (e.type?.toLowerCase().includes("composition") || e.type?.toLowerCase().includes("compo")) &&
-          e.classe?.annee_scolaire_id === academicYearId
-        );
-        if (compoT2Eval) {
-          const noteT2 = allNotesForYear.find(n => n.etudiant?.id === studentId && n.evaluation?.id === compoT2Eval.id);
-          compoT2Note = noteT2 ? noteT2.note : null;
-        }
+        const noteT2Obj = allNotesForYear.find(n => {
+          const evalDate = n.evaluation?.date_eval;
+          if (!evalDate) return false;
+          return n.etudiant?.id === studentId &&
+                 n.evaluation?.matiere?.id === subjectId &&
+                 (n.evaluation?.type?.toLowerCase().includes("composition") || n.evaluation?.type?.toLowerCase().includes("compo")) &&
+                 new Date(evalDate) >= new Date(trimestre2Obj.date_debut) &&
+                 new Date(evalDate) <= new Date(trimestre2Obj.date_fin);
+        });
+        compoT2Note = noteT2Obj ? noteT2Obj.note : null;
       }
     }
 
@@ -464,20 +468,20 @@ const translateSubject = (subjectName: string): string => {
     if (currentTrimestreNumero === 1) {
       let somme = 0;
       let poids = 0;
-      if (countDevoirsCurrentTerm > 0) { somme += avgDevoirsCurrentTerm * 3; poids += 3; }
+      if (avgDevoirsCurrentTerm !== null) { somme += avgDevoirsCurrentTerm * 3; poids += 3; }
       if (compositionNoteValueCurrentTerm !== null) { somme += compositionNoteValueCurrentTerm; poids += 1; }
       moyenneMatiere = poids > 0 ? somme / poids : 0;
     } else if (currentTrimestreNumero === 2) {
       let somme = 0;
       let poids = 0;
-      if (countDevoirsCurrentTerm > 0) { somme += avgDevoirsCurrentTerm * 3; poids += 3; }
+      if (avgDevoirsCurrentTerm !== null) { somme += avgDevoirsCurrentTerm * 3; poids += 3; }
       if (compositionNoteValueCurrentTerm !== null) { somme += compositionNoteValueCurrentTerm * 2; poids += 2; }
       if (compoT1Note !== null) { somme += compoT1Note; poids += 1; }
       moyenneMatiere = poids > 0 ? somme / poids : 0;
     } else if (currentTrimestreNumero === 3) {
       let somme = 0;
       let poids = 0;
-      if (countDevoirsCurrentTerm > 0) { somme += avgDevoirsCurrentTerm * 3; poids += 3; }
+      if (avgDevoirsCurrentTerm !== null) { somme += avgDevoirsCurrentTerm * 3; poids += 3; }
       if (compositionNoteValueCurrentTerm !== null) { somme += compositionNoteValueCurrentTerm * 3; poids += 3; }
       if (compoT1Note !== null) { somme += compoT1Note; poids += 1; }
       if (compoT2Note !== null) { somme += compoT2Note * 2; poids += 2; }
@@ -521,9 +525,8 @@ const translateSubject = (subjectName: string): string => {
 
   // Initialisation avec les traductions
   const distribution = {
-    [t.common.gender.female]: 0, 
-    [t.common.gender.male]: 0, 
-    [t.common.gender.other]: 0 
+    [t.common.gender.female]: 0,
+    [t.common.gender.male]: 0,
   };
 
   studentsToProcess.forEach(student => {
@@ -535,27 +538,23 @@ const translateSubject = (subjectName: string): string => {
         distribution[t.common.gender.male]++;
         break;
       default:
-        distribution[t.common.gender.other]++;
+        // On ignore les autres valeurs (ex: null, undefined)
+        break;
     }
   });
 
   return [
-    { 
-      name: t.common.gender.female, 
-      value: distribution[t.common.gender.female], 
-      color: '#FF8042' 
+    {
+      name: t.common.gender.female,
+      value: distribution[t.common.gender.female],
+      color: '#FF8042'
     },
-    { 
-      name: t.common.gender.male, 
-      value: distribution[t.common.gender.male], 
-      color: '#0088FE' 
+    {
+      name: t.common.gender.male,
+      value: distribution[t.common.gender.male],
+      color: '#0088FE'
     },
-    { 
-      name: t.common.gender.other, 
-      value: distribution[t.common.gender.other], 
-      color: '#FFBB28' 
-    },
-  ].filter(item => item.value > 0);
+  ];
 }, [studentsInYear, loading.students, selectedClassId, t]);
 
   const filteredGrades = useMemo(() => {
@@ -690,18 +689,13 @@ const translateSubject = (subjectName: string): string => {
         .map(data => ({
           name: data.className,
           moyenne: data.count > 0 ? parseFloat((data.sumAnnualAverages / data.count).toFixed(2)) : 0,
-        }))
-        .filter(item => item.moyenne > 0);
+        }));
     }
 
     // Complex average calculation for a specific term
-    let classesToProcess = classesForYear;
-    if (selectedClassId !== 'all') {
-      classesToProcess = classesForYear.filter(c => String(c.id) === selectedClassId);
-    } else if (selectedStudentId !== 'all') {
-      const student = studentsInYear.find(s => String(s.id) === selectedStudentId);
-      classesToProcess = student?.classe ? [student.classe] : [];
-    }
+    const classesToProcess = selectedClassId === 'all'
+      ? classesForYear
+      : classesForYear.filter(c => String(c.id) === selectedClassId);
 
     const studentOverallAveragesByClass: { [classId: string]: { 
       sumOfStudentAverages: number; 
@@ -711,22 +705,22 @@ const translateSubject = (subjectName: string): string => {
 
     classesToProcess.forEach(classe => {
       const studentsInThisClass = studentsInYear.filter(s => s.classe?.id === classe.id);
-      const studentsForThisClassAverage = selectedStudentId === 'all'
-        ? studentsInThisClass
-        : studentsInThisClass.filter(s => String(s.id) === selectedStudentId);
-      if (studentsForThisClassAverage.length === 0) return;
+      if (studentsInThisClass.length === 0) return;
 
       const classCoefficients = coefficients.filter(c => Number(c.classe_id) === Number(classe.id));
-      let sumOfStudentAveragesInClass = 0;
+      let sumOfStudentAveragesInClass = 0.0;
       let countOfStudentsWithAveragesInClass = 0;
 
-      studentsForThisClassAverage.forEach(student => {
+      studentsInThisClass.forEach(student => {
         let studentTotalWeightedScore = 0;
         let studentTotalCoefficients = 0;
 
-        const subjectIdsInClass = Array.from(new Set(
-          classCoefficients.filter(c => c.matiere_id != null).map(c => c.matiere_id as number)
-        ));
+        // Correction: Utiliser les affectations pour déterminer les matières réellement enseignées, comme dans les bulletins.
+      const subjectsTaughtInClass = affectations.filter(
+        a => a.classe.id === classe.id && a.annee_scolaire.id === yearIdNum
+      );
+      const subjectIdsInClass = Array.from(new Set(subjectsTaughtInClass.map(a => a.matiere.id)));
+
 
         subjectIdsInClass.forEach(subjectId => {
           const subjectCoeff = classCoefficients.find(c => c.matiere_id === subjectId)?.coefficient || 1;
@@ -766,8 +760,7 @@ const translateSubject = (subjectName: string): string => {
       .map(data => ({
         name: data.className,
         moyenne: data.studentCount > 0 ? parseFloat((data.sumOfStudentAverages / data.studentCount).toFixed(2)) : 0,
-      }))
-      .filter(item => item.moyenne > 0);
+      }));
   }, [
     filteredGrades, gradesInYear, studentsInYear, classesForYear, termsForYear, coefficients,
     selectedAcademicYearId, selectedClassId, selectedTermId, selectedStudentId, academicYears,
@@ -859,8 +852,7 @@ const translateSubject = (subjectName: string): string => {
     .map(data => ({ 
       name: translateSubject(data.subjectName), // Utilisation de la fonction de traduction
       taux: data.studentCount > 0 ? parseFloat((data.totalStudentSubjectAverages / data.studentCount).toFixed(2)) : 0, 
-    }))
-    .filter(item => item.taux > 0);
+    }));
   }, [
     gradesInYear, studentsInYear, affectations, termsForYear,
     selectedAcademicYearId, selectedClassId, selectedTermId, selectedStudentId,
@@ -896,13 +888,16 @@ const translateSubject = (subjectName: string): string => {
         if (!studentClassId) return;
 
         const studentClassCoefficients = coefficients.filter(c => c.classe_id === studentClassId);
-        if (studentClassCoefficients.length === 0) return;
 
         let studentTotalWeightedScore = 0;
         let studentTotalCoefficients = 0;
-        const subjectIdsInClass = Array.from(new Set(
-          studentClassCoefficients.filter(c => c.matiere_id != null).map(c => c.matiere_id as number)
-        ));
+        
+        // Correction: Utiliser les affectations pour déterminer les matières réellement enseignées
+        const subjectsTaughtInStudentClass = affectations.filter(a => 
+          a.classe.id === studentClassId && a.annee_scolaire.id === yearIdNum
+        );
+        const subjectIdsInClass = Array.from(new Set(subjectsTaughtInStudentClass.map(a => a.matiere.id)));
+        if (subjectIdsInClass.length === 0) return;
 
         subjectIdsInClass.forEach(subjectId => {
           const subjectCoeff = studentClassCoefficients.find(c => c.matiere_id === subjectId)?.coefficient || 1;
@@ -932,14 +927,191 @@ const translateSubject = (subjectName: string): string => {
         ? parseFloat((totalOfStudentOverallAveragesForTerm / countOfStudentsWithAveragesForTerm).toFixed(2))
         : 0,
     };
-  }).filter(item => item.moyenne > 0);
+  });
 
   }, [
     gradesInYear, termsForYear, selectedAcademicYearId, selectedClassId, selectedStudentId, 
     studentsInYear, coefficients, calculateStudentSubjectAverageForTerm, loading.grades, 
     loading.terms, loading.coefficients, loading.students
   ]);
+ 
+  const subjectSuccessRateData = useMemo((): SuccessRateChartItem[] => {
+    if (loading.grades || loading.students || loading.affectations || !selectedAcademicYearId) {
+      return [];
+    }
 
+    const yearIdNum = parseInt(selectedAcademicYearId);
+    const termIdNum = selectedTermId === 'all' ? null : parseInt(selectedTermId);
+    const allEvalsForYear = gradesInYear.map(g => g.evaluation).filter((e): e is Evaluation => e !== undefined);
+    
+    let studentsToProcess = studentsInYear;
+    if (selectedClassId !== 'all') {
+      studentsToProcess = studentsToProcess.filter(s => String(s.classe?.id) === selectedClassId);
+    }
+
+    if (studentsToProcess.length === 0) return [];
+
+    let relevantSubjectIds: number[] = [];
+    if (selectedClassId !== 'all') {
+      relevantSubjectIds = Array.from(new Set(
+        affectations
+          .filter(a => String(a.classe.id) === selectedClassId)
+          .map(a => a.matiere.id)
+      ));
+    } else {
+      relevantSubjectIds = Array.from(new Set(affectations.map(a => a.matiere.id)));
+    }
+
+    const successRatesBySubject: { [subjectId: number]: { successful: number; total: number; subjectName: string } } = {};
+
+    relevantSubjectIds.forEach(subjectId => {
+      const matiereInfo = affectations.find(a => a.matiere.id === subjectId)?.matiere;
+      if (!matiereInfo) return;
+
+      successRatesBySubject[subjectId] = {
+        successful: 0,
+        total: 0,
+        subjectName: matiereInfo.nom,
+      };
+    });
+
+    studentsToProcess.forEach(student => {
+      relevantSubjectIds.forEach(subjectId => {
+        const isSubjectTaughtInStudentClass = affectations.some(a => 
+          a.classe.id === student.classe?.id && a.matiere.id === subjectId
+        );
+
+        if (!isSubjectTaughtInStudentClass) return;
+
+        let studentAverage = 0;
+        if (termIdNum) {
+          studentAverage = calculateStudentSubjectAverageForTerm(
+            student.id, subjectId, termIdNum, yearIdNum, gradesInYear, allEvalsForYear, termsForYear
+          );
+        } else { // Calculate annual average
+          let termAveragesSum = 0;
+          let termCount = 0;
+          termsForYear.forEach(term => {
+            const termAvg = calculateStudentSubjectAverageForTerm(
+              student.id, subjectId, term.id, yearIdNum, gradesInYear, allEvalsForYear, termsForYear
+            );
+            if (termAvg > 0) { // Only count terms with grades
+              termAveragesSum += termAvg;
+              termCount++;
+            }
+          });
+          studentAverage = termCount > 0 ? termAveragesSum / termCount : 0;
+        }
+
+        successRatesBySubject[subjectId].total++;
+        if (studentAverage >= 10) {
+          successRatesBySubject[subjectId].successful++;
+        }
+      });
+    });
+
+    return Object.values(successRatesBySubject)
+      .map(data => ({
+        name: translateSubject(data.subjectName),
+        tauxReussite: data.total > 0 ? parseFloat(((data.successful / data.total) * 100).toFixed(2)) : 0,
+      }));
+
+  }, [
+    gradesInYear, studentsInYear, affectations, termsForYear,
+    selectedAcademicYearId, selectedClassId, selectedTermId,
+    calculateStudentSubjectAverageForTerm, loading, t, translateSubject
+  ]);
+
+  const classSuccessRateData = useMemo((): SuccessRateChartItem[] => {
+    if (loading.grades || loading.students || loading.classes || loading.coefficients || loading.affectations ||
+        studentsInYear.length === 0 || !selectedAcademicYearId || !selectedTermId) {
+      return [];
+    }
+
+    const yearIdNum = parseInt(selectedAcademicYearId);
+    const termIdNum = selectedTermId === 'all' ? null : parseInt(selectedTermId);
+    const allEvalsForYear = gradesInYear.map(g => g.evaluation).filter((e): e is Evaluation => e !== undefined);
+
+    // 1. Déterminer les classes à traiter en fonction du filtre
+    const classesToProcess = selectedClassId === 'all'
+      ? classesForYear
+      : classesForYear.filter(c => String(c.id) === selectedClassId);
+
+    const successRatesByClass: SuccessRateChartItem[] = [];
+
+    // 2. Itérer sur la liste de classes correctement filtrée
+    classesToProcess.forEach(classe => {
+      const studentsInThisClass = studentsInYear.filter(s => s.classe?.id === classe.id);
+      if (studentsInThisClass.length === 0) return;
+
+      let successfulStudents = 0;
+      const classCoefficients = coefficients.filter(c => Number(c.classe_id) === Number(classe.id));
+      // Correction: Utiliser les affectations pour déterminer les matières réellement enseignées.
+      const subjectsTaughtInClass = affectations.filter(
+        a => a.classe.id === classe.id && a.annee_scolaire.id === yearIdNum
+      );
+      const subjectIdsInClass = Array.from(new Set(subjectsTaughtInClass.map(a => a.matiere.id)));
+
+      studentsInThisClass.forEach(student => {
+        let studentOverallAverage = 0;
+
+        if (termIdNum) { // Term average
+          let studentTotalWeightedScore = 0;
+          let studentTotalCoefficients = 0;
+          subjectIdsInClass.forEach(subjectId => {
+            const subjectCoeff = classCoefficients.find(c => c.matiere_id === subjectId)?.coefficient || 1;
+            const subjectAverage = calculateStudentSubjectAverageForTerm(
+              student.id, subjectId, termIdNum, yearIdNum, gradesInYear, allEvalsForYear, termsForYear
+            );
+            studentTotalWeightedScore += subjectAverage * subjectCoeff;
+            studentTotalCoefficients += subjectCoeff;
+          });
+          studentOverallAverage = studentTotalCoefficients > 0 ? studentTotalWeightedScore / studentTotalCoefficients : 0;
+        } else { // Annual average
+          let sumTrimestreMoyennes = 0;
+          let countTrimestres = 0;
+          termsForYear.forEach(term => {
+            let totalWeighted = 0;
+            let totalCoeff = 0;
+            subjectIdsInClass.forEach(subjectId => {
+              const coeff = classCoefficients.find(c => c.matiere_id === subjectId)?.coefficient || 1;
+              const avg = calculateStudentSubjectAverageForTerm(
+                student.id, subjectId, term.id, yearIdNum, gradesInYear, allEvalsForYear, termsForYear
+              );
+              totalWeighted += avg * coeff;
+              totalCoeff += coeff;
+            });
+            const termAverage = totalCoeff > 0 ? totalWeighted / totalCoeff : 0;
+            if (termAverage > 0) { // Ne compter que les trimestres où l'élève a une moyenne
+              sumTrimestreMoyennes += termAverage;
+              countTrimestres++;
+            }
+          });
+          studentOverallAverage = countTrimestres > 0 ? sumTrimestreMoyennes / countTrimestres : 0;
+        }
+
+        if (studentOverallAverage >= 10) {
+          successfulStudents++;
+        }
+      });
+
+      const successRate = studentsInThisClass.length > 0
+        ? parseFloat(((successfulStudents / studentsInThisClass.length) * 100).toFixed(2))
+        : 0;
+
+      successRatesByClass.push({
+        name: classe.nom,
+        tauxReussite: successRate,
+      });
+    });
+
+    return successRatesByClass;
+  }, [
+    gradesInYear, studentsInYear, classesForYear, termsForYear, coefficients,
+    selectedAcademicYearId, selectedTermId, selectedClassId, // 3. Ajout de selectedClassId pour la réactivité
+    loading, calculateStudentSubjectAverageForTerm, affectations
+  ]);
+  
   const filteredAbsences = useMemo(() => {
     let tempAbsences = absencesInYear;
     if (!selectedAcademicYearId) return [];
@@ -1314,25 +1486,23 @@ const translateSubject = (subjectName: string): string => {
                         data={studentDistributionData}
                         cx="50%"
                         cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                         outerRadius={80}
                         fill="#8884d8"
                         dataKey="value"
+                        labelLine={false}
+                        label={{ fill: 'hsl(var(--primary-foreground))', fontSize: 12 }}
                       >
                         {studentDistributionData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
-                         <Legend 
-          layout={language === 'ar' ? 'vertical' : 'horizontal'}
-          align={language === 'ar' ? 'right' : 'left'}
-          wrapperStyle={{
-            textAlign: language === 'ar' ? 'right' : 'left'
-          }}
-        />
                       </Pie>
-                      <Tooltip />
-                      <Legend />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--background))",
+                          borderColor: "hsl(var(--border))",
+                        }}
+                      />
+                      <Legend wrapperStyle={{ color: "hsl(var(--foreground))" }} />
 </PieChart>
                   </ResponsiveContainer>
                 ) : (
@@ -1341,6 +1511,11 @@ const translateSubject = (subjectName: string): string => {
                   </p>
                 )}
               </CardContent>
+              <CardFooter>
+                <p className="text-xs text-muted-foreground w-full text-center">
+                  {t.statistics.zeroValueNote}
+                </p>
+              </CardFooter>
             </Card>
             
             <Card>
@@ -1367,8 +1542,13 @@ const translateSubject = (subjectName: string): string => {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip />
-                      <Legend />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--background))",
+                          borderColor: "hsl(var(--border))",
+                        }}
+                      />
+                      <Legend wrapperStyle={{ color: "hsl(var(--foreground))" }} />
 </PieChart>
                   </ResponsiveContainer>
                 ) : (
@@ -1377,6 +1557,11 @@ const translateSubject = (subjectName: string): string => {
                   </p>
                 )}
               </CardContent>
+              <CardFooter>
+                <p className="text-xs text-muted-foreground w-full text-center">
+                  {t.statistics.zeroValueNote}
+                </p>
+              </CardFooter>
             </Card>
           </div>
         </TabsContent>
@@ -1397,12 +1582,17 @@ const translateSubject = (subjectName: string): string => {
                   >
 
                     <CartesianGrid strokeDasharray="3 3" />
-                   <XAxis dataKey="name" />
+                   <XAxis dataKey="name" tick={{ fill: 'hsl(var(--foreground))' }} />
                 
-    <YAxis domain={[0, 20]} />
+    <YAxis domain={[0, 20]} tick={{ fill: 'hsl(var(--foreground))' }} />
 
-                    <Tooltip />
-                      <Legend />
+                    <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--background))",
+                          borderColor: "hsl(var(--border))",
+                        }}
+                      />
+                      <Legend wrapperStyle={{ color: "hsl(var(--foreground))" }} />
                    <Bar 
                       dataKey="moyenne" 
                       fill="#3b82f6" 
@@ -1416,6 +1606,13 @@ const translateSubject = (subjectName: string): string => {
                 </p>
               )}
             </CardContent>
+            <CardFooter>
+              <p className="text-xs text-muted-foreground w-full text-center">
+                {t.statistics.zeroValueNote}
+              </p>
+            </CardFooter>
+
+           
           </Card>
 
   <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${language === 'ar' ? 'md:[&>*:nth-child(odd)]:rtl-flip' : ''}`}>
@@ -1432,9 +1629,14 @@ const translateSubject = (subjectName: string): string => {
                       data={subjectAverageData} 
                       margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
                     >
-                      <XAxis dataKey="name" />
-                      <YAxis domain={[0, 20]} />
-                      <Tooltip />
+                      <XAxis dataKey="name" tick={{ fill: 'hsl(var(--foreground))' }} />
+                      <YAxis domain={[0, 20]} tick={{ fill: 'hsl(var(--foreground))' }} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--background))",
+                          borderColor: "hsl(var(--border))",
+                        }}
+                      />
                       <Bar 
                         dataKey="taux" 
                         name={t.statistics.charts.average} 
@@ -1448,6 +1650,11 @@ const translateSubject = (subjectName: string): string => {
                   </p>
                 )}
               </CardContent>
+              <CardFooter>
+                <p className="text-xs text-muted-foreground w-full text-center">
+                  {t.statistics.zeroValueNote}
+                </p>
+              </CardFooter>
             </Card>
             
             <Card>
@@ -1464,10 +1671,15 @@ const translateSubject = (subjectName: string): string => {
                       margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis domain={[0, 20]} />
-                      <Tooltip />
-                      <Legend />
+                      <XAxis dataKey="name" tick={{ fill: 'hsl(var(--foreground))' }} />
+                      <YAxis domain={[0, 20]} tick={{ fill: 'hsl(var(--foreground))' }} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--background))",
+                          borderColor: "hsl(var(--border))",
+                        }}
+                      />
+                      <Legend wrapperStyle={{ color: "hsl(var(--foreground))" }} />
                     <Line 
                         type="monotone" 
                         dataKey="moyenne" 
@@ -1483,8 +1695,90 @@ const translateSubject = (subjectName: string): string => {
                   </p>
                 )}
               </CardContent>
+              <CardFooter>
+                <p className="text-xs text-muted-foreground w-full text-center">
+                  {t.statistics.zeroValueNote}
+                </p>
+              </CardFooter>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader className={getAlignmentClass()}>
+              <CardTitle className={getAlignmentClass()}>{t.statistics.charts.successRates.title}</CardTitle>
+              <CardDescription className={getAlignmentClass()}>{t.statistics.charts.successRates.description}</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-center text-base">{t.statistics.charts.subjectSuccessRate}</CardTitle>
+                </CardHeader>
+                <CardContent className="h-80">
+                  {loading.grades || loading.students ? (
+                    <Loader2 className="m-auto h-8 w-8 animate-spin" />
+                  ) : subjectSuccessRateData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart layout="vertical" data={subjectSuccessRateData} margin={{ top: 5, right: 20, left: 80, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" domain={[0, 100]} unit="%" tick={{ fill: 'hsl(var(--foreground))' }} />
+                        <YAxis dataKey="name" type="category" tick={{ fontSize: 12, fill: 'hsl(var(--foreground))' }} />
+                        <Tooltip 
+                          formatter={(value) => `${value}%`} 
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--background))",
+                            borderColor: "hsl(var(--border))",
+                          }}
+                        />
+                        <Legend wrapperStyle={{ top: -10, right: 0, color: 'hsl(var(--foreground))' }} />
+                        <Bar dataKey="tauxReussite" fill="#82ca9d" name={t.statistics.charts.successRate} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="text-center text-gray-500 pt-10">{t.statistics.noData.subjectSuccessRate}</p>
+                  )}
+                </CardContent>
+                <CardFooter>
+                  <p className="text-xs text-muted-foreground w-full text-center">
+                    {t.statistics.zeroValueNote}
+                  </p>
+                </CardFooter>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-center text-base">{t.statistics.charts.classSuccessRate}</CardTitle>
+                </CardHeader>
+                <CardContent className="h-80">
+                  {loading.grades || loading.students ? (
+                    <Loader2 className="m-auto h-8 w-8 animate-spin" />
+                  ) : classSuccessRateData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={classSuccessRateData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" tick={{ fill: 'hsl(var(--foreground))' }} />
+                        <YAxis domain={[0, 100]} unit="%" tick={{ fill: 'hsl(var(--foreground))' }} />
+                        <Tooltip 
+                          formatter={(value) => `${value}%`} 
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--background))",
+                            borderColor: "hsl(var(--border))",
+                          }}
+                        />
+                        <Legend wrapperStyle={{ color: 'hsl(var(--foreground))' }} />
+                        <Bar dataKey="tauxReussite" fill="#8884d8" name={t.statistics.charts.successRate} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="text-center text-gray-500 pt-10">{t.statistics.noData.classSuccessRate}</p>
+                  )}
+                </CardContent>
+                <CardFooter>
+                  <p className="text-xs text-muted-foreground w-full text-center">
+                    {t.statistics.zeroValueNote}
+                  </p>
+                </CardFooter>
+              </Card>
+            </CardContent>
+          </Card>
         </TabsContent>
         
         <TabsContent value="attendance" className="space-y-6">
@@ -1502,10 +1796,16 @@ const translateSubject = (subjectName: string): string => {
                     margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis domain={[0, 100]} unit="%"/>
-                    <Tooltip formatter={(value) => `${value}%`} />
-                      <Legend />
+                    <XAxis dataKey="name" tick={{ fill: 'hsl(var(--foreground))' }} />
+                    <YAxis domain={[0, 100]} unit="%" tick={{ fill: 'hsl(var(--foreground))' }} />
+                    <Tooltip 
+                      formatter={(value) => `${value}%`} 
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--background))",
+                        borderColor: "hsl(var(--border))",
+                      }}
+                    />
+                      <Legend wrapperStyle={{ color: 'hsl(var(--foreground))' }} />
 <Bar 
                       dataKey="tauxAssiduite" 
                       name={t.statistics.charts.attendanceRatePercent} 
@@ -1520,6 +1820,11 @@ const translateSubject = (subjectName: string): string => {
                 </p>
               )}
             </CardContent>
+            <CardFooter>
+              <p className="text-xs text-muted-foreground w-full text-center">
+                {t.statistics.zeroValueNote}
+              </p>
+            </CardFooter>
           </Card>
 
           <Card>
@@ -1536,10 +1841,16 @@ const translateSubject = (subjectName: string): string => {
                     margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis domain={[0, 100]} unit="%"/>
-                    <Tooltip formatter={(value) => `${value}%`} />
-                      <Legend />
+                    <XAxis dataKey="name" tick={{ fill: 'hsl(var(--foreground))' }} />
+                    <YAxis domain={[0, 100]} unit="%" tick={{ fill: 'hsl(var(--foreground))' }} />
+                    <Tooltip 
+                      formatter={(value) => `${value}%`} 
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--background))",
+                        borderColor: "hsl(var(--border))",
+                      }}
+                    />
+                      <Legend wrapperStyle={{ color: 'hsl(var(--foreground))' }} />
                   <Line 
                       type="monotone"
                       dataKey="tauxAssiduite" 
@@ -1556,6 +1867,11 @@ const translateSubject = (subjectName: string): string => {
                 </p>
               )}
             </CardContent>
+            <CardFooter>
+              <p className="text-xs text-muted-foreground w-full text-center">
+                {t.statistics.zeroValueNote}
+              </p>
+            </CardFooter>
           </Card>
           
           <Card className="mt-4 bg-blue-50 border-blue-200 dark:bg-blue-900 dark:border-blue-700">

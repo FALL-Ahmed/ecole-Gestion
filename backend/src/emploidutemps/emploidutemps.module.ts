@@ -8,6 +8,7 @@ import { Matiere } from '../matieres/matiere.entity';
 import { User } from '../users/user.entity';
 import { createTenantRepositoryProvider } from '../tenant/tenant-repository.provider';
 import { AuthModule } from '../auth/auth.module';
+import { Inscription } from '../inscription/inscription.entity';
 
 @Module({
   imports: [forwardRef(() => AuthModule)],
@@ -18,6 +19,7 @@ import { AuthModule } from '../auth/auth.module';
     createTenantRepositoryProvider(Classe),
     createTenantRepositoryProvider(Matiere),
     createTenantRepositoryProvider(User),
+    createTenantRepositoryProvider(Inscription),
   ],
 })
 export class EmploiDuTempsModule {}

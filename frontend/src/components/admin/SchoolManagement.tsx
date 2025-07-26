@@ -106,6 +106,7 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
   const [anneeToDelete, setAnneeToDelete] = useState<{ id: string; libelle: string } | null>(null);
   const [isEditCoeffDialogOpen, setIsEditCoeffDialogOpen] = useState(false);
 
+  const [isFraisScolariteManuallyEdited, setIsFraisScolariteManuallyEdited] = useState(false);
   const [currentEditingCoeff, setCurrentEditingCoeff] = useState<{
     id: number;
     classeNom: string;
@@ -117,7 +118,7 @@ export default function SchoolManagement({ onNavigate }: SchoolManagementProps) 
 
   // Form states
   const [classeNom, setClasseNom] = useState("");
-  const [classeNiveau, setClasseNiveau] = useState("Collège");
+  const [classeNiveau, setClasseNiveau] = useState<'primaire' | 'collège' | 'lycée'>("collège");
     const [fraisScolarite, setFraisScolarite] = useState<number | ''>('');
 
   const [coeffClasse, setCoeffClasse] = useState("");
@@ -195,12 +196,41 @@ const [affectations, setAffectations] = useState<Affectation[]>([]);
   useEffect(() => {
     if (isAddClasseOpen) {
       setClasseNom("");
-      setClasseNiveau(t.schoolManagement.levels.middle);
+      setClasseNiveau("collège");
       setAnneeScolaireId("");
-            setFraisScolarite('');
-
+      setFraisScolarite('');
+      setIsFraisScolariteManuallyEdited(false); // Réinitialiser le flag
     }
-  }, [isAddClasseOpen, t.schoolManagement.levels.middle]);
+  }, [isAddClasseOpen]);
+
+  // Remplissage automatique des frais de scolarité
+  useEffect(() => {
+    if (isFraisScolariteManuallyEdited || !classeNom || !anneeScolaireId) {
+      return;
+    }
+
+    const baseNameMatch = classeNom.match(/^(\d)/);
+    if (!baseNameMatch) {
+      return;
+    }
+    const baseName = baseNameMatch[1];
+
+    const similarClass = classes.find(c => 
+      c.nom.startsWith(baseName) &&
+      String(c.annee_scolaire_id) === anneeScolaireId &&
+      c.frais_scolarite !== undefined &&
+      c.frais_scolarite !== null
+    );
+
+    if (similarClass) {
+      setFraisScolarite(similarClass.frais_scolarite!);
+      toast({
+        title: t.common.information,
+        description: t.schoolManagement.classes.addDialog.tuitionFeeAutofilled.replace('{className}', similarClass.nom),
+      });
+    }
+  }, [classeNom, anneeScolaireId, classes, isFraisScolariteManuallyEdited, t, toast]);
+
  useEffect(() => {
     if (useActiveYearForCoeff && currentConfiguredAcademicYearId) {
       setCoeffAnneeFilter(currentConfiguredAcademicYearId);
@@ -1206,9 +1236,11 @@ const groupCoefficientsByNiveauEtAnnee = () => {
             <DialogTitle className="text-center text-2xl font-bold text-gray-800 dark:text-white">
               {t.schoolManagement.classes.addDialog.title}
             </DialogTitle>
-            <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+                       <DialogDescription className="text-center text-sm text-gray-500 dark:text-gray-400">
+
               {t.schoolManagement.classes.addDialog.description}
-            </p>
+                        </DialogDescription>
+
           </DialogHeader>
 
           <form
@@ -1218,7 +1250,7 @@ const groupCoefficientsByNiveauEtAnnee = () => {
               const response = await apiClient.post('/classes', {
                 nom: classeNom,
                 niveau: classeNiveau,
-                anneeScolaireId,
+                anneeScolaireId: Number(anneeScolaireId),
                 frais_scolarite: Number(fraisScolarite)
               });
 
@@ -1227,7 +1259,7 @@ const groupCoefficientsByNiveauEtAnnee = () => {
               let message = t.schoolManagement.classes.successAdd;
 
               if (["collège", "lycée"].includes(classeNiveau.toLowerCase())) {
-                const prefixe = classeNom.match(/^\d+/)?.[0];
+                const prefixe = classeNom.match(/^\w/)?.[0];
 
                 if (prefixe) {
                  const classeExistante = classes.find(
@@ -1255,7 +1287,7 @@ const groupCoefficientsByNiveauEtAnnee = () => {
               // Rafraîchit la liste complète des classes depuis le serveur pour refléter les changements.
               await refreshClasses();
               setClasseNom("");
-              setClasseNiveau("Primaire");
+              setClasseNiveau("collège");
                             setFraisScolarite('');
               setIsAddClasseOpen(false);
               
@@ -1313,16 +1345,42 @@ const groupCoefficientsByNiveauEtAnnee = () => {
                   ))}
                 </select>
               </div>
+              
+
               <div className="space-y-3">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                  {t.schoolManagement.classes.addDialog.levelLabel} <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-3">{
+                  [{ key: 'collège', labelKey: 'middle' }, { key: 'lycée', labelKey: 'high' }].map((option) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => setClasseNiveau(option.key as 'collège' | 'lycée')}
+                      className={`px-4 py-3 rounded-xl font-medium border flex items-center justify-center gap-2 transition-all ${
+                        classeNiveau === option.key
+                          ? "bg-blue-600 text-white border-blue-600 shadow-md"
+                          : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-700"
+                      }`}
+                    >
+                      {t.schoolManagement.levels[option.labelKey as keyof typeof t.schoolManagement.levels]}
+                    </button>
+                  ))
+                }</div>
+              </div>
+                <div className="space-y-3">
                 <label htmlFor="fraisScolarite" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
-                  Frais de scolarité (MRU) <span className="text-red-500">*</span>
+                  {t.schoolManagement.classes.addDialog.tuitionFeesLabel} ({t.common.currency}) <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <input
                     id="fraisScolarite"
                     type="number"
                     value={fraisScolarite}
-                    onChange={(e) => setFraisScolarite(e.target.value === '' ? '' : Number(e.target.value))}
+                    onChange={(e) => {
+                      setIsFraisScolariteManuallyEdited(true);
+                      setFraisScolarite(e.target.value === '' ? '' : Number(e.target.value));
+                    }}
                     className="w-full rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white pl-11"
                     placeholder="5000"
                     required
@@ -1331,28 +1389,6 @@ const groupCoefficientsByNiveauEtAnnee = () => {
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Landmark className="h-5 w-5 text-gray-400 dark:text-gray-500" />
                   </div>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
-                  {t.schoolManagement.classes.addDialog.levelLabel} <span className="text-red-500">*</span>
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {t.schoolManagement.classes.levelOptions.filter(niveau => niveau !== t.schoolManagement.levels.primary).map((niveau) => (
-                    <button
-                      key={niveau}
-                      type="button"
-                      onClick={() => setClasseNiveau(niveau)}
-                      className={`px-4 py-3 rounded-xl font-medium border flex items-center justify-center gap-2 transition-all ${
-                        classeNiveau === niveau
-                          ? "bg-blue-600 text-white border-blue-600 shadow-md"
-                          : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-700"
-                      }`}
-                    >
-                      {niveau}
-                    </button>
-                  ))}
                 </div>
               </div>
             </fieldset>
@@ -1391,9 +1427,11 @@ const groupCoefficientsByNiveauEtAnnee = () => {
                 {t.schoolManagement.coefficients.dialogTitle}
               </DialogTitle>
             </div>
-            <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+                        <DialogDescription className="text-center text-sm text-gray-600 dark:text-gray-400">
+
               {t.schoolManagement.coefficients.dialogDescription}
-            </p>
+                      </DialogDescription>
+
           </DialogHeader>
 
           <form
@@ -1692,9 +1730,10 @@ const groupCoefficientsByNiveauEtAnnee = () => {
             <DialogTitle className="text-xl font-semibold text-blue-700 dark:text-blue-300 text-center">
               {t.schoolManagement.teacherAssignments.assignDialogTitle}
             </DialogTitle>
-            <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
+                        <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 text-center">
+
               {t.schoolManagement.teacherAssignments.assignDialogDescription}
-            </p>
+             </DialogDescription>
           </DialogHeader>
 
           <form
@@ -1714,7 +1753,7 @@ const groupCoefficientsByNiveauEtAnnee = () => {
                   professeur_id: affectProf,
                   matiere_id: affectMatiere,
                   classe_id: classeId,
-                  annee_id: affectAnnee,
+                  annee_scolaire_id: affectAnnee,
                 }).then(res => res.data);
               });
 

@@ -1,4 +1,10 @@
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+} from 'class-validator';
 import { Niveau } from '../classe.entity';
 
 export class CreateClasseDto {
@@ -7,6 +13,7 @@ export class CreateClasseDto {
   nom: string;
 
   @IsEnum(Niveau)
+  @IsNotEmpty()
   niveau: Niveau;
 
   @IsString()
@@ -14,5 +21,9 @@ export class CreateClasseDto {
   description?: string;
 
   @IsNumber()
+  @IsNotEmpty()
   anneeScolaireId: number;
+
+  @IsNumber()
+  frais_scolarite: number;
 }

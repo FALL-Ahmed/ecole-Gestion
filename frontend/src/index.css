@@ -295,7 +295,7 @@
 }
 /* Pour l'écran */
 .observation-column {
-  width: 30% !important;
+  width: 20% !important;
   text-align: left !important;
   padding-left: 16px !important;
 }
@@ -312,20 +312,14 @@ html, body, #root {
     display: none !important;
   }
 
-  body, html {
-    width: 210mm;   /* A4 Width */
-    height: 297mm;  /* A4 Height */
+  html, body {
+    width: 100%;
+    height: auto; /* Laisser la hauteur s'adapter au contenu */
     margin: 0;
     padding: 0;
-    overflow: hidden; /* Prevent scrollbars */
-    page-break-after: avoid;
-    page-break-before: avoid;
-    page-break-inside: avoid;
+    overflow: visible !important; /* Important pour l'impression */
   }
-@page {
-  size: A4;
-  margin: 15mm;
-}
+  /* La directive @page est maintenant gérée dynamiquement dans le composant pour permettre le mode paysage */
   #bulletin-preview-content-area {
     width: 100%; /* Occupy full width of the A4 page */
     height: auto; /* Let height adjust to content */
@@ -388,14 +382,13 @@ html, body, #root {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
     font-size: 8.5pt !important;
     color: #000 !important;
-    table-layout: fixed !important; /* Crucial for controlling column widths */
-    width: 100% !important; /* Ensure table fills available space */
+    table-layout: auto !important; /* Let the browser determine column widths based on content */
   }
 
   th, td {
     padding: 1.5mm 2mm !important;
     vertical-align: middle !important;
-    text-align: center !important;
+    text-align: center;
     border: 1px solid #ccc !important;
     box-shadow: none !important;
     border-radius: 0 !important;
@@ -429,63 +422,13 @@ html, body, #root {
     background-color: transparent !important; /* Prevent hover effects in print */
   }
 
-  /* --- Column Width Adjustments --- */
-
-  /* First Column: MATIÈRE */
-  td:first-child,
-  th:first-child {
-    text-align: left !important;
-    width: 20% !important; 
-    min-width: 20% !important;
-    max-width: 20% !important;
-    padding-left: 3mm !important;
+  
+  /* --- Orientation-specific styles --- */
+  @media (orientation: landscape) {
+    thead th {
+      white-space: nowrap !important; /* Prevent headers from wrapping in landscape */
+    }
   }
-
-  /* If min-w-[150px] is the class applied to the MATIERE column, ensure it's set correctly */
-  .min-w-\[150px\] {
-    width: 20% !important;
-    min-width: 20% !important;
-    max-width: 20% !important;
-  }
-
-  /* Second Column: COEFF */
-  td:nth-child(2),
-  th:nth-child(2) {
-    width: 7% !important;
-    min-width: 7% !important;
-    max-width: 7% !important;
-  }
-
-  /* Last Column: OBSERVATION */
-  td:last-child,
-  th:last-child {
-    width: 25% !important;
-    max-width: 25% !important;
-    text-align: left !important;
-    padding-left: 4mm !important;
-  }
-
-  /* Intermediate Columns (Devoir 5, Devoir 6, Moy. Devoir, Composition, Moy. Matière) */
-  td:nth-child(3), th:nth-child(3),
-  td:nth-child(4), th:nth-child(4),
-  td:nth-child(5), th:nth-child(5),
-  td:nth-child(6), th:nth-child(6),
-  td:nth-child(7), th:nth-child(7) {
-    width: 9.6% !important; 
-    min-width: 9.6% !important;
-    max-width: 9.6% !important;
-  }
-
-  /* Total (row at the bottom) */
-  td.font-bold:first-child {
-    width: 20% !important;
-    text-align: left !important;
-    padding-left: 3mm !important;
-  }
-  td.font-bold:last-child {
-      width: 9.6% !important;
-  }
-
 
   /* --- Footer Specific Adjustments --- */
   .text-gray-500 {

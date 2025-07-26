@@ -2,6 +2,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { Classe } from '../classe/classe.entity'; // Assuming you have a Classe entity
 import { Matiere } from '../matieres/matiere.entity'; // Assuming you have a Matiere entity
+import { anneescolaire } from '../annee-academique/annee-academique.entity';
 import { User } from '../users/user.entity'; // Assuming you have a User entity for Professors
 import { Bloc } from '../bloc/bloc.entity';
 
@@ -55,4 +56,11 @@ export class EmploiDuTemps {
   @ManyToOne(() => User, { onDelete: 'SET NULL' }) // Assuming a 'User' entity for professors
   @JoinColumn({ name: 'professeur_id' })
   professeur: User;
+
+  @Column({ nullable: true }) // Rendre nullable si des anciennes données existent
+  annee_academique_id: number;
+
+  @ManyToOne(() => anneescolaire, { onDelete: 'CASCADE', nullable: false })
+  @JoinColumn({ name: 'annee_academique_id' })
+  anneeAcademique: anneescolaire;
 }

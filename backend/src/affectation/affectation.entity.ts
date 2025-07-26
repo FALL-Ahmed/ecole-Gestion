@@ -23,6 +23,6 @@ export class Affectation {
   classe: Classe;
 
   @ManyToOne(() => anneescolaire)
- @JoinColumn({ name: "annee_id" })
+ @JoinColumn({ name: "annee_scolaire_id" })
  annee_scolaire: anneescolaire;
 }

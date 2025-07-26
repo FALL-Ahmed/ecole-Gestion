@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Param, Put, Delete, ParseIntPipe, UsePipes, ValidationPipe, Query, HttpCode, HttpStatus, BadRequestException, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Put, Delete, ParseIntPipe, UsePipes, ValidationPipe, Query, HttpCode, HttpStatus, BadRequestException, UseGuards, ParseArrayPipe } from '@nestjs/common';
 import { NoteService } from './note.service';
 import { Note } from './note.entity';
 import { CreateNoteDto } from './dto/create-note.dto';
@@ -20,37 +20,37 @@ export class NoteController {
   }
 
   @Get()
+  @Roles(UserRole.ADMIN, UserRole.PROFESSEUR, UserRole.ETUDIANT, 'parent')
   async findFilteredNotes(
-    @Query('evaluationIds') evaluationIdsString?: string,
-    @Query('evaluation_id') evaluationIdSingle?: string,
-    @Query('etudiant_id') etudiantId?: string,
+    @Query('evaluation_id', new ParseIntPipe({ optional: true })) evaluationId?: number,
+    @Query('evaluationIds', new ParseArrayPipe({ items: Number, separator: ',', optional: true })) evaluationIds?: number[],
+    @Query('etudiant_id', new ParseIntPipe({ optional: true })) etudiantId?: number,
   ): Promise<Note[] | Note | null> {
-    let parsedEvaluationIds: number[] | undefined;
-    if (evaluationIdsString) {
-      parsedEvaluationIds = evaluationIdsString.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
-      if (parsedEvaluationIds.length === 0) {
-        parsedEvaluationIds = undefined;
-      }
-    } else if (evaluationIdSingle) {
-      const singleId = parseInt(evaluationIdSingle, 10);
-      if (!isNaN(singleId)) {
-        parsedEvaluationIds = [singleId];
-      }
+    // Combine evaluationId and evaluationIds into a single array for consistency.
+    // `evaluationIds` from query takes precedence.
+    const finalEvaluationIds = evaluationIds || (evaluationId ? [evaluationId] : undefined);
+
+    // Case 1: Filter by student and evaluations
+    if (finalEvaluationIds && etudiantId) {
+      return this.noteService.findNotesByEvaluationIdsAndStudentId(finalEvaluationIds, etudiantId);
     }
 
-    const parsedEtudiantId = etudiantId ? parseInt(etudiantId, 10) : undefined;
-
-    if (parsedEvaluationIds && parsedEvaluationIds.length > 0 && parsedEtudiantId) {
-      return this.noteService.findNotesByEvaluationIdsAndStudentId(parsedEvaluationIds, parsedEtudiantId);
-    } else if (parsedEvaluationIds && parsedEvaluationIds.length > 0) {
-      return this.noteService.findByEvaluationIds(parsedEvaluationIds);
-    } else if (parsedEtudiantId) {
-      throw new BadRequestException("Veuillez fournir des 'evaluationIds' ou un 'evaluation_id' pour filtrer les notes.");
+    // Case 2: Filter by evaluations only
+    if (finalEvaluationIds) {
+      return this.noteService.findByEvaluationIds(finalEvaluationIds);
     }
+    
+    // Case 3: Filtering by student only is ambiguous without an evaluation context.
+    if (etudiantId) {
+      throw new BadRequestException("Veuillez fournir des 'evaluationIds' ou un 'evaluation_id' pour filtrer les notes par étudiant.");
+    }
+    
+    // Default case: return all notes for the user's bloc
     return this.noteService.findAll();
   }
 
   @Get(':id')
+  @Roles(UserRole.ADMIN, UserRole.PROFESSEUR, UserRole.ETUDIANT, 'parent')
   async findOne(@Param('id', ParseIntPipe) id: number): Promise<Note> {
     return this.noteService.findOne(id);
   }

@@ -33,7 +33,7 @@ interface PrintableReportProps {
       print: string;
       student: string;
       class: string;
-      hours: string;
+      hourse: string;
       phone: string;
       website: string;
     };
@@ -109,12 +109,12 @@ export const PrintableReport = React.forwardRef<HTMLDivElement, PrintableReportP
     return (
       <div 
         ref={ref}
-  className="max-w-6xl w-full p-0 rounded-lg overflow-hidden h-[calc(100vh-2rem)] print:h-[297mm] print:max-h-[297mm] print:rounded-none print:shadow-none print:border-none dark:bg-gray-900"
+  className="max-w-6xl w-full p-0 rounded-lg overflow-hidden print:overflow-visible h-[calc(100vh-2rem)] print:h-auto print:max-w-none print:rounded-none print:shadow-none print:border-none dark:bg-gray-900"
       >
         {/* Contenu imprimable */}
         <div 
           id="bulletin-preview-content-area" 
-          className="bg-white dark:bg-gray-800 h-full overflow-y-auto px-8 pt-8 pb-8 print:p-[8mm] print:overflow-visible print:h-auto print:border print:border-gray-300 print:shadow-md print:rounded-md"
+          className="bg-white dark:bg-gray-800 h-full overflow-y-auto px-8 pt-8 pb-8 print:p-0 print:overflow-visible print:h-auto print:border-none print:shadow-none"
           dir="ltr"
         >
           {/* En-tête */}
@@ -157,7 +157,7 @@ export const PrintableReport = React.forwardRef<HTMLDivElement, PrintableReportP
                 <p><strong>{t.reportManagement.studentsCount}:</strong> {report.totalElevesClasse}</p>
                 <p>
                   <strong>{t.reportManagement.unjustifiedAbsences}:</strong>{" "}
-                  <span className="text-red-600">{report.absencesNonJustifieesHeures ?? 0} {t.common.hours}</span>
+                  <span className="text-red-600">{report.absencesNonJustifieesHeures ?? 0} {t.common.hourse}</span>
                 </p>
               </div>
             </div>
@@ -167,11 +167,11 @@ export const PrintableReport = React.forwardRef<HTMLDivElement, PrintableReportP
           </div>
 
           {/* Tableau des notes */}
-          <div className="mb-6 overflow-x-auto text-xs print:text-xs">
+          <div className="mb-6 overflow-x-auto print:overflow-visible text-xs print:text-xs">
             <Table className="w-full border border-gray-300 print:border print:border-gray-400 print:border-collapse">
               <TableHeader className="bg-blue-100 print:bg-gray-100">
                 <TableRow>
-                  <TableHead className="min-w-[150px]">
+                  <TableHead style={{ minWidth: '170px', textAlign: 'left' }}>
                     {t.reportManagement.subject}<br />
                     <span className="text-sm">{t.reportManagement.subjectAr}</span>
                   </TableHead>
@@ -192,7 +192,7 @@ export const PrintableReport = React.forwardRef<HTMLDivElement, PrintableReportP
                     ))}
                   
                   {dynamicEvaluationHeaders.some(header => header.toLowerCase().includes('devoir')) && (
-                    <TableHead key="moy-dev-pond-header" className="text-center">
+                    <TableHead key="moy-dev-pond-header" className="text-center" style={{ minWidth: '90px' }}>
                       {t.reportManagement.weightedTestAvg}<br />
                       <span className="text-sm">{t.reportManagement.weightedTestAvgAr}</span>
                     </TableHead>
@@ -201,7 +201,7 @@ export const PrintableReport = React.forwardRef<HTMLDivElement, PrintableReportP
                   {dynamicEvaluationHeaders
                     .filter(header => header.toLowerCase().includes('compo') && !header.toLowerCase().includes('devoir'))
                     .map(header => (
-                      <TableHead key={header} className="text-center min-w-[120px]">
+                      <TableHead key={header} className="text-center" style={{ minWidth: '80px' }}>
                         {header.toLowerCase().startsWith('compo')
                           ? `${t.reportManagement.exam} ${header.replace(/composition\s*/i, '')}`
                           : header}
@@ -212,12 +212,12 @@ export const PrintableReport = React.forwardRef<HTMLDivElement, PrintableReportP
                       </TableHead>
                     ))}
                   
-                  <TableHead className="text-center">
+                  <TableHead className="text-center" style={{ minWidth: '90px' }}>
                     {t.reportManagement.subjectAvg}<br />
                     <span className="text-sm">{t.reportManagement.subjectAvgAr}</span>
                   </TableHead>
-                  <TableHead className="min-w-[150px]">
-                    {t.reportManagement.observation}<br />
+                  <TableHead style={{ minWidth: '25px', textAlign: 'left' }}>
+                      {t.reportManagement.observation}<br />
                     <span className="text-sm">{t.reportManagement.observationAr}</span>
                   </TableHead>
                 </TableRow>
@@ -226,7 +226,7 @@ export const PrintableReport = React.forwardRef<HTMLDivElement, PrintableReportP
               <TableBody>
                 {report.notesParMatiere.map(matiere => (
                   <TableRow key={matiere.matiere} className="even:bg-gray-50 print:even:bg-white">
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium" style={{ minWidth: '170px', textAlign: 'left' }}>
                       <div className="flex justify-between items-center">
                         <span>{matiere.matiere}</span>
                         {matiere.matiereArabe && matiere.matiereArabe !== matiere.matiere && <span className="text-sm" dir="rtl">{matiere.matiereArabe}</span>}
@@ -262,7 +262,7 @@ export const PrintableReport = React.forwardRef<HTMLDivElement, PrintableReportP
                       })}
 
                     <TableCell className="text-center font-bold">{matiere.moyenneMatiere.toFixed(2)}</TableCell>
-                    <TableCell className="observation-column" style={{ textAlign: isRTL ? 'right' : 'left', paddingLeft: '16px' }}></TableCell>
+                    <TableCell className="observation-column" style={{ textAlign: 'left', paddingLeft: '16px' }}></TableCell>
                   </TableRow>
                 ))}
 

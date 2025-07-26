@@ -1,5 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
-import { User } from '../users/user.entity'; // Assurez-vous que le chemin est correct
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity('parents')
 export class Parent {
@@ -32,8 +31,4 @@ export class Parent {
 
   @UpdateDateColumn({ name: 'date_mise_a_jour' })
   dateMiseAJour: Date;
-
-  // Relation avec les utilisateurs (enfants)
-  @OneToMany(() => User, (user) => user.parent)
-  enfants: User[];
 }

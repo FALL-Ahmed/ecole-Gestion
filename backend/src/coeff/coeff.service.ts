@@ -1,13 +1,16 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException, Scope, Inject, UnauthorizedException, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm"; // Assurez-vous que c'est le bon import pour TypeORM
 import { In, Repository, Like } from "typeorm";
 import { CoefficientClasse } from "./coeff.entity";
 import { Classe } from "../classe/classe.entity";
 import { Matiere } from "../matieres/matiere.entity";
+import { REQUEST } from "@nestjs/core";
+import { Request } from "express";
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class CoefficientClasseService {
-  prisma: any;
+  private readonly logger = new Logger(CoefficientClasseService.name);
+
   constructor(
     @InjectRepository(CoefficientClasse)
     private repo: Repository<CoefficientClasse>,
@@ -16,40 +19,96 @@ export class CoefficientClasseService {
     private classeRepo: Repository<Classe>,
 
     @InjectRepository(Matiere)
-    private matiereRepo: Repository<Matiere>
+    private matiereRepo: Repository<Matiere>,
+
+    @Inject(REQUEST) private readonly request: Request,
   ) {}
 
-  async findAll() {
-  const data = await this.repo.find({ relations: ["classe", "matiere"] });
-  console.log("CoefficientClasse - findAll:", data);
-  return data;
-}
-async cloneCoefficients(fromClasseId: number, toClasseId: number) {
-  // 1. Récupérer les coefficients de la classe source
-  const coefficients = await this.repo.find({
-    where: { classe: { id: fromClasseId } },
-    relations: ["classe", "matiere"]
-  });
+  private getBlocId(): number | null {
+    const user = this.request.user as any;
 
-  if (coefficients.length === 0) {
-    throw new BadRequestException("Classe source sans coefficients à copier.");
+    if (user && user.blocId) {
+      this.logger.debug(`[getBlocId] blocId ${user.blocId} trouvé dans le token JWT.`);
+      return user.blocId;
+    }
+
+    const queryBlocId = this.request.query.blocId;
+    if (queryBlocId && !isNaN(parseInt(queryBlocId as string, 10))) {
+      const blocId = parseInt(queryBlocId as string, 10);
+      this.logger.debug(`[getBlocId] blocId ${blocId} trouvé dans les paramètres de la requête.`);
+      return blocId;
+    }
+
+    this.logger.warn(`[getBlocId] Aucun blocId trouvé pour l'utilisateur ${user?.email}.`);
+    return null;
   }
 
-  // 2. Préparer les nouveaux coefficients pour la classe cible
-  const newCoefficients = coefficients.map(coef => ({
-    classe_id: toClasseId,
-    matiere_id: coef.matiere.id,
-    coefficient: coef.coefficient,
-  }));
+  async findAll() {
+    const blocId = this.getBlocId();
+    if (blocId === null) return [];
 
-  // 3. Utiliser la méthode createMany que tu as déjà, pour insérer les nouveaux coefficients
-  return this.createMany(newCoefficients);
-}
+    return this.repo.find({
+      relations: ["classe", "matiere"],
+      where: {
+        classe: {
+          blocId: blocId,
+        },
+      },
+    });
+  }
+  async cloneCoefficients(fromClasseId: number, toClasseId: number) {
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      throw new UnauthorizedException("Action non autorisée en dehors du contexte d'un bloc.");
+    }
 
- async update(id: number, newCoefficient: number): Promise<CoefficientClasse> {
-    const coefficientToUpdate = await this.repo.findOneBy({ id });
+    // 1. Vérifier que les deux classes appartiennent bien au bloc de l'utilisateur
+    const fromClasse = await this.classeRepo.findOneBy({ id: fromClasseId, blocId });
+    const toClasse = await this.classeRepo.findOneBy({ id: toClasseId, blocId });
+
+    if (!fromClasse) {
+      throw new NotFoundException(`La classe source avec l'ID ${fromClasseId} n'a pas été trouvée dans votre établissement.`);
+    }
+    if (!toClasse) {
+      throw new NotFoundException(`La classe de destination avec l'ID ${toClasseId} n'a pas été trouvée dans votre établissement.`);
+    }
+
+    // 2. Récupérer les coefficients de la classe source
+    const coefficients = await this.repo.find({
+      where: { classe: { id: fromClasseId } },
+      relations: ["matiere"], // La relation 'classe' n'est plus nécessaire ici
+    });
+
+    if (coefficients.length === 0) {
+      throw new BadRequestException("La classe source n'a pas de coefficients à copier.");
+    }
+
+    // 3. Préparer les nouveaux coefficients pour la classe cible
+    const newCoefficients = coefficients.map(coef => ({
+      classe_id: toClasseId,
+      matiere_id: coef.matiere.id,
+      coefficient: coef.coefficient,
+    }));
+
+    // 4. Utiliser la méthode createMany (sécurisée) pour insérer les nouveaux coefficients
+    return this.createMany(newCoefficients);
+  }
+
+  async update(id: number, newCoefficient: number): Promise<CoefficientClasse> {
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      throw new UnauthorizedException("Action non autorisée en dehors du contexte d'un bloc.");
+    }
+    // Vérifier que le coefficient appartient bien au bloc de l'utilisateur
+    const coefficientToUpdate = await this.repo.findOne({
+      where: {
+        id: id,
+        classe: { blocId: blocId },
+      },
+    });
+
     if (!coefficientToUpdate) {
-      throw new NotFoundException(`Coefficient avec l'ID ${id} non trouvé.`);
+      throw new NotFoundException(`Coefficient avec l'ID ${id} non trouvé dans votre établissement.`);
     }
 
     coefficientToUpdate.coefficient = newCoefficient;
@@ -61,9 +120,15 @@ async cloneCoefficients(fromClasseId: number, toClasseId: number) {
     matiereId: number,
     newCoefficient: number,
   ): Promise<{ updated: number; created: number }> {
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      throw new UnauthorizedException("Action non autorisée en dehors du contexte d'un bloc.");
+    }
+
     // 1. Trouver la classe originale pour obtenir son niveau et son année scolaire
     const originalClasse = await this.classeRepo.findOne({
-      where: { id: classeId },
+      // Sécurisation : on vérifie que la classe appartient au bloc de l'utilisateur
+      where: { id: classeId, blocId: blocId },
       relations: ['anneeScolaire'],
     });
 
@@ -82,13 +147,14 @@ async cloneCoefficients(fromClasseId: number, toClasseId: number) {
       similarClasses = await this.classeRepo.find({
         where: {
           anneeScolaire: { id: anneeScolaire.id },
+          blocId: blocId, // Sécurisation
           nom: Like(`${prefix}%`),
         },
       });
     } else {
       // 3. Sinon, trouver les classes par niveau
       similarClasses = await this.classeRepo.find({
-        where: { anneeScolaire: { id: anneeScolaire.id }, niveau },
+        where: { anneeScolaire: { id: anneeScolaire.id }, niveau, blocId: blocId }, // Sécurisation
       });
     }
 
@@ -128,9 +194,15 @@ async cloneCoefficients(fromClasseId: number, toClasseId: number) {
     sourceClasseId: number,
     newCoefficients: { matiere_id: number; coefficient: number }[],
   ): Promise<{ created: number }> {
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      throw new UnauthorizedException("Action non autorisée en dehors du contexte d'un bloc.");
+    }
+
     // 1. Trouver la classe originale pour obtenir son niveau et son année scolaire
     const originalClasse = await this.classeRepo.findOne({
-      where: { id: sourceClasseId },
+      // Sécurisation : on vérifie que la classe appartient au bloc de l'utilisateur
+      where: { id: sourceClasseId, blocId: blocId },
       relations: ['anneeScolaire'],
     });
 
@@ -149,6 +221,7 @@ async cloneCoefficients(fromClasseId: number, toClasseId: number) {
       similarClasses = await this.classeRepo.find({
         where: {
           anneeScolaire: { id: anneeScolaire.id },
+          blocId: blocId, // Sécurisation
           nom: Like(`${prefix}%`),
         },
       });
@@ -157,7 +230,7 @@ async cloneCoefficients(fromClasseId: number, toClasseId: number) {
       similarClasses = await this.classeRepo.find({
         where: {
           anneeScolaire: { id: anneeScolaire.id },
-          niveau: niveau,
+          niveau: niveau, blocId: blocId, // Sécurisation
         },
       });
     }
@@ -206,18 +279,41 @@ async cloneCoefficients(fromClasseId: number, toClasseId: number) {
   }
 
   async createMany(
-    data: { classe_id: number; matiere_id: number; coefficient: number }[]
+    data: { classe_id: number; matiere_id: number; coefficient: number }[],
   ) {
-    const saved: CoefficientClasse[] = [];
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      throw new UnauthorizedException("Action non autorisée en dehors du contexte d'un bloc.");
+    }
 
+    if (data.length === 0) {
+      return [];
+    }
+
+    const classeIds = [...new Set(data.map((item) => item.classe_id))];
+    const matiereIds = [...new Set(data.map((item) => item.matiere_id))];
+
+    // 1. Récupérer toutes les entités nécessaires en deux requêtes
+    const classes = await this.classeRepo.find({
+      where: { id: In(classeIds), blocId: blocId },
+    });
+    const matieres = await this.matiereRepo.find({
+      where: { id: In(matiereIds) },
+    });
+
+    // Créer des maps pour des recherches rapides
+    const classesMap = new Map(classes.map((c) => [c.id, c]));
+    const matieresMap = new Map(matieres.map((m) => [m.id, m]));
+
+    const entitiesToSave: CoefficientClasse[] = [];
+
+    // 2. Valider et créer les entités en mémoire
     for (const item of data) {
-      const classe = await this.classeRepo.findOneBy({ id: item.classe_id });
-      const matiere = await this.matiereRepo.findOneBy({ id: item.matiere_id });
+      const classe = classesMap.get(item.classe_id);
+      const matiere = matieresMap.get(item.matiere_id);
 
       if (!classe || !matiere) {
-        throw new Error(
-          `Classe ou Matière introuvable (classe_id: ${item.classe_id}, matiere_id: ${item.matiere_id})`
-        );
+        throw new BadRequestException(`Impossible de créer le coefficient pour la classe ID ${item.classe_id}. Vérifiez que la classe et la matière existent dans votre établissement.`);
       }
 
       const entity = this.repo.create({
@@ -225,10 +321,10 @@ async cloneCoefficients(fromClasseId: number, toClasseId: number) {
         matiere,
         coefficient: item.coefficient,
       });
-
-      saved.push(await this.repo.save(entity));
+      entitiesToSave.push(entity);
     }
 
-    return saved;
+    // 3. Sauvegarder toutes les entités en une seule transaction
+    return this.repo.save(entitiesToSave);
   }
 }

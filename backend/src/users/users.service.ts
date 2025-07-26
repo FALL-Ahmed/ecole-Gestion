@@ -12,6 +12,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, UserRole } from './user.entity';
 import { Classe } from '../classe/classe.entity';
+import { CreateUserDto } from './dto/create-user.dto';
 import { anneescolaire } from '../annee-academique/annee-academique.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ParentService } from '../central/parent.service';
@@ -21,6 +22,7 @@ import { UtilisateurBloc } from './utilisateur-bloc.entity';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
+import { Bloc } from '../bloc/bloc.entity';
 @Injectable({ scope: Scope.REQUEST })
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
@@ -38,19 +40,33 @@ export class UsersService {
     @InjectRepository(anneescolaire)
     private readonly anneeScolaireRepository: Repository<anneescolaire>,
 
+    @InjectRepository(Bloc)
+    private readonly blocRepository: Repository<Bloc>,
+
     private readonly parentService: ParentService,
     @Inject(REQUEST) private readonly request: Request,
   ) {}
 
   private getBlocId(): number | null {
     const user = this.request.user as any;
-    this.logger.debug(`[getBlocId] Tentative de récupération du blocId depuis request.user.`);
-    if (!user || !user.blocId) {
-      this.logger.debug(`[getBlocId] Aucun utilisateur ou blocId trouvé sur request.user. request.user est: ${JSON.stringify(user)}`);
-      return null; // Ne pas lancer d'erreur, certains contextes peuvent ne pas avoir de blocId
+    this.logger.debug(`[getBlocId] Tentative de récupération du blocId.`);
+
+    // Priorité 1: Le blocId dans le token (pour admin, prof, élève)
+    if (user && user.blocId) {
+      this.logger.debug(`[getBlocId] blocId ${user.blocId} trouvé dans le token JWT.`);
+      return user.blocId;
     }
-    this.logger.debug(`[getBlocId] blocId trouvé: ${user.blocId}`);
-    return user.blocId;
+
+    // Priorité 2: Le blocId dans les paramètres de la requête (pour les parents)
+    const queryBlocId = this.request.query.blocId;
+    if (queryBlocId && !isNaN(parseInt(queryBlocId as string, 10))) {
+      const blocId = parseInt(queryBlocId as string, 10);
+      this.logger.debug(`[getBlocId] blocId ${blocId} trouvé dans les paramètres de la requête.`);
+      return blocId;
+    }
+
+    this.logger.debug(`[getBlocId] Aucun blocId trouvé pour l'utilisateur ${user?.email}. Retourne null.`);
+    return null;
   }
 
   private generateRandomPassword(length = 10): string {
@@ -92,7 +108,7 @@ export class UsersService {
   }
 
   async createUser(
-    data: Partial<User> & { parentEmail?: string },
+    data: CreateUserDto,
   ): Promise<{
     user: Partial<User>;
     plainPassword: string;
@@ -166,20 +182,9 @@ export class UsersService {
 
     const savedUser = await this.userRepository.save(newUser);
 
-    // **NOUVELLE LOGIQUE : Lier l'utilisateur au bloc actuel**
-    // Ne s'applique pas aux étudiants, car leur lien se fait à l'inscription.
-    const blocId = this.getBlocId();
-    if (blocId && savedUser.role !== UserRole.ETUDIANT) {
-      const newAccess = this.utilisateurBlocRepository.create({
-        utilisateur: { id: savedUser.id },
-        bloc: { id: blocId },
-      });
-      try {
-        await this.utilisateurBlocRepository.save(newAccess);
-      } catch (error) {
-        // Log l'erreur mais ne bloque pas la création de l'utilisateur
-        console.error(`Impossible de lier l'utilisateur ${savedUser.id} au bloc ${blocId}`, error);
-      }
+    // Gérer l'affectation des blocs si des IDs sont fournis
+    if (data.blocIds && data.blocIds.length > 0) {
+      await this.synchronizeUserBlocs(savedUser.id, data.blocIds);
     }
 
     return {
@@ -188,6 +193,35 @@ export class UsersService {
       motDePasseParent,
     };
   }
+
+  private async synchronizeUserBlocs(userId: number, blocIds: number[]): Promise<void> {
+    // 1. Supprimer les anciens accès
+    await this.utilisateurBlocRepository.delete({ utilisateur: { id: userId } });
+
+    // 2. Ajouter les nouveaux accès
+    for (const blocId of blocIds) {
+      try {
+        const blocExists = await this.blocRepository.findOneBy({ id: blocId });
+        if (blocExists) {
+          const newAccess = this.utilisateurBlocRepository.create({
+            utilisateur: { id: userId },
+            bloc: { id: blocId },
+          });
+          await this.utilisateurBlocRepository.save(newAccess);
+        } else {
+          this.logger.warn(`Bloc avec l'ID ${blocId} introuvable, impossible de créer l'association pour l'utilisateur ${userId}.`);
+        }
+      } catch (error) {
+        // Log l'erreur mais ne bloque pas les autres créations
+        this.logger.error(`Impossible de lier l'utilisateur ${userId} au bloc ${blocId}`, error.stack);
+      }
+    }
+  }
+
+
+
+
+
 
  async findById(id: number): Promise<User> {
   const blocId = this.getBlocId();
@@ -249,32 +283,50 @@ export class UsersService {
       return [];
     }
 
-    // Trouve tous les utilisateurs qui ont accès au bloc actuel.
-    return this.userRepository
+    // 1. Filtre les utilisateurs qui ont accès au bloc courant.
+    // 2. Pour ces utilisateurs, charge TOUTES leurs associations de blocs.
+    return await this.userRepository
       .createQueryBuilder('user')
-      .innerJoin('user.accesBlocs', 'acces')
-      .where('acces.blocId = :blocId', { blocId })
+      .innerJoin('user.accesBlocs', 'access_filter', 'access_filter.blocId = :blocId', { blocId })
+      .leftJoinAndSelect('user.accesBlocs', 'all_access')
       .getMany();
   }
 
   async deleteUser(id: number): Promise<void> {
-    const result = await this.userRepository.delete(id);
-    if (result.affected === 0) {
-      throw new NotFoundException('Utilisateur non trouvé pour suppression');
-    }
+    // First, find the user to ensure they exist and the current admin has access to them.
+    // The `findById` method already contains the logic to filter by the admin's blocId.
+    const userToDelete = await this.findById(id);
+
+    // If findById didn't throw an error, it means the user exists and is in the correct bloc.
+    // Now we can safely delete them using the more robust `remove` method.
+    await this.userRepository.remove(userToDelete);
   }
 
   async update(id: number, updateUserDto: UpdateUserDto): Promise<Partial<User>> {
     const user = await this.findById(id);
 
-    const { ancienMotDePasse, nouveauMotDePasse, ...otherFields } = updateUserDto;
+    const { ancienMotDePasse, nouveauMotDePasse, blocIds, ...otherFields } = updateUserDto;
 
     if (ancienMotDePasse || nouveauMotDePasse) {
       throw new BadRequestException("La modification du mot de passe n'est pas gérée ici.");
     }
 
     Object.assign(user, otherFields);
-    return this.userRepository.save(user);
+    await this.userRepository.save(user);
+
+    if (blocIds !== undefined) {
+      await this.synchronizeUserBlocs(id, blocIds);
+    }
+
+    // Re-fetch the user with all relations to return the updated state to the frontend
+    const updatedUserWithRelations = await this.userRepository.findOne({
+        where: { id },
+        relations: ['accesBlocs']
+    });
+
+    if (!updatedUserWithRelations) throw new NotFoundException('Utilisateur non trouvé après la mise à jour.');
+
+    return updatedUserWithRelations;
   }
 
   async updatePasswordWithoutOld(id: number, hashedPassword: string): Promise<void> {

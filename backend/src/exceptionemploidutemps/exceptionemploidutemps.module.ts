@@ -7,6 +7,7 @@ import { Classe } from '../classe/classe.entity';
 import { Matiere } from '../matieres/matiere.entity';
 import { User } from '../users/user.entity';
 import { createTenantRepositoryProvider } from '../tenant/tenant-repository.provider';
+import { Inscription } from '../inscription/inscription.entity';
 
 @Module({
   imports: [],
@@ -17,6 +18,7 @@ import { createTenantRepositoryProvider } from '../tenant/tenant-repository.prov
     createTenantRepositoryProvider(Classe),
     createTenantRepositoryProvider(Matiere),
     createTenantRepositoryProvider(User),
+    createTenantRepositoryProvider(Inscription),
   ],
 })
 export class ExceptionEmploiDuTempsModule {}

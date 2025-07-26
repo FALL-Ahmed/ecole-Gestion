@@ -82,7 +82,7 @@ export function Sidebar({
           { id: "comptabilite", label: t.sidebar.accounting, icon: Landmark },
           { id: "chapter-monitoring", label: t.sidebar.chapterMonitoring, icon: CheckSquare },
           { id: "stats", label: t.sidebar.statistics, icon: BarChart3 },
-          { id: "historique", label: "Historique", icon: History },
+          { id: "historique", label: t.sidebar.historique, icon: History },
           { id: "settings", label: t.sidebar.settings, icon: Settings },
         ];
       case "professeur":

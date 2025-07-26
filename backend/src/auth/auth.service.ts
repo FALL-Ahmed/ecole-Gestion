@@ -3,17 +3,21 @@ import {
   UnauthorizedException,
   ForbiddenException,
   Scope,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { ParentService } from '../central/parent.service';
-import { User } from '../users/user.entity';
+import { User, UserRole } from '../users/user.entity';
 import { Parent } from '../central/parent.entity';
 import { AdminService } from 'src/admin/admin.service';
 import { Admin } from 'src/admin/admin.entity';
 import { LoginDto } from './dto/login.dto';
 import { ConfigService } from '@nestjs/config';
+import { TenantConnectionManager } from '../tenant/tenant-connection.manager';
+import { Inscription } from '../inscription/inscription.entity';
+import { UtilisateurBloc } from '../users/utilisateur-bloc.entity';
 
 // Define response interfaces for clarity
 export interface ISelectionRequiredResponse {
@@ -29,12 +33,15 @@ export interface ILoginSuccessResponse {
 
 @Injectable({ scope: Scope.REQUEST })
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly parentService: ParentService,
     private readonly adminService: AdminService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly connectionManager: TenantConnectionManager,
   ) {}
 
   async login(
@@ -62,16 +69,29 @@ export class AuthService {
     }
 
     // 3. Check for User (with multi-bloc logic)
-    const user = await this.usersService.findByEmailWithPassword(email);
+    let user = await this.usersService.findByEmailWithPassword(email);
     if (user) {
       const isPasswordValid = await this.verifyPassword(user.motDePasse, password);
       if (isPasswordValid) {
         if (!user.actif) throw new UnauthorizedException('Compte désactivé');
 
-        // --- Multi-Bloc Logic Starts Here ---
-        const { accesBlocs } = user;
+        let { accesBlocs } = user;
 
-        // Cas C: Aucun bloc trouvé
+        // --- DEBUT DE LA LOGIQUE D'AUTO-REPARATION ---
+        if ((!accesBlocs || accesBlocs.length === 0) && user.role === UserRole.ETUDIANT) {
+          this.logger.log(`[login] Aucun accès bloc trouvé pour l'élève ${user.email}. Tentative de réparation...`);
+          await this.repairStudentAccess(user);
+          
+          // Re-fetch user to get the new access rights
+          const repairedUser = await this.usersService.findByEmailWithPassword(email);
+          if (repairedUser) {
+            user = repairedUser;
+            accesBlocs = repairedUser.accesBlocs;
+          }
+        }
+        // --- FIN DE LA LOGIQUE D'AUTO-REPARATION ---
+
+        // Cas C: Aucun bloc trouvé (même après réparation)
         if (!accesBlocs || accesBlocs.length === 0) {
           throw new ForbiddenException(
             "Aucun établissement n'est associé à ce compte. Veuillez contacter l'administration.",
@@ -168,5 +188,47 @@ export class AuthService {
       access_token: this.jwtService.sign(payload),
       user: userPayload,
     };
+  }
+
+  private async repairStudentAccess(user: User): Promise<void> {
+    const allTenantIds = await this.connectionManager.getAllTenantIds();
+    this.logger.debug(`[repairStudentAccess] Scan des tenants pour l'utilisateur ${user.id}: ${allTenantIds.join(', ')}`);
+
+    for (const tenantId of allTenantIds) {
+      try {
+        const dataSource = await this.connectionManager.getDataSource(tenantId);
+        const inscriptionRepository = dataSource.getRepository(Inscription);
+        const utilisateurBlocRepository = dataSource.getRepository(UtilisateurBloc);
+
+        // Chercher une inscription active pour cet élève dans ce tenant
+        const activeInscription = await inscriptionRepository.findOne({
+          where: { utilisateurId: user.id, actif: true },
+        });
+
+        if (activeInscription) {
+          this.logger.log(`[repairStudentAccess] Inscription active trouvée pour l'utilisateur ${user.id} dans le tenant ${tenantId}.`);
+          const blocId = parseInt(tenantId.replace('bloc_', ''), 10);
+
+          // Vérifier si l'accès existe déjà pour éviter les doublons
+          const existingAccess = await utilisateurBlocRepository.findOne({
+            where: { utilisateur: { id: user.id }, blocId: blocId },
+          });
+
+          if (!existingAccess) {
+            this.logger.log(`[repairStudentAccess] Création du lien manquant entre l'utilisateur ${user.id} et le bloc ${blocId}.`);
+            const newAccess = utilisateurBlocRepository.create({
+              utilisateur: { id: user.id },
+              bloc: { id: blocId },
+            });
+            await utilisateurBlocRepository.save(newAccess);
+          } else {
+            this.logger.debug(`[repairStudentAccess] Le lien pour l'utilisateur ${user.id} et le bloc ${blocId} existe déjà.`);
+          }
+        }
+      } catch (error) {
+        this.logger.error(`[repairStudentAccess] Erreur lors du traitement du tenant ${tenantId} pour l'utilisateur ${user.id}:`, error.stack);
+        // On continue même si un tenant échoue
+      }
+    }
   }
 }

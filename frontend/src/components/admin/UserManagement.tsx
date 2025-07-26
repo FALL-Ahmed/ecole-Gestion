@@ -16,13 +16,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Search, Check, X, ChevronDown, ChevronUp, Loader2, Shield, User as UserIcon, GraduationCap, BookOpen, Upload, Info, Eye, EyeOff, Users as UsersIcon } from 'lucide-react';
+import { Plus, Search, Check, X, ChevronDown, ChevronUp, Loader2, Shield, User as UserIcon, GraduationCap, BookOpen, Upload, Info, Eye, EyeOff, Users as UsersIcon, Landmark } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Skeleton } from '../ui/skeleton';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { Label } from '../ui/label';
+import { Checkbox } from '../ui/checkbox';
+
 import { Switch } from '../ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -36,6 +38,12 @@ interface PasswordRevealProps {
   showPasswordText: string;
   hidePasswordText: string;
 }
+
+interface Bloc {
+  id: number;
+  nom: string;
+}
+
 
 const initialUserFormData = {
   nom: '',
@@ -51,6 +59,8 @@ const initialUserFormData = {
   classe_id: '',
   annee_scolaire_id: '',
   date_inscription: new Date().toISOString().split('T')[0],
+    blocIds: [] as number[],
+
   parentId: '',
 };
 
@@ -116,6 +126,7 @@ const initialInscriptionFormData = {
 };
   const [activeTab, setActiveTab] = useState<'users' | 'inscriptions'>('users');
   const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
+  const [filterBlocId, setFilterBlocId] = useState<string>('all');
   const [inscriptions, setInscriptions] = useState<Inscription[]>([]);
   const [generatedPassword, setGeneratedPassword] = useState<{
     password: string;
@@ -128,6 +139,8 @@ const initialInscriptionFormData = {
   const [editUser, setEditUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [classes, setClasses] = useState<Classe[]>([]);
+    const [blocs, setBlocs] = useState<Bloc[]>([]);
+
   const [windowHeight, setWindowHeight] = useState(window.innerHeight);
 const handlePrintClassStudents = async (classeId: number) => {
   try {
@@ -367,6 +380,7 @@ const [editInscription, setEditInscription] = useState<Inscription | null>(null)
 const [userFormData, setUserFormData] = useState<typeof initialUserFormData>(initialUserFormData);
 const [emailManuallyEdited, setEmailManuallyEdited] = useState(false);
   const [isCheckingTuteur, setIsCheckingTuteur] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
 
   const handleEditUserFromInscription = (inscription: Inscription) => {
   setEditUser(inscription.utilisateur);
@@ -384,6 +398,8 @@ const [emailManuallyEdited, setEmailManuallyEdited] = useState(false);
     classe_id: String(inscription.classe.id),
     annee_scolaire_id: String(inscription.annee_scolaire.id), // Bien définir l'année scolaire
     date_inscription: inscription.date_inscription.split('T')[0],
+        blocIds: inscription.utilisateur.accesBlocs?.map(ab => ab.blocId) || [],
+
     parentId: inscription.utilisateur.parentId || '',
   });
   setIsAddUserDialogOpen(true);
@@ -416,11 +432,13 @@ const handleEditInscription = (inscription: Inscription) => {
       setIsLoadingUsers(true);
       setIsLoadingInscriptions(true);
       try {
-        const [usersRes, classesRes, yearsRes, inscriptionsRes] = await Promise.all([
+        const [usersRes, classesRes, yearsRes, inscriptionsRes, blocsRes] = await Promise.all([
           apiClient.get('/users'),
           apiClient.get('/classes'),
           apiClient.get('/annees-academiques'),
           apiClient.get('/inscriptions?_expand=utilisateur&_expand=classe&_expand=annee_scolaire'),
+          apiClient.get('/blocs'),
+
         ]);
 
         const usersData = usersRes.data;
@@ -429,6 +447,8 @@ const handleEditInscription = (inscription: Inscription) => {
         const inscriptionsData: Inscription[] = inscriptionsRes.data;
         
         setClasses(classesData);
+                setBlocs(blocsRes.data);
+
         setAcademicYears(yearsData);
 
         const linkedInscriptions = inscriptionsData.map(inscription => ({
@@ -571,10 +591,11 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
  const handleAddUserSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
   setIsSubmitting(true);
+  setValidationErrors({}); // Réinitialiser les erreurs précédentes
 
   try {
     // Préparation des données utilisateur
-    const userData: Partial<User> = {
+    const userData: Partial<User> & { blocIds?: number[] } = {
       nom: userFormData.nom,
       prenom: userFormData.prenom,
       email: userFormData.email,
@@ -583,6 +604,8 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
       photoUrl: userFormData.photoUrl || null,
       role: userFormData.role === "" ? 'eleve' : userFormData.role,
       actif: userFormData.actif,
+      blocIds: userFormData.blocIds,
+
     };
 
     // Ajout des infos tuteur si c'est un élève
@@ -655,13 +678,25 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
     });
 
   } catch (error) {
-    console.error("Erreur lors de la création/mise à jour:", error);
-    toast({
+    const axiosError = error as any;
+    if (axiosError.isAxiosError && axiosError.response && (axiosError.response.status === 400 || axiosError.response.status === 422)) {
+      const backendErrors = axiosError.response.data.message;
+      if (typeof backendErrors === 'object' && backendErrors !== null) {
+        setValidationErrors(backendErrors);
+      }
+      toast({
+        title: t.common.error,
+        description: t.common.requiredFieldsError,
+        variant: "destructive",
+      });
+    } else {
+      console.error("Erreur lors de la création/mise à jour:", error);
+        toast({
       title: t.common.error,
       description: error instanceof Error ? error.message : t.userManagement.toasts.userCreateUpdateError,
       variant: "destructive",
     });
-  } finally {
+  }} finally {
     setIsSubmitting(false);
   }
 };
@@ -792,12 +827,13 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
   const filteredUsers = useMemo(() => {
     return sortedUsers.filter(user =>
       (filterRole === 'all' || user.role === filterRole) &&
+      (filterBlocId === 'all' || user.accesBlocs?.some(ab => String(ab.blocId) === filterBlocId)) &&
       (user.nom.toLowerCase().includes(searchTermUsers.toLowerCase()) ||
         user.prenom.toLowerCase().includes(searchTermUsers.toLowerCase()) ||
         user.email.toLowerCase().includes(searchTermUsers.toLowerCase()) ||
         (user.tuteurNom && user.tuteurNom.toLowerCase().includes(searchTermUsers.toLowerCase())))
     );
-  }, [sortedUsers, searchTermUsers, filterRole]);
+  }, [sortedUsers, searchTermUsers, filterRole, filterBlocId]);
 
   const requestSortInscriptions = (key: 'utilisateur' | 'classe' | 'annee_scolaire' | 'actif') => {
     let direction: 'ascending' | 'descending' = 'ascending';
@@ -912,6 +948,8 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
         annee_scolaire_id,
         date_inscription,
         parentId: editUser.parentId || '',
+                blocIds: editUser.accesBlocs?.map(ab => ab.blocId) || [],
+
       });
       setIsAddUserDialogOpen(true);
     }
@@ -921,6 +959,7 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
     return sortedInscriptions.filter(inscription =>
       (filterClasseId === 'all' || String(inscription.classe.id) === filterClasseId) &&
       (filterAnneeId === 'all' || String(inscription.annee_scolaire.id) === filterAnneeId) &&
+      (filterBlocId === 'all' || inscription.utilisateur.accesBlocs?.some(ab => String(ab.blocId) === filterBlocId)) &&
       (
         inscription.utilisateur.nom.toLowerCase().includes(searchTermInscriptions.toLowerCase()) ||
         inscription.utilisateur.prenom.toLowerCase().includes(searchTermInscriptions.toLowerCase()) ||
@@ -930,7 +969,7 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
         inscription.annee_scolaire.libelle.toLowerCase().includes(searchTermInscriptions.toLowerCase())
       )
     );
-  }, [sortedInscriptions, searchTermInscriptions, filterClasseId, filterAnneeId]);
+  }, [sortedInscriptions, searchTermInscriptions, filterClasseId, filterAnneeId, filterBlocId]);
 
   const availableStudents = useMemo(() => users.filter(user => user.role === 'eleve'), [users]);
   
@@ -987,6 +1026,8 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
               if (!isOpen) {
                 setEditUser(null);
                 setUserFormData(initialUserFormData);
+                                setValidationErrors({});
+
                 setEmailManuallyEdited(false);
               }
             }}>              <DialogTrigger asChild>
@@ -1044,6 +1085,10 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
   onChange={e => setUserFormData(prev => ({ ...prev, nom: e.target.value }))}
   className="h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm"
 />
+{validationErrors.nom && (
+                            <p className="text-xs text-red-500 mt-1">{validationErrors.nom.join(', ')}</p>
+                          )}
+
                           {isCheckingTuteur && (
                             <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
                           )}
@@ -1062,7 +1107,12 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
                           value={userFormData.prenom}
                           onChange={e => setUserFormData(prev => ({ ...prev, prenom: e.target.value }))}
                           className="h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm"
-                        />
+                          />
+                        {validationErrors.prenom && (
+                          <p className="text-xs text-red-500 mt-1">{validationErrors.prenom.join(', ')}</p>
+
+                        )}
+                        
                       </div>
                 
                       
@@ -1290,6 +1340,28 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
                     </div>
                   </div>
 
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-850 dark:to-gray-900 p-6 rounded-2xl border border-blue-100 dark:border-gray-700 shadow-sm-light transform transition-transform duration-300 hover:scale-[1.005]">
+                    <h3 className="flex items-center gap-3 text-base font-semibold text-blue-700 dark:text-blue-300 mb-5 pb-3 border-b border-blue-200/60 dark:border-gray-700/60">
+                      <Landmark className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      {t.settings.blocManagement.title}
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {blocs.map(bloc => (
+                        <div key={bloc.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`bloc-${bloc.id}`}
+                            checked={userFormData.blocIds.includes(bloc.id)}
+                            onCheckedChange={(checked) => {
+                              const newBlocIds = checked ? [...userFormData.blocIds, bloc.id] : userFormData.blocIds.filter(id => id !== bloc.id);
+                              setUserFormData(prev => ({...prev, blocIds: newBlocIds}));
+                            }}
+                          />
+                          <Label htmlFor={`bloc-${bloc.id}`} className="text-sm font-medium text-gray-700 dark:text-gray-200">{bloc.nom}</Label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-850 dark:to-gray-900 p-6 rounded-2xl border border-blue-100 dark:border-gray-700 shadow-sm-light transform transition-transform duration-300 hover:scale-[1.005]">
                     <h3 className="flex items-center gap-3 text-base font-semibold text-blue-700 dark:text-blue-300 mb-5 pb-3 border-b border-blue-200/60 dark:border-gray-700/60">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1391,6 +1463,10 @@ const handleUserFormChange = useCallback((field: keyof typeof userFormData) => (
       }}
       className="h-11 px-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 ease-in-out shadow-xs hover:shadow-sm"
     />
+        {validationErrors.email && (
+      <p className="text-xs text-red-500 mt-1">{validationErrors.email.join(', ')}</p>
+    )}
+
     {isCheckingTuteur && (
       <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
     )}
@@ -1482,6 +1558,22 @@ onClick={() => setFilterRole(key as "all" | UserRole)}
         );
       })}
     </div>
+    
+    <Select value={filterBlocId} onValueChange={setFilterBlocId}>
+      <SelectTrigger className="w-full sm:w-48 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 shadow-sm">
+        <SelectValue placeholder={t.common.filterByBloc} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">
+          {t.common.allBlocs}
+        </SelectItem>
+        {blocs.map(bloc => (
+          <SelectItem key={bloc.id} value={String(bloc.id)}>
+            {bloc.nom}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
 
     {/* Barre de recherche */}
     <div className="relative w-full sm:w-64">
@@ -1852,6 +1944,22 @@ onClick={() => {
   {t.userManagement.printClassList}
 </Button>
       
+      <Select value={filterBlocId} onValueChange={setFilterBlocId}>
+        <SelectTrigger className="w-full sm:w-44">
+          <SelectValue placeholder={t.common.filterByBloc} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">
+            {t.common.allBlocs}
+          </SelectItem>
+          {blocs.map(bloc => (
+            <SelectItem key={bloc.id} value={String(bloc.id)}>
+              {bloc.nom}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
       <div className="relative w-full sm:w-64">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
         <Input
@@ -2083,40 +2191,37 @@ onClick={() => {
      {generatedPassword && (
   <Dialog open={!!generatedPassword} onOpenChange={() => setGeneratedPassword(null)}>
     <DialogContent className="max-w-md w-full bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 rounded-2xl shadow-xl border border-blue-100 dark:border-gray-700 p-0 overflow-hidden">
-      <div className="flex flex-col items-center text-center px-6 py-8">
-        {/* Icône de succès */}
+      <DialogHeader className="flex flex-col items-center text-center px-6 pt-8 pb-4">
         <div className="bg-green-100 dark:bg-green-900 rounded-full p-3 mb-3 animate-bounce shadow-lg">
           <Check className="h-8 w-8 text-green-600 dark:text-green-300" />
         </div>
-
-        {/* Titre */}
-        <h2 className="text-2xl font-bold mb-2 text-blue-900 dark:text-blue-100">
-          {generatedPassword.parentPassword 
-            ? t.userManagement.passwordModal.parentTitle 
+        <DialogTitle className="text-2xl font-bold mb-2 text-blue-900 dark:text-blue-100">
+          {generatedPassword.parentPassword
+            ? t.userManagement.passwordModal.parentTitle
             : t.userManagement.passwordModal.title}
-        </h2>
+        </DialogTitle>
+        <DialogDescription asChild>
+          <div className="space-y-2">
+            <div className="flex items-center justify-center gap-2">
+              <span className="inline-flex items-center px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-xs font-semibold">
+                <Info className="h-4 w-4 mr-1" /> {t.userManagement.passwordModal.important}
+              </span>
+            </div>
+            <p className="text-gray-600 dark:text-gray-300 text-sm">
+              {generatedPassword.parentPassword
+                ? t.userManagement.passwordModal.parentInfo
+                : t.userManagement.passwordModal.info}
+              <br />
+              <span className="text-red-500 font-medium">
+                {t.userManagement.passwordModal.warning}
+              </span>
+            </p>
+          </div>
+        </DialogDescription>
+      </DialogHeader>
 
-        {/* Message d'avertissement */}
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <span className="inline-flex items-center px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-xs font-semibold">
-            <Info className="h-4 w-4 mr-1" /> {t.userManagement.passwordModal.important}
-          </span>
-        </div>
-
-        {/* Instructions */}
-        <p className="text-gray-600 dark:text-gray-300 mb-4 text-sm">
-          {generatedPassword.parentPassword 
-            ? t.userManagement.passwordModal.parentInfo 
-            : t.userManagement.passwordModal.info}
-          <br />
-          <span className="text-red-500 font-medium">
-            {t.userManagement.passwordModal.warning}
-          </span>
-        </p>
-
-        {/* Détails du compte */}
-        <div className="w-full bg-white dark:bg-gray-900 rounded-lg shadow p-4 mb-4 space-y-2 border border-gray-100 dark:border-gray-700 text-left">
-          {/* Nom + Prénom */}
+      <div className="px-6 pb-8 space-y-4">
+        <div className="w-full bg-white dark:bg-gray-900 rounded-lg shadow p-4 space-y-2 border border-gray-100 dark:border-gray-700 text-left">
           <div>
             <span className="font-semibold">{t.userManagement.userForm.name}:</span> {generatedPassword.nom}
           </div>
@@ -2127,14 +2232,13 @@ onClick={() => {
             <span className="font-semibold">{t.userManagement.userForm.email}:</span> {generatedPassword.email}
           </div>
 
-          {/* Afficher le mot de passe parent OU élève selon le cas */}
           {generatedPassword.parentPassword ? (
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-2 pt-2">
               <span className="font-semibold">{t.userManagement.passwordModal.parentPassword}:</span>
-              <PasswordReveal 
-                password={generatedPassword.parentPassword} 
-                showPasswordText={t.userManagement.passwordModal.show} 
-                hidePasswordText={t.userManagement.passwordModal.hide} 
+              <PasswordReveal
+                password={generatedPassword.parentPassword}
+                showPasswordText={t.userManagement.passwordModal.show}
+                hidePasswordText={t.userManagement.passwordModal.hide}
               />
               <Button
                 type="button"
@@ -2149,12 +2253,12 @@ onClick={() => {
               </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-2 pt-2">
               <span className="font-semibold">{t.userManagement.passwordModal.password}:</span>
-              <PasswordReveal 
-                password={generatedPassword.password} 
-                showPasswordText={t.userManagement.passwordModal.show} 
-                hidePasswordText={t.userManagement.passwordModal.hide} 
+              <PasswordReveal
+                password={generatedPassword.password}
+                showPasswordText={t.userManagement.passwordModal.show}
+                hidePasswordText={t.userManagement.passwordModal.hide}
               />
               <Button
                 type="button"
@@ -2171,10 +2275,9 @@ onClick={() => {
           )}
         </div>
 
-        {/* Bouton de fermeture */}
         <Button
           onClick={() => setGeneratedPassword(null)}
-          className="mt-2 px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow"
+          className="w-full mt-2 px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow"
         >
           {t.common.close}
         </Button>

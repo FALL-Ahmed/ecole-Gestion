@@ -49,6 +49,9 @@ import { EcolesModule } from './ecoles/ecoles.module';
 import { Ecole } from './ecoles/ecole.entity';
 import { Admin } from './admin/admin.entity';
 import { ParentModule } from './central/parent.module';
+import { BlocModule } from './bloc/bloc.module';
+import { ParentSearchModule } from './parent-search/parent-search.module';
+
 import { ExceptionEmploiDuTemps } from './exceptionemploidutemps/exceptionemploidutemps.entity';
 import { Paiement } from './paiements/paiements.entity';
 
@@ -79,6 +82,8 @@ const featureModules = [
   RappelPaiementModule,
   AdminModule,
   EcolesModule,
+  BlocModule,
+  ParentSearchModule,
 ];
 
 @Module({
@@ -99,28 +104,7 @@ const featureModules = [
         username: config.get('CENTRAL_DB_USER'),
         password: config.get('CENTRAL_DB_PASSWORD'),
         database: config.get('CENTRAL_DB_NAME'),
-entities: [
-  Parent,
-  User,
-  Absence,
-  Matiere,
-  Chapitre,
-  Classe,
-  Inscription,
-  anneescolaire,
-  Evaluation,
-  Trimestre,
-  Note,
-  Ecole,
-  Admin,
-  Bloc,
-  EmploiDuTemps,
-  ExceptionEmploiDuTemps,
-  Paiement,
-  // 👇 ajoute ici
-  UtilisateurBloc,
-],
-
+        entities: [Parent, Ecole, Admin], // Seules les entités de la base de données centrale sont listées ici.
 
         synchronize: false,
         logging: false,

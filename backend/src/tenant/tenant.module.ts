@@ -19,7 +19,7 @@ export class TenantModule {
         },
         TenantConnectionManager,
       ],
-      exports: [TenantConnectionManager],
+      exports: [TenantConnectionManager, 'central'],
     };
   }
 }

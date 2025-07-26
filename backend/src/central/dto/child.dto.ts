@@ -11,4 +11,6 @@ export interface ChildDto {
     id: number;
     libelle: string;
   };
+  blocId: number;
+  photoUrl?: string | null; // Champ optionnel pour la photo
 }

@@ -1,28 +1,37 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, Req } from '@nestjs/common';
+import { Request } from 'express';
 import { AuditLogService } from './historique.service';
-import { InjectRepository } from '@nestjs/typeorm';
-import { AuditLog } from './historique.entity';
-import { Repository, FindManyOptions } from 'typeorm';
 import { QueryAuditLogDto } from './dto/query-audit-log.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { UserRole } from '../users/user.entity';
+
+interface UserPayload {
+  userId: number;
+  email: string;
+  role: UserRole;
+  blocId: number;
+}
+
+interface RequestWithUser extends Request {
+  user: UserPayload;
+}
 
 @Controller('api/historique')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN)
 export class HistoriqueController {
   constructor(
-    @InjectRepository(AuditLog)
-    private readonly auditLogRepository: Repository<AuditLog>,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   @Get()
-  async findAll(@Query() queryDto: QueryAuditLogDto) {
-    const { search, user, action, entity } = queryDto;
-    const queryOptions: FindManyOptions<AuditLog> = {
-      order: { timestamp: 'DESC' },
-      relations: ['utilisateur'],
-      take: 100, // Limiter pour la performance
-    };
-
-    // Ici, vous ajouteriez la logique de filtrage en fonction des queryDto
-    // Exemple: if (user) { queryOptions.where = { ...queryOptions.where, userId: user }; }
-    return this.auditLogRepository.find(queryOptions);
+  async findAll(
+    @Query() queryDto: QueryAuditLogDto,
+    @Req() req: RequestWithUser,
+  ) {
+    const { blocId } = req.user;
+    return this.auditLogService.findAll(blocId, queryDto);
   }
 }

@@ -19,15 +19,16 @@ import { useLanguage } from '@/contexts/LanguageContext';
 
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { FileDown, Printer, Search, Eye } from 'lucide-react';
+import { FileDown, Printer, Search, Eye, Award } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useEstablishmentInfo } from '@/contexts/EstablishmentInfoContext';
 import { useDebounce } from 'use-debounce';
 import ReactDOMServer from 'react-dom/server';
 import apiClient from '@/lib/apiClient';
+import { format, parseISO } from 'date-fns';
 
 import { calculateGeneralAverage, termEvaluationMap } from '../../lib/grades';
 
@@ -367,7 +368,39 @@ export function ReportManagement() {
   const [previewOpen, setPreviewOpen] = useState<boolean>(false);
   const [selectedReport, setSelectedReport] = useState<BulletinEleve | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isOrientationDialogOpen, setIsOrientationDialogOpen] = useState(false);
+  const [isSinglePrintDialogOpen, setIsSinglePrintDialogOpen] = useState(false);
+  const [isPrintPending, setIsPrintPending] = useState(false); // Pour enchaîner les modales
+
   const [dynamicEvaluationHeaders, setDynamicEvaluationHeaders] = useState<string[]>([]);
+
+  const getRankDetails = (rank: string) => {
+    const rankNumber = parseInt(rank.split('/')[0], 10);
+    if (isNaN(rankNumber)) return null;
+
+    if (rankNumber === 1) {
+      return { 
+        icon: <Award className="h-5 w-5 text-amber-500" />, 
+        rowClass: 'bg-amber-100 dark:bg-amber-900/30 border-l-4 border-amber-400',
+        cardClass: 'border-2 border-amber-400 bg-amber-100 dark:bg-amber-900/30'
+      };
+    }
+    if (rankNumber === 2) {
+      return { 
+        icon: <Award className="h-5 w-5 text-slate-500" />, 
+        rowClass: 'bg-slate-100 dark:bg-slate-800/40 border-l-4 border-slate-400',
+        cardClass: 'border-2 border-slate-400 bg-slate-100 dark:bg-slate-800/40'
+      };
+    }
+    if (rankNumber === 3) {
+      return { 
+        icon: <Award className="h-5 w-5 text-orange-600" />, 
+        rowClass: 'bg-orange-100 dark:bg-orange-900/30 border-l-4 border-orange-500',
+        cardClass: 'border-2 border-orange-500 bg-orange-100 dark:bg-orange-900/30'
+      };
+    }
+    return null;
+  };
 
   const getAppreciation = useCallback((moyenne: number): string => {
     if (moyenne >= 16) return t.reportManagement.appreciations.excellent;
@@ -484,15 +517,37 @@ const allEvaluationsForYear = await fetchEvaluationsForClassAndYear(classIdNum, 
       console.log("Notes finales stockées dans l'état 'allNotes':", notesData);
       setAllNotes(notesData);
 
-      // 5. Mets à jour les headers dynamiques
-      const termConfig = termEvaluationMap[currentTerm.nom as keyof typeof termEvaluationMap];
-      if (termConfig) {
-        setDynamicEvaluationHeaders([
-          termConfig.devoir1,
-          termConfig.devoir2,
-          termConfig.composition
-        ]);
+      // 5. Mettre à jour les en-têtes de colonnes dynamiquement et dans le bon ordre
+      const termNumber = parseInt(currentTerm.nom.replace(/\D/g, ''), 10);
+      const devoirs: string[] = [];
+      const compositions: string[] = [];
+
+      // Ajouter les devoirs et la composition du trimestre actuel
+      const currentTermConfig = termEvaluationMap[currentTerm.nom as keyof typeof termEvaluationMap];
+      if (currentTermConfig) {
+        devoirs.push(currentTermConfig.devoir1, currentTermConfig.devoir2);
+        compositions.push(currentTermConfig.composition);
       }
+
+      // Ajouter les compositions des trimestres précédents
+      if (termNumber >= 2) {
+        const prevTermConfig = termEvaluationMap['Trimestre 1'];
+        if (prevTermConfig) compositions.push(prevTermConfig.composition);
+      }
+      if (termNumber >= 3) {
+        const term2Config = termEvaluationMap['Trimestre 2'];
+        if (term2Config) compositions.push(term2Config.composition);
+      }
+
+      // Trier les compositions par ordre numérique
+      const sortedCompositions = [...new Set(compositions)].sort((a, b) => {
+        const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+        const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+        return numA - numB;
+      });
+
+      // Concaténer les devoirs du trimestre, PUIS les compositions triées
+      setDynamicEvaluationHeaders([...devoirs, ...sortedCompositions]);
     } catch (error) {
       console.error("Failed to load evaluations or notes:", error);
     } finally {
@@ -511,32 +566,38 @@ const allEvaluationsForYear = await fetchEvaluationsForClassAndYear(classIdNum, 
   const termIdNum = parseInt(selectedTermId);
   const currentTerm = trimestres.find(t => t.id === termIdNum);
   if (!classIdNum || !anneeIdNum || !termIdNum || !currentTerm) return;
-
   setIsLoading(true);
 
   try {
-    // Absences
-    const allClassAbsences: AbsenceAPI[] = await fetchApiData('absences', {
-      classe_id: classIdNum.toString(),
+    // On récupère toutes les absences de l'année pour la classe sélectionnée.
+    const allYearAbsences: AbsenceAPI[] = await fetchApiData('absences', {
       annee_scolaire_id: anneeIdNum.toString(),
-      date_debut: currentTerm.date_debut,
-      date_fin: currentTerm.date_fin
+      classe_id: classIdNum.toString(),
     });
 
-    const termNumber = parseInt(currentTerm.nom.replace('Trimestre ', ''));
-    const termConfig = termEvaluationMap[currentTerm.nom as keyof typeof termEvaluationMap];
+    // On filtre ensuite ces absences côté client pour ne garder que celles du trimestre.
+    const termStartDate = parseISO(currentTerm.date_debut);
+    const termEndDate = parseISO(currentTerm.date_fin);
+    const allTermAbsences = allYearAbsences.filter(abs => {
+        const absDate = parseISO(abs.date);
+        return absDate >= termStartDate && absDate <= termEndDate;
+    });
 
     const bulletinsPromises = eleves.map(async (eleve) => {
       console.log(`%c[Bulletin] Traitement pour ${eleve.prenom} ${eleve.nom} (ID: ${eleve.id})`, 'color: #1e90ff; font-weight: bold;');
       // Absences
-      const absencesEleve = allClassAbsences.filter(abs => abs.etudiant_id === eleve.id);
+      const absencesEleve = allTermAbsences.filter(abs => abs.etudiant_id === eleve.id);
       let totalHeuresAbsenceNonJustifiees = 0;
       absencesEleve.forEach(absence => {
-        if (!absence.justifie) {
+        // Correction : une absence est non justifiée si la colonne 'justification' est vide ou nulle.
+        if (!absence.justification || absence.justification.trim() === '') {
           const heures = calculateDurationInHours(absence.heure_debut, absence.heure_fin);
           totalHeuresAbsenceNonJustifiees += heures;
         }
       });
+
+      const termNumber = parseInt(currentTerm.nom.replace('Trimestre ', ''));
+      const termConfig = termEvaluationMap[currentTerm.nom as keyof typeof termEvaluationMap];
 
       // Tri des matières selon l'ordre spécifié
       const subjectOrder = [
@@ -578,73 +639,22 @@ const allEvaluationsForYear = await fetchEvaluationsForClassAndYear(classIdNum, 
         const coefficient = coefficients.find(c => c.matiere_id === matiere.id)?.coefficient || 1;
         const matiereId = matiere.id;
         
-        // Correction: Utiliser allEvaluations pour obtenir une date fiable.
-        const notesForSubjectAndTerm = allNotes.filter((note, index) => {
-           console.log("[Debug note.evaluation] ", note.evaluation);
-
-          const studentMatch = Number(note.etudiant.id) === Number(eleve.id);
-          const noteMatiereId = note.evaluation.matiere?.id ?? note.evaluation.matiere_id;
-          const subjectMatch = Number(noteMatiereId) === Number(matiereId);
-
-          // Chercher l'évaluation complète pour avoir la date
-          const fullEvaluation = allEvaluations.find(e => e.id === note.evaluation.id);
-          const evalDateStr = fullEvaluation?.date_eval?.substring(0, 10) || '';
-          const termStartDateStr = currentTerm.date_debut.substring(0, 10);
-          const termEndDateStr = currentTerm.date_fin.substring(0, 10);
-const trimestre = trimestres.find(t => t.id === note.evaluation.trimestre);
-const dateMatch = evalDateStr &&
-  new Date(evalDateStr) >= new Date(termStartDateStr) &&
-  new Date(evalDateStr) <= new Date(termEndDateStr);
-if (!dateMatch) {
-  console.warn(`[⚠️ Filtrage] Exclue : note #${note.id} — Date ${evalDateStr} hors période ${termStartDateStr} - ${termEndDateStr}`);
-}
-
-
-          // Log de débogage
-       if (eleve.id === eleves[0]?.id && matiere.id === matieres[0]?.id && index < 5) {
-  const debugInfo = {
-    "Note ID": note.id,
-    "Élève": `${eleve.prenom} ${eleve.nom}`,
-    "ID Élève": {
-      "Note": note.etudiant.id,
-      "Bulletin": eleve.id,
-      "Match": studentMatch,
-      "Problème": studentMatch ? "" : "❌ ID Élève ne correspond pas"
-    },
-    "Matière": {
-      "ID Note": noteMatiereId,
-      "ID Bulletin": matiereId,
-      "Match": subjectMatch,
-      "Problème": subjectMatch ? "" : "❌ ID Matière ne correspond pas"
-    },
-    "Dates": {
-      "Évaluation": evalDateStr || "Non spécifiée",
-      "Trimestre": `${termStartDateStr} - ${termEndDateStr}`,
-      "Dans période": dateMatch ? "✅" : "❌ Hors période",
-      "Problème": dateMatch ? "" : 
-        !evalDateStr ? "Date manquante" : 
-        "Date hors du trimestre"
-    },
-    "Résultat Final": studentMatch && subjectMatch && dateMatch ? "✅ Inclus" : "❌ Exclu"
-  };
-
-  console.log(`%c[Debug Filtre Note] Note #${note.id}`, 
-    'color: #f97316; font-weight: bold;', 
-    debugInfo);
-}
-          return studentMatch && subjectMatch && dateMatch;
-        });
-
-        console.log(`[Bulletin] Matière: ${matiere.nom} - ${notesForSubjectAndTerm.length} notes trouvées pour ce trimestre.`, notesForSubjectAndTerm);
         // Génère dynamiquement les évaluations attendues
        const notesEvaluations = dynamicEvaluationHeaders.map((header) => {
-  const noteObj = notesForSubjectAndTerm.find(note => {
-    const evalType = note.evaluation.type?.trim().toLowerCase();
-    const evalLibelle = note.evaluation.libelle?.trim().toLowerCase();
-    const headerLower = header.trim().toLowerCase();
-    
-    return evalType === headerLower || evalLibelle === headerLower;
-  });
+          // On cherche la note correspondante dans TOUTES les notes de l'année,
+          // pas seulement celles du trimestre courant.
+          const noteObj = allNotes.find(note => {
+            const studentMatch = Number(note.etudiant.id) === Number(eleve.id);
+            const noteMatiereId = note.evaluation.matiere?.id ?? note.evaluation.matiere_id;
+            const subjectMatch = Number(noteMatiereId) === Number(matiereId);
+
+            const evalType = note.evaluation.type?.trim().toLowerCase();
+            const evalLibelle = note.evaluation.libelle?.trim().toLowerCase();
+            const headerLower = header.trim().toLowerCase();
+            const headerMatch = evalType === headerLower || evalLibelle === headerLower;
+
+            return studentMatch && subjectMatch && headerMatch;
+          });
   
   return {
     id: noteObj?.id || 0,
@@ -664,7 +674,10 @@ if (!dateMatch) {
           ? devoirNotes.reduce((sum, n) => sum + n, 0) / devoirNotes.length
           : null;
 
-        const compositionEval = notesEvaluations.find(ev => ev.type === 'Composition');
+        // Correction: Trouver la composition du trimestre ACTUEL, pas la première de la liste.
+        // Le nom de la composition du trimestre actuel est dans termConfig.
+        const currentTermCompositionName = termConfig.composition;
+        const compositionEval = notesEvaluations.find(ev => ev.libelle === currentTermCompositionName);
         const compositionNote = compositionEval && typeof compositionEval.note === 'number'
           ? Number(compositionEval.note)
           : null;
@@ -805,7 +818,7 @@ useEffect(() => {
     setPreviewOpen(true);
   };
 
- const printAllReports = async () => {
+ const printAllReports = async (orientation: 'portrait' | 'landscape') => {
   if (bulletins.length === 0) {
     toast({
       title: t.common.error,
@@ -832,12 +845,11 @@ useEffect(() => {
       ${styles}
       <style>
         @page {
-          size: A4;
+          size: A4 ${orientation};
           margin: 10mm;
         }
         .bulletin-container {
           page-break-after: always;
-          height: 100vh;
         }
         .bulletin-container:last-child {
           page-break-after: auto;
@@ -853,7 +865,7 @@ useEffect(() => {
         }
       </style>
     </head>
-    <body ${isRTL ? 'dir="rtl"' : ''} style="font-family: Arial, sans-serif;">
+    <body ${isRTL ? 'dir="rtl"' : ''} style="font-family: Arial, sans-serif; margin: 0;">
   `;
 
   // Générer le HTML pour chaque bulletin
@@ -900,7 +912,7 @@ useEffect(() => {
     });
   };
 
-  const printPreviewedReport = () => {
+  const printPreviewedReport = (orientation: 'portrait' | 'landscape') => {
     if (!selectedReport) return;
 const printWindow = window.open('', '_blank');
     if (printWindow) {
@@ -928,7 +940,7 @@ const printWindow = window.open('', '_blank');
           <title>${t.reports.title} - ${selectedReport.name}</title>
           ${styles}
           <style>
-            @page { size: A4; margin: 10mm; }
+            @page { size: A4 ${orientation}; margin: 10mm; }
             body { font-family: Arial, sans-serif; margin: 0; ${isRTL ? 'direction: rtl;' : ''} }
             .no-print { display: none !important; }
             @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
@@ -944,6 +956,53 @@ const printWindow = window.open('', '_blank');
     }
   };
 
+  const handlePreviewOpenChange = (isOpen: boolean) => {
+    if (!isOpen && isPrintPending) {
+      // Si la modale de prévisualisation se ferme ET qu'une impression est en attente,
+      // on ouvre la modale de choix d'orientation.
+      setIsSinglePrintDialogOpen(true);
+      setIsPrintPending(false); // Réinitialiser le drapeau
+    }
+    setPreviewOpen(isOpen);
+  };
+
+  const handlePrintFromPreviewClick = () => {
+    if (!selectedReport) return;
+    if (selectedTermId === '6' || selectedTermId === '5') {
+      printPreviewedReport('landscape');
+      setPreviewOpen(false);
+    } else {
+      setIsPrintPending(true);
+      setPreviewOpen(false);
+    }
+  };
+
+  const handlePrintAllClick = () => {
+    if (bulletins.length === 0) {
+      toast({
+        title: t.common.error,
+        description: t.reports.noReportsToPrint,
+        variant: "destructive",
+      });
+      return;
+    }
+    if (selectedTermId === '6' || selectedTermId === '5') {
+      printAllReports('landscape');
+    } else {
+      setIsOrientationDialogOpen(true);
+    }
+  };
+
+  const handlePrintFromRowClick = (bulletin: BulletinEleve) => {
+    setSelectedReport(bulletin);
+    if (selectedTermId === '6' || selectedTermId === '5') {
+      // The `printPreviewedReport` function uses the `selectedReport` state, which we just set.
+      printPreviewedReport('landscape');
+    } else {
+      setIsSinglePrintDialogOpen(true);
+    }
+  };
+
   const getMention = (moyenne: number): string => {
     if (moyenne >= 16) return t.reportManagement.mentions.excellent;
     if (moyenne >= 14) return t.reportManagement.mentions.veryGood;
@@ -954,72 +1013,6 @@ const printWindow = window.open('', '_blank');
   };
 
   const isFormComplete = selectedAnneeAcademiqueId && selectedClassId && selectedTermId;
-
-  const printReportFromRow = (bulletin: BulletinEleve) => {
-  const printWindow = window.open('', '_blank');
-  if (printWindow) {
-    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-      .map(el => el.outerHTML)
-      .join('\n');
-
-    const reportHtml = ReactDOMServer.renderToString(
-      <PrintableReport
-        report={bulletin}
-        establishmentInfo={{ schoolName, address, phone, website }}
-        selectedClass={classes.find(c => c.id === parseInt(selectedClassId))?.nom || ''}
-        selectedTerm={trimestres.find(t => t.id === parseInt(selectedTermId))?.nom || ''}
-        selectedYear={anneesAcademiques.find(a => a.id === parseInt(selectedAnneeAcademiqueId))?.libelle || ''}
-        dynamicEvaluationHeaders={dynamicEvaluationHeaders}
-        getMention={getMention}
-        t={t}
-        isRTL={isRTL}
-      />
-    );
-
-    printWindow.document.write(`
-      <html>
-      <head>
-        <title>${t.reports.title} - ${bulletin.name}</title>
-        ${styles}
-        <style>
-          @page {
-            size: A4;
-            margin: 10mm;
-          }
-          body { 
-            font-family: Arial, sans-serif; 
-            margin: 0; 
-            ${isRTL ? 'direction: rtl;' : ''}
-          }
-          .page-break {
-            page-break-after: always;
-            page-break-inside: avoid;
-          }
-          .no-print {
-            display: none !important;
-          }
-          @media print {
-            body {
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-          }
-        </style>
-      </head>
-      <body ${isRTL ? 'dir="rtl"' : ''}>
-        <div>${reportHtml}</div>
-        <script>
-          setTimeout(() => {
-            window.print();
-            window.close();
-          }, 500);
-        </script>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
-  }
-};
 
   // ... tout le code JSX du composant inchangé ...
 
@@ -1119,7 +1112,7 @@ const printWindow = window.open('', '_blank');
       {isFormComplete ? (
         <div className="space-y-8">
 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">            <Button
-              onClick={printAllReports}
+              onClick={handlePrintAllClick}
               disabled={isLoading || bulletins.length === 0}
         className="bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 text-white shadow-md px-6 py-3 text-base rounded-md"
             >
@@ -1183,21 +1176,32 @@ const printWindow = window.open('', '_blank');
                       </TableHeader>
                 <TableBody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                         {filteredBulletins.map((bulletin) => (
-                    <TableRow key={bulletin.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150">
-                      <TableCell className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">
-                              {bulletin.name}
-                            </TableCell>
+                          (() => {
+                            const rankDetails = getRankDetails(bulletin.rank);
+                            return (
+                              <TableRow key={bulletin.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150 ${rankDetails?.rowClass || ''}`}>
+                                <TableCell className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">
+                                  <div className="flex items-center gap-2">
+                                    {rankDetails?.icon}
+                                    {bulletin.name}
+                                  </div>
+                                </TableCell>
                       <TableCell className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">
                               {bulletin.avg}/20
                             </TableCell>
                       <TableCell className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">
                               {bulletin.rank}
                             </TableCell>
-                      <TableCell className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">
-                              <Badge className="bg-green-500 text-white text-xs font-medium px-2.5 py-0.5 rounded-full">
-                                {t.reports.generated}
-                              </Badge>
+                      <TableCell className="px-6 py-4 whitespace-nowrap">
+                              {parseFloat(bulletin.avg) >= 10 ? (
+                                <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                  {t.reportManagement.passed}
+                                </Badge>
+                              ) : (
+                                <Badge variant="destructive">{t.reportManagement.failed}</Badge>
+                              )}
                             </TableCell>
+                      
                       <TableCell className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-white">
                               <div className="flex justify-end gap-2">
                                 <Button
@@ -1209,16 +1213,18 @@ const printWindow = window.open('', '_blank');
                                   <Eye className="h-4 w-4 mr-1" /> {t.reports.preview}
                                 </Button>
                                 <Button 
-                                  onClick={() => printReportFromRow(bulletin)}
+                                  onClick={() => handlePrintFromRowClick(bulletin)}
                                   variant="outline"
                                   size="sm"
-                                  className="text-red-600 hover:bg-red-50 rounded-md"
+                                  className="text-green-600 hover:bg-green-50 rounded-md"
                                 >
                                   <Printer className="h-4 w-4 mr-1" /> {t.common.print}
                                 </Button>
                               </div>
                             </TableCell>
-                          </TableRow>
+                              </TableRow>
+                            );
+                          })()
                         ))}
                       </TableBody>
                     </Table>
@@ -1233,9 +1239,13 @@ const printWindow = window.open('', '_blank');
                     }}
                   >
                     {filteredBulletins.map((bulletin) => (
-                      <Card key={bulletin.id} className="bg-white dark:bg-gray-800 shadow-md rounded-lg">
+                      (() => {
+                        const rankDetails = getRankDetails(bulletin.rank);
+                        return (
+                          <Card key={bulletin.id} className={`bg-white dark:bg-gray-800 shadow-md rounded-lg ${rankDetails?.cardClass || ''}`}>
                         <CardHeader className="pb-3">
-                          <CardTitle className="text-base font-semibold text-blue-700 dark:text-blue-300">
+                          <CardTitle className="text-base font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                            {rankDetails?.icon}
                             {bulletin.name}
                           </CardTitle>
                         </CardHeader>
@@ -1256,11 +1266,15 @@ const printWindow = window.open('', '_blank');
                           </div>
                           <div className="flex justify-between items-center">
                             <span className="font-medium text-gray-600 dark:text-gray-300">
-                              {t.common.status.general}:
+                              {t.reportManagement.decision}:
                             </span>
-                            <Badge className="bg-green-500 text-white text-xs font-medium px-2 py-0.5 rounded-full">
-                              {t.reports.generated}
-                            </Badge>
+                            {parseFloat(bulletin.avg) >= 10 ? (
+                              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                {t.reportManagement.passed}
+                              </Badge>
+                            ) : (
+                              <Badge variant="destructive">{t.reportManagement.failed}</Badge>
+                            )}
                           </div>
                         </CardContent>
                         <CardFooter className="flex justify-end gap-2 pt-3">
@@ -1272,16 +1286,18 @@ const printWindow = window.open('', '_blank');
                           >
                             <Eye className="h-4 w-4 mr-1" /> {t.reports.preview}
                           </Button>
-                          <Button
+                          <Button 
                             variant="ghost"
                             size="icon"
-                            onClick={() => printReportFromRow(bulletin)}
-                            className="text-red-600 hover:bg-red-50 rounded-md"
+                            onClick={() => handlePrintFromRowClick(bulletin)}
+                            className="text-green-600 hover:bg-green-50 rounded-md"
                           >
                             <Printer className="h-4 w-4" />
                           </Button>
                         </CardFooter>
                       </Card>
+                        );
+                      })()
                     ))}
                   </div>
                 </>
@@ -1301,8 +1317,8 @@ const printWindow = window.open('', '_blank');
       )}
 
       {/* Dialogue de prévisualisation */}
- {/* Dialogue de prévisualisation */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+      {/* Dialogue de prévisualisation */}
+      <Dialog open={previewOpen} onOpenChange={handlePreviewOpenChange}>
         <DialogContent className="max-w-4xl h-[90vh] p-0 flex flex-col">
           <PrintableReport
             report={selectedReport}
@@ -1313,13 +1329,68 @@ const printWindow = window.open('', '_blank');
             dynamicEvaluationHeaders={dynamicEvaluationHeaders}
             getMention={getMention}
             t={t}
-            isRTL={isRTL}
+            isRTL={isRTL}            
             onClose={() => setPreviewOpen(false)}
-            onPrint={printPreviewedReport}
+            onPrint={handlePrintFromPreviewClick}
             onExport={exportPreviewedReport}
+          
+
           />
         </DialogContent>
       </Dialog>
+
+      {/* Dialogue de choix d'orientation */}
+      <Dialog open={isOrientationDialogOpen} onOpenChange={setIsOrientationDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t.reports.orientationDialog.title}</DialogTitle>
+            <DialogDescription>
+              {t.reports.orientationDialog.description}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button
+              onClick={() => { printAllReports('portrait'); setIsOrientationDialogOpen(false); }}
+              className="w-full sm:w-auto"
+            >
+              {t.reports.orientationDialog.portrait}
+            </Button>
+            <Button
+              onClick={() => { printAllReports('landscape'); setIsOrientationDialogOpen(false); }}
+              className="w-full sm:w-auto"
+            >
+              {t.reports.orientationDialog.landscape}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+        {/* Dialogue de choix d'orientation pour impression unique */}
+      <Dialog open={isSinglePrintDialogOpen} onOpenChange={setIsSinglePrintDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t.reports.orientationDialog.title}</DialogTitle>
+            <DialogDescription>
+              {t.reports.orientationDialog.description}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button
+              onClick={() => { printPreviewedReport('portrait'); setIsSinglePrintDialogOpen(false); }}
+              className="w-full sm:w-auto"
+            >
+              {t.reports.orientationDialog.portrait}
+            </Button>
+            <Button
+              onClick={() => { printPreviewedReport('landscape'); setIsSinglePrintDialogOpen(false); }}
+              className="w-full sm:w-auto"
+            >
+              {t.reports.orientationDialog.landscape}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
 
     </div>
   );

@@ -131,6 +131,7 @@ interface ClassAverages {
 
 interface StudentGradesProps {
   userId: number;
+  blocId?: number; // Add blocId as an optional prop
 }
 
 const SubjectGradeCard = ({ grade, headers, t }: { grade: StudentSubjectGrades, headers: { devoir1: string, devoir2: string, composition: string }, t: any }) => (
@@ -168,9 +169,14 @@ const SubjectGradeCard = ({ grade, headers, t }: { grade: StudentSubjectGrades, 
   </Card>
 );
 
-const fetchTaughtSubjects = async (classId: number, anneeScolaireId: number): Promise<Matiere[]> => {
+const fetchTaughtSubjects = async (classId: number, anneeScolaireId: number, blocId?: number): Promise<Matiere[]> => {
   try {
-    const response = await apiClient.get(`/affectations?classe_id=${classId}&annee_scolaire_id=${anneeScolaireId}&_expand=matiere`);
+    const params = new URLSearchParams({
+      classe_id: classId.toString(),
+      annee_scolaire_id: anneeScolaireId.toString(),
+    });
+    if (blocId) params.append('blocId', blocId.toString());
+    const response = await apiClient.get(`/affectations?${params.toString()}&_expand=matiere`);
     const affectations = response.data;
     const taughtMatieresMap = new Map<number, Matiere>();
     affectations.forEach((aff: any) => {
@@ -188,7 +194,7 @@ const fetchTaughtSubjects = async (classId: number, anneeScolaireId: number): Pr
     return [];
   }
 };
-export function StudentGrades({ userId }: StudentGradesProps) {
+export function StudentGrades({ userId, blocId }: StudentGradesProps) {
   const { t, language } = useLanguage();
   const isRTL = language === 'ar';
   // Affiche les cartes sur mobile et tablettes (jusqu'à 1024px)
@@ -245,9 +251,13 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     return termMap[termName] || termName;
   }, [t]);
 
-  const fetchCoefficientsForClass = async (classId: number): Promise<Coefficient[]> => {
+  const fetchCoefficientsForClass = async (classId: number, blocId?: number): Promise<Coefficient[]> => {
     try {
-      const response = await apiClient.get(`/coefficientclasse?classeId=${classId}`);
+      const params = new URLSearchParams({ classeId: classId.toString() });
+      if (blocId) {
+        params.append('blocId', blocId.toString());
+      }
+      const response = await apiClient.get(`/coefficientclasse?${params.toString()}`);
       const rawCoefficients: any[] = response.data;
       return rawCoefficients.map(cc => ({
         id: cc.id,
@@ -265,9 +275,13 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     }
   };
 
-  const fetchActiveAcademicYearId = async (): Promise<number | null> => {
+  const fetchActiveAcademicYearId = async (blocId?: number): Promise<number | null> => {
     try {
-      const response = await apiClient.get('/configuration');
+      const params = new URLSearchParams();
+      if (blocId) {
+        params.append('blocId', blocId.toString());
+      }
+      const response = await apiClient.get(`/configuration?${params.toString()}`);
       const configData: Configuration | Configuration[] = response.data;
 
       let activeAnneeScolaireId: number | undefined;
@@ -288,11 +302,18 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     }
   };
 
-  const fetchUserInscriptionAndClassInfo = async (userId: number, activeAnneeAcademiqueId: number): Promise<{ studentName: string; className: string; classId: number; anneeScolaireId: number; eleveId: number } | null> => {
+  const fetchUserInscriptionAndClassInfo = async (userId: number, activeAnneeAcademiqueId: number, blocId?: number): Promise<{ studentName: string; className: string; classId: number; anneeScolaireId: number; eleveId: number } | null> => {
     try {
-      const userResponse = await apiClient.get(`/users/${userId}`);
+      const apiParams = blocId ? { params: { blocId } } : {};
+      const userResponse = await apiClient.get(`/users/${userId}`, apiParams);
       const user: AuthUser = userResponse.data;
-      const inscriptionResponse = await apiClient.get(`/inscriptions?utilisateurId=${userId}&anneeAcademiqueId=${activeAnneeAcademiqueId}&_expand=classe&_expand=annee_scolaire&_expand=utilisateur`);
+      
+      const inscriptionParams = new URLSearchParams({
+        utilisateurId: userId.toString(),
+        anneeAcademiqueId: activeAnneeAcademiqueId.toString(),
+      });
+      if (blocId) inscriptionParams.append('blocId', blocId.toString());
+      const inscriptionResponse = await apiClient.get(`/inscriptions?${inscriptionParams.toString()}&_expand=classe&_expand=annee_scolaire&_expand=utilisateur`);
       const inscriptions: Inscription[] = inscriptionResponse.data;
 
       if (inscriptions.length === 0) {
@@ -361,9 +382,13 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     }
   };
 
-  const fetchAllTrimestreObjects = async (): Promise<TrimestreData[]> => {
+  const fetchAllTrimestreObjects = async (blocId?: number): Promise<TrimestreData[]> => {
     try {
-      const response = await apiClient.get('/trimestres');
+      const params = new URLSearchParams();
+      if (blocId) {
+        params.append('blocId', blocId.toString());
+      }
+      const response = await apiClient.get(`/trimestres?${params.toString()}`);
       return response.data;
     } catch (error: any) {
       toast({
@@ -375,9 +400,14 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     }
   };
 
-  const fetchAllStudentsInClass = async (classId: number, anneeScolaireId: number): Promise<Inscription[]> => {
+  const fetchAllStudentsInClass = async (classId: number, anneeScolaireId: number, blocId?: number): Promise<Inscription[]> => {
     try {
-      const response = await apiClient.get(`/inscriptions?classeId=${classId}&anneeAcademiqueId=${anneeScolaireId}&_expand=utilisateur`);
+      const params = new URLSearchParams({
+        classeId: classId.toString(),
+        anneeAcademiqueId: anneeScolaireId.toString(),
+      });
+      if (blocId) params.append('blocId', blocId.toString());
+      const response = await apiClient.get(`/inscriptions?${params.toString()}&_expand=utilisateur`);
       return response.data;
     } catch (error: any) {
       toast({
@@ -389,10 +419,15 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     }
   };
 
-  const fetchAllNotesForClass = async (classId: number, anneeScolaireId: number): Promise<Note[]> => {
+  const fetchAllNotesForClass = async (classId: number, anneeScolaireId: number, blocId?: number): Promise<Note[]> => {
     try {
       // 1. Fetch evaluations filtered by class and year for reliability
-      const evalUrl = `/evaluations?classe_id=${classId}&annee_scolaire_id=${anneeScolaireId}`;
+      const evalParams = new URLSearchParams({
+        classe_id: classId.toString(),
+        annee_scolaire_id: anneeScolaireId.toString(),
+      });
+      if (blocId) evalParams.append('blocId', blocId.toString());
+      const evalUrl = `/evaluations?${evalParams.toString()}`;
       console.log(`[StudentGrades] Fetching evaluations from: ${evalUrl}`);
       const evaluationsResponse = await apiClient.get(evalUrl);
       const evaluationsForClass: { id: number }[] = evaluationsResponse.data;
@@ -403,12 +438,19 @@ export function StudentGrades({ userId }: StudentGradesProps) {
       if (evaluationIds.length === 0) {
         return []; // No evaluations for this class, so no notes.
       }
-      // 2. Fetch all notes and filter them by the relevant evaluation IDs
-      const notesResponse = await apiClient.get(`/notes?_expand=evaluation&_expand=evaluation.matiere&_expand=evaluation.classe&_cacheBust=${Date.now()}`);
-      const allNotesFromApi: any[] = notesResponse.data;
+      // 2. Fetch notes already filtered by the relevant evaluation IDs for efficiency
+      const notesParams = new URLSearchParams();
+      notesParams.append('evaluationIds', evaluationIds.join(','));
 
-      const classNotesFromApi = allNotesFromApi.filter(note => evaluationIds.includes(note.evaluation?.id));
-      console.log(`[StudentGrades] Notes trouvées pour la classe ${classId} (après filtrage):`, classNotesFromApi);
+      if (blocId) {
+        notesParams.append('blocId', blocId.toString());
+      }
+      const notesUrl = `/notes?${notesParams.toString()}&_expand=evaluation&_expand=evaluation.matiere&_expand=evaluation.classe&_cacheBust=${Date.now()}`;
+      console.log(`[StudentGrades] Fetching notes from: ${notesUrl}`);
+      const notesResponse = await apiClient.get(notesUrl);
+      const classNotesFromApi: any[] = notesResponse.data || [];
+
+      console.log(`[StudentGrades] Notes trouvées pour la classe ${classId}:`, classNotesFromApi);
 
       return classNotesFromApi.map((apiNote: any) => {
         let studentIdVal: number | undefined;
@@ -476,18 +518,24 @@ export function StudentGrades({ userId }: StudentGradesProps) {
     const loadInitialAppConfig = async () => {
       setLoading(true);
       try {
-        const [yearId, termsNames, termsObjects] = await Promise.all([
-          fetchActiveAcademicYearId(),
-          fetchAllTrimestresNames(),
-          fetchAllTrimestreObjects(),
+        const [yearId, termsObjects] = await Promise.all([
+          fetchActiveAcademicYearId(blocId),
+          fetchAllTrimestreObjects(blocId),
         ]);
 
         setActiveAcademicYearId(yearId);
-        setAllPossibleTerms(termsNames);
         setAllTrimestreObjects(termsObjects);
 
-        if (termsNames.length > 0) {
-          setSelectedTerm(termsNames[termsNames.length - 1]);
+        const terms = Array.from(new Set(termsObjects.map(t => t.nom))).filter(Boolean) as string[];
+        terms.sort((a, b) => {
+          const numA = parseInt(a.replace('Trimestre ', '') || '0');
+          const numB = parseInt(b.replace('Trimestre ', '') || '0');
+          return numA - numB;
+        });
+        setAllPossibleTerms(terms);
+
+        if (terms.length > 0) {
+          setSelectedTerm(terms[terms.length - 1]);
         } else {
           setSelectedTerm(t.common.noDataAvailable);
         }
@@ -501,8 +549,8 @@ export function StudentGrades({ userId }: StudentGradesProps) {
         setLoading(false);
       }
     };
-    loadInitialAppConfig();
-  }, [t]);
+    loadInitialAppConfig(); // blocId is a dependency
+  }, [t, blocId]);
 
   useEffect(() => {
     const loadStudentInfo = async () => {
@@ -512,7 +560,7 @@ export function StudentGrades({ userId }: StudentGradesProps) {
       }
       setLoading(true);
       try {
-        const info = await fetchUserInscriptionAndClassInfo(userId, activeAcademicYearId);
+        const info = await fetchUserInscriptionAndClassInfo(userId, activeAcademicYearId, blocId);
         if (info) {
           setStudentName(info.studentName);
           setClassName(info.className);
@@ -521,15 +569,15 @@ export function StudentGrades({ userId }: StudentGradesProps) {
           setEleveId(userId);
           
           const [coeffs, students, taughtSubjects] = await Promise.all([
-            fetchCoefficientsForClass(info.classId),
-            fetchAllStudentsInClass(info.classId, info.anneeScolaireId),
-            fetchTaughtSubjects(info.classId, info.anneeScolaireId)
+            fetchCoefficientsForClass(info.classId, blocId),
+            fetchAllStudentsInClass(info.classId, info.anneeScolaireId, blocId),
+            fetchTaughtSubjects(info.classId, info.anneeScolaireId, blocId)
           ]);
           setClassCoefficients(coeffs);
           setClassStudents(students);
-          setAllMatiere(taughtSubjects);
+          setAllMatiere(taughtSubjects); // This should be taught subjects
           
-          const notes = await fetchAllNotesForClass(info.classId, info.anneeScolaireId);
+          const notes = await fetchAllNotesForClass(info.classId, info.anneeScolaireId, blocId);
           setClassNotes(notes);
           console.log('%c[StudentGrades] Données de contexte chargées', 'color: green; font-weight: bold;', {
             'Infos Élève': info,
@@ -547,8 +595,8 @@ export function StudentGrades({ userId }: StudentGradesProps) {
         setLoading(false);
       }
     };
-    loadStudentInfo();
-  }, [userId, activeAcademicYearId, t]);
+    loadStudentInfo(); // blocId is a dependency
+  }, [userId, activeAcademicYearId, t, blocId]);
 
   
 
@@ -923,7 +971,7 @@ const allStudentNotes = classNotes.filter(note => note.eleveId === eleveId);
     classStudents,
     classNotes,
     t,
-    translateSubject, translateTerm
+    translateSubject, translateTerm, blocId
   ]);
 
   const currentSelectedGrades = processedGrades[selectedTerm] || [];

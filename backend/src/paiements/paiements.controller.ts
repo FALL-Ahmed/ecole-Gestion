@@ -59,24 +59,19 @@ async envoyerRappel(
 @Put(':id')
 @Roles(UserRole.ADMIN)
 async update(
-  @Param('id') id: number,
+  @Param('id', ParseIntPipe) id: number,
   @Body() updatePaiementDto: EnregistrerPaiementDto,
 ): Promise<Paiement> {
   return this.paiementService.updatePaiement(id, updatePaiementDto);
 }
 
   @Get('historique/eleve/:eleveId')
-  @Roles(UserRole.ADMIN, UserRole.PROFESSEUR)
+  @Roles(UserRole.ADMIN, UserRole.PROFESSEUR, 'parent')
   findHistorique(
-    @Param('eleveId') eleveId: number,
-    @Query('anneeScolaireId') anneeScolaireId: number,
+    @Param('eleveId', ParseIntPipe) eleveId: number,
+    @Query('anneeScolaireId', ParseIntPipe) anneeScolaireId: number,
   ): Promise<Paiement[]> {
-    if (!anneeScolaireId) {
-      throw new BadRequestException(
-        'Le paramètre de requête anneeScolaireId est requis.',
-      );
-    }
-    return this.paiementService.findHistoriqueByEleve(+eleveId, +anneeScolaireId);
+    return this.paiementService.findHistoriqueByEleve(eleveId, anneeScolaireId);
   }
 
   @Post('enregistrer')

@@ -8,6 +8,7 @@ import { TwilioModule } from '../twilo/twilio.module';
 import { Inscription } from '../inscription/inscription.entity';
 import { EtablissementInfoModule } from '../etablissement/etablissement-info.module';
 import { createTenantRepositoryProvider } from '../tenant/tenant-repository.provider';
+import { User } from '../users/user.entity';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
@@ -22,6 +23,7 @@ import { AuthModule } from '../auth/auth.module';
     RappelPaiementService,
     createTenantRepositoryProvider(Paiement),
     createTenantRepositoryProvider(Inscription),
+    createTenantRepositoryProvider(User), // Ajout du provider manquant
   ],
   exports: [
     PaiementService,

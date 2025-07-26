@@ -1,12 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
-import { Parent } from '../central/parent.entity'; // Ajoutez cet import
-
-import { Classe } from '../classe/classe.entity';
-import { anneescolaire } from '../annee-academique/annee-academique.entity';
-import { Absence } from '../absence/absence.entity'; // Adaptez le chemin
+import { Absence } from '../absence/absence.entity';
 import { UtilisateurBloc } from './utilisateur-bloc.entity';
 
- // Assure-toi d'avoir cette entité importée
 
 export enum UserRole {
   ADMIN = 'admin',
@@ -86,11 +81,6 @@ parentId?: string | null;
 
   @OneToMany(() => Absence, (absence: Absence) => absence.etudiant) // Typer le paramètre absence
   absences: Absence[];
-  @ManyToOne(() => Parent, parent => parent.enfants)
-  @JoinColumn({ name: 'parent_id' })
-  parent: Parent;
    @OneToMany(() => UtilisateurBloc, acces => acces.utilisateur)
   accesBlocs: UtilisateurBloc[];
 }
-
-

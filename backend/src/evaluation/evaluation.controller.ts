@@ -18,11 +18,13 @@ export class EvaluationController {
   }
 
   @Get()
+  // CORRECTION : Autoriser tous les rôles pertinents à consulter les évaluations.
+  @Roles(UserRole.ADMIN, UserRole.PROFESSEUR, 'parent', UserRole.ETUDIANT)
   findAllFiltered(
     @Query('classeId', new ParseIntPipe({ optional: true })) classeId?: number,
     @Query('matiereId', new ParseIntPipe({ optional: true })) matiereId?: number,
     @Query('trimestre', new ParseIntPipe({ optional: true })) trimestreId?: number,
-    @Query('anneeScolaireId', new ParseIntPipe({ optional: true })) anneeScolaireId?: number,
+    @Query('annee_scolaire_id', new ParseIntPipe({ optional: true })) anneeScolaireId?: number,
   ) {
     return this.evaluationService.findAll(
       classeId,
@@ -33,6 +35,8 @@ export class EvaluationController {
   }
 
   @Get(':id')
+  // CORRECTION : Autoriser tous les rôles pertinents à consulter une évaluation spécifique.
+  @Roles(UserRole.ADMIN, UserRole.PROFESSEUR, 'parent', UserRole.ETUDIANT)
   async findOne(@Param('id', ParseIntPipe) id: number) {
     return this.evaluationService.findOne(id);
   }

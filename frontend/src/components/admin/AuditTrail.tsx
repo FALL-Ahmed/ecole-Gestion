@@ -79,6 +79,8 @@ export function AuditTrail() {
     }
   });
   const [showFilters, setShowFilters] = useState(false);
+  const [isFromDatePickerOpen, setIsFromDatePickerOpen] = useState(false);
+  const [isToDatePickerOpen, setIsToDatePickerOpen] = useState(false);
 
   const actionColors = {
     CREATE: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
@@ -385,7 +387,7 @@ export function AuditTrail() {
                 </SelectContent>
               </Select>
               <div className="grid grid-cols-2 gap-2">
-                <Popover>
+                <Popover open={isFromDatePickerOpen} onOpenChange={setIsFromDatePickerOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
@@ -407,6 +409,7 @@ export function AuditTrail() {
                             ...prev,
                             dateRange: { ...prev.dateRange, from: newDate }
                           }));
+                          setIsFromDatePickerOpen(false);
                         }
                       }}
                       initialFocus
@@ -414,7 +417,7 @@ export function AuditTrail() {
                     />
                   </PopoverContent>
                 </Popover>
-                <Popover>
+                <Popover open={isToDatePickerOpen} onOpenChange={setIsToDatePickerOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
@@ -436,6 +439,7 @@ export function AuditTrail() {
                             ...prev,
                             dateRange: { ...prev.dateRange, to: newDate }
                           }));
+                          setIsToDatePickerOpen(false);
                         }
                       }}
                       initialFocus

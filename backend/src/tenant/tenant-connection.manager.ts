@@ -50,6 +50,30 @@ export class TenantConnectionManager {
   }
 
   /**
+   * Retrieves all tenant identifiers (as 'bloc_ID') from the central database.
+   * This is used by central services that need to iterate through all tenants, like finding a parent's children.
+   * @returns A promise that resolves to an array of tenant ID strings (e.g., ['bloc_1', 'bloc_2']).
+   */
+  async getAllTenantIds(): Promise<string[]> {
+    try {
+      // This query fetches all unique bloc IDs from your central mapping table.
+      const mappings = await this.centralDataSource.query(
+        `SELECT DISTINCT bloc_id FROM bloc_ecole_mapping`,
+      );
+
+      if (!mappings || mappings.length === 0) {
+        this.logger.warn(`No bloc mappings found in 'bloc_ecole_mapping'.`);
+        return [];
+      }
+
+      return mappings.map((mapping: { bloc_id: number }) => `bloc_${mapping.bloc_id}`);
+    } catch (error) {
+      this.logger.error(`Error querying central DB for all bloc IDs`, error.stack);
+      return []; // Return empty array on error to avoid crashing the calling service.
+    }
+  }
+
+  /**
    * Finds the database name for a tenant by querying the central database.
    * It can resolve a tenant from a subdomain or a blocId.
    * @param tenantId The identifier for the tenant (e.g., 'default', 'lycee1', or 'bloc_123').

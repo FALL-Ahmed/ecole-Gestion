@@ -3,17 +3,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { StudentGrades } from '../student/StudentGrades';
 import { Loader2 } from 'lucide-react';
 import { useParentChildren } from '@/hooks/useParentChildren';
-import { ChildSelector } from './ChildSelector';
-
-interface Child {
-  id: number;
-  prenom: string;
-  nom: string;
-  classe: {
-    id: number;
-    nom: string;
-  };
-}
+import { ChildSelector, Child } from './ChildSelector';
 
 export function ParentGradesView() {
   const { t, language } = useLanguage();
@@ -61,9 +51,14 @@ export function ParentGradesView() {
 
       <ChildSelector children={children} selectedChild={selectedChild} onChildChange={setSelectedChild} />
 
-      {selectedChild && (
-        <StudentGrades key={selectedChild} userId={selectedChild} />
-      )}
+      {selectedChild && (() => {
+        const selectedChildDetails = children.find(c => c.id === selectedChild);
+        return selectedChildDetails ? (
+          <div className="mt-6">
+            <StudentGrades key={selectedChild} userId={selectedChild} blocId={selectedChildDetails.blocId} />
+          </div>
+        ) : null;
+      })()}
     </div>
   );
 }

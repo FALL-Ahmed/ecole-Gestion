@@ -7,6 +7,7 @@ import { Classe } from '../classe/classe.entity';
 import { ParentModule } from '../central/parent.module';
 import { createTenantRepositoryProvider } from '../tenant/tenant-repository.provider';
 import { UtilisateurBloc } from './utilisateur-bloc.entity';
+import { Bloc } from '../bloc/bloc.entity';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
@@ -20,6 +21,7 @@ import { AuthModule } from '../auth/auth.module';
     createTenantRepositoryProvider(UtilisateurBloc),
     createTenantRepositoryProvider(Classe),
     createTenantRepositoryProvider(anneescolaire),
+    createTenantRepositoryProvider(Bloc),
   ],
   controllers: [UsersController],
   exports: [UsersService],

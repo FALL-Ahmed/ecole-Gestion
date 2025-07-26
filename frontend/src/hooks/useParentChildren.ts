@@ -2,19 +2,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from '@/hooks/use-toast';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const API_BASE_URL = `${API_URL}/api`;
-
-interface Child {
-  id: number;
-  prenom: string;
-  nom: string;
-  classe: {
-    id: number;
-    nom: string;
-  };
-}
+import { Child } from '@/components/parent/ChildSelector';
+import apiClient from '@/lib/apiClient';
 
 export function useParentChildren() {
   const { user } = useAuth();
@@ -33,11 +22,8 @@ export function useParentChildren() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`${API_BASE_URL}/parents/${user.id}/children`);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const childrenData: Child[] = await response.json();
+        const response = await apiClient.get(`/parents/${user.id}/children`);
+        const childrenData: Child[] = response.data;
         setChildren(childrenData);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -56,4 +42,3 @@ export function useParentChildren() {
 
   return { children, loading, error };
 }
-

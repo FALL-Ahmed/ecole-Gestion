@@ -1,10 +1,22 @@
-// src/emploi-du-temps/emploi-du-temps.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  Scope,
+  Inject,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, FindOptionsWhere } from 'typeorm';
 import { EmploiDuTemps } from './emploidutemps.entity';
 import { CreateEmploiDuTempsDto } from './dto/create-emploi-du-temps.dto';
 import { UpdateEmploiDuTempsDto } from './dto/update-emploi-du-temps.dto';
+import { Classe } from '../classe/classe.entity';
+import { REQUEST } from '@nestjs/core';
+import { Request } from 'express';
+import { Inscription } from '../inscription/inscription.entity';
 
 // Define a type for filters
 interface EmploiDuTempsFilters {
@@ -13,94 +25,155 @@ interface EmploiDuTempsFilters {
   anneeAcademiqueId?: number;
 }
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class EmploiDuTempsService {
+  private readonly logger = new Logger(EmploiDuTempsService.name);
+
   constructor(
     @InjectRepository(EmploiDuTemps)
     private emploiDuTempsRepository: Repository<EmploiDuTemps>,
+    @InjectRepository(Classe)
+    private classeRepository: Repository<Classe>,
+    @InjectRepository(Inscription)
+    private inscriptionRepository: Repository<Inscription>,
+    @Inject(REQUEST) private readonly request: Request,
   ) {}
 
+  private getBlocId(): number | null {
+    const user = this.request.user as any;
+
+    if (user && user.blocId) {
+      this.logger.debug(`[getBlocId] blocId ${user.blocId} trouvé dans le token JWT.`);
+      return user.blocId;
+    }
+
+    const queryBlocId = this.request.query.blocId;
+    if (queryBlocId && !isNaN(parseInt(queryBlocId as string, 10))) {
+      const blocId = parseInt(queryBlocId as string, 10);
+      this.logger.debug(`[getBlocId] blocId ${blocId} trouvé dans les paramètres de la requête.`);
+      return blocId;
+    }
+
+    this.logger.warn(`[getBlocId] Aucun blocId trouvé pour l'utilisateur ${user?.email}.`);
+    return null;
+  }
+
+  private async verifyParentAccessToClasse(classeId: number): Promise<void> {
+    const user = this.request.user as any;
+    if (user.role !== 'parent') {
+      return;
+    }
+
+    const parentId = user.id;
+    const inscription = await this.inscriptionRepository.findOne({
+      where: {
+        classe: { id: classeId },
+        utilisateur: { parentId: parentId },
+        actif: true,
+      },
+    });
+
+    if (!inscription) {
+      throw new ForbiddenException("Accès non autorisé à l'emploi du temps de cette classe.");
+    }
+  }
+
   async create(createEmploiDuTempsDto: CreateEmploiDuTempsDto): Promise<EmploiDuTemps> {
-    const newEntry = this.emploiDuTempsRepository.create(createEmploiDuTempsDto);
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      throw new UnauthorizedException("Impossible de créer une entrée sans être dans le contexte d'un bloc.");
+    }
+
+    // Security check: ensure the class belongs to the admin's bloc
+    const classe = await this.classeRepository.findOneBy({ id: createEmploiDuTempsDto.classe_id, blocId });
+    if (!classe) {
+      throw new ForbiddenException(`La classe avec l'ID ${createEmploiDuTempsDto.classe_id} n'existe pas dans votre établissement.`);
+    }
+
+    const newEntry = this.emploiDuTempsRepository.create({
+      ...createEmploiDuTempsDto,
+      blocId,
+    });
     return this.emploiDuTempsRepository.save(newEntry);
   }
 
-  // --- MODIFIED: findAll to accept filters ---
   async findAll(filters?: EmploiDuTempsFilters): Promise<EmploiDuTemps[]> {
-    const whereClause: any = {};
-    const relationsToLoad: string[] = ['classe', 'matiere', 'professeur'];
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      this.logger.warn("[findAll] Aucun blocId fourni, retour d'une liste vide.");
+      return [];
+    }
 
     if (filters?.classeId) {
-      whereClause.classe_id = filters.classeId;
-      // Add relation to classe if not already there, to filter by annee_academique_id
-      if (filters.anneeAcademiqueId) {
-        // IMPORTANT: Assuming 'Classe' entity has 'annee_scolaire_id' directly or a relation to 'AnneeAcademique'
-        // If 'Classe' has 'annee_scolaire_id' column:
-        whereClause.classe = {
-          id: filters.classeId, // Also include class ID if filtering by relation
-          annee_scolaire_id: filters.anneeAcademiqueId,
-        };
-        // Ensure the 'classe' relation is loaded for filtering
-        if (!relationsToLoad.includes('classe')) {
-            relationsToLoad.push('classe');
-        }
-      }
+      await this.verifyParentAccessToClasse(filters.classeId);
+    }
+
+    const where: FindOptionsWhere<EmploiDuTemps> = { blocId };
+
+    if (filters?.classeId) {
+      where.classe = { id: filters.classeId };
     }
     if (filters?.professeurId) {
-      whereClause.professeur_id = filters.professeurId;
+      where.professeur = { id: filters.professeurId };
     }
-    // If filtering by annee_academique_id alone (without classeId), it's more complex
-    // as EmploiDuTemps does not directly store annee_academique_id.
-    // The current frontend uses annee_academique_id primarily with classe_id.
-    // If you need to filter by annee_academique_id without a class,
-    // you'd need a more advanced TypeORM query builder or a direct relation on EmploiDuTemps.
+    if (filters?.anneeAcademiqueId) {
+      where.anneeAcademique = { id: filters.anneeAcademiqueId };
+    }
 
     return this.emploiDuTempsRepository.find({
-      where: whereClause,
-      relations: relationsToLoad, // Dynamically add relations if needed for filtering
+      where,
+      relations: ['classe', 'matiere', 'professeur', 'anneeAcademique'],
     });
   }
-  // --- END MODIFIED ---
 
   async findOne(id: number): Promise<EmploiDuTemps> {
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      throw new NotFoundException(`EmploiDuTemps avec l'ID ${id} non trouvé car aucun bloc n'est sélectionné.`);
+    }
+
     const entry = await this.emploiDuTempsRepository.findOne({
-      where: { id },
-      relations: ['classe', 'matiere', 'professeur'],
+      where: { id, blocId },
+      relations: ['classe', 'matiere', 'professeur', 'anneeAcademique'],
     });
     if (!entry) {
-      throw new NotFoundException(`EmploiDuTemps with ID ${id} not found.`);
+      throw new NotFoundException(`EmploiDuTemps with ID ${id} not found in this bloc.`);
     }
+
+    await this.verifyParentAccessToClasse(entry.classe_id);
+
     return entry;
   }
 
   async update(id: number, updateEmploiDuTempsDto: UpdateEmploiDuTempsDto): Promise<EmploiDuTemps> {
-    const entry = await this.emploiDuTempsRepository.findOneBy({ id }); // Use findOneBy for simpler primary key lookup
-    if (!entry) {
-      throw new NotFoundException(`EmploiDuTemps with ID ${id} not found.`);
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      throw new UnauthorizedException("Action non autorisée en dehors du contexte d'un bloc.");
     }
+
+    // findOne will perform the security check
+    const entry = await this.findOne(id);
+
+    // If the class is being changed, verify the new class is in the same bloc
+    if (updateEmploiDuTempsDto.classe_id && updateEmploiDuTempsDto.classe_id !== entry.classe_id) {
+      const newClasse = await this.classeRepository.findOneBy({ id: updateEmploiDuTempsDto.classe_id, blocId });
+      if (!newClasse) {
+        throw new ForbiddenException(`La nouvelle classe avec l'ID ${updateEmploiDuTempsDto.classe_id} n'existe pas dans votre établissement.`);
+      }
+    }
+
     Object.assign(entry, updateEmploiDuTempsDto);
     return this.emploiDuTempsRepository.save(entry);
   }
 
   async remove(id: number): Promise<void> {
-    const result = await this.emploiDuTempsRepository.delete(id);
-    if (result.affected === 0) {
-      throw new NotFoundException(`EmploiDuTemps with ID ${id} not found.`);
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      throw new UnauthorizedException("Action non autorisée en dehors du contexte d'un bloc.");
     }
+    // findOne will perform all security checks (blocId, parent access)
+    const entryToRemove = await this.findOne(id);
+
+    await this.emploiDuTempsRepository.remove(entryToRemove);
   }
-
-  // --- REMOVED: Custom methods as they are now handled by the modified findAll ---
-  // async findByClassAndYear(classeId: number, anneeScolaireId: number): Promise<EmploiDuTemps[]> {
-  //   return this.emploiDuTempsRepository.find({
-  //     where: { classe_id: classeId }, // Needs to include annee_scolaire_id through relation
-  //     relations: ['classe', 'matiere', 'professeur'],
-  //   });
-  // }
-
-  // async findByTeacher(professeurId: number): Promise<EmploiDuTemps[]> {
-  //   return this.emploiDuTempsRepository.find({
-  //     where: { professeur_id: professeurId },
-  //     relations: ['classe', 'matiere', 'professeur'],
-  //   });
-  // }
 }

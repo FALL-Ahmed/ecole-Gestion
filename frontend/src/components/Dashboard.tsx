@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { useAuth } from '@/contexts/AuthContext';
 import { Users, BookOpen, GraduationCap, TrendingUp, Calendar as CalendarIcon, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { fr, ar } from 'date-fns/locale';
 import apiClient from '@/lib/apiClient';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -18,13 +18,16 @@ interface UserData {
   nom: string;
   prenom: string;
 }
-
+interface StudentDistributionChartItem {
+  name: string;
+  élèves: number;
+}
 interface NoteApiData {
   id: string;
   note: number | null;
   etudiant?: { id: number };
   etudiant_id?: number;
-  evaluation?: { id: number };
+  evaluation?: EvaluationApiData;
   evaluationId?: number;
 }
 
@@ -33,9 +36,11 @@ interface EvaluationApiData {
   type: string;
   date_eval: string;
   matiere?: { id: number; nom: string };
+  classe?: { id: number; annee_scolaire_id: number };
   anneeScolaire?: { id: number };
   trimestreId?: number;
   trimestre_id?: number;
+  trimestre?: { id: number; nom: string };
 }
 
 interface AnneeAcademiqueDetails {
@@ -155,19 +160,20 @@ const NOTIFIED_ABSENCE_IDS_KEY_PREFIX = 'notified_absence_ids_';
 export function Dashboard() {
   const { user } = useAuth();
   const { addNotification } = useNotifications();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const [notifiedNoteIds, setNotifiedNoteIds] = useState<Set<string>>(new Set());
   const [latestNotes, setLatestNotes] = useState<EnrichedNote[]>([]);
   const [loadingNotes, setLoadingNotes] = useState<boolean>(true);
   const [errorNotes, setErrorNotes] = useState<string | null>(null);
 
-  const [activeAcademicYearDetails, setActiveAcademicYearDetails] = useState<AnneeAcademiqueDetails | null>(null);
+  const [allAcademicYears, setAllAcademicYears] = useState<AnneeAcademiqueDetails[]>([]);
+  const [selectedAcademicYearId, setSelectedAcademicYearId] = useState<string>('');
   const [adminStats, setAdminStats] = useState<StatsDataItem[]>([]);
   const [loadingAdminData, setLoadingAdminData] = useState(true);
-  const [selectedAdminClassId, setSelectedAdminClassId] = useState<string>('all');
   const [allAdminClasses, setAllAdminClasses] = useState<ClasseData[]>([]);
   const [adminError, setAdminError] = useState<string | null>(null);
+  const [allInscriptions, setAllInscriptions] = useState<InscriptionData[]>([]);
 
   const [professorAffectations, setProfessorAffectations] = useState<AffectationData[]>([]);
   const [professorInscriptions, setProfessorInscriptions] = useState<InscriptionData[]>([]);
@@ -182,6 +188,13 @@ export function Dashboard() {
   const [loadingProfessorData, setLoadingProfessorData] = useState(true);
   const [loadingTrackingData, setLoadingTrackingData] = useState(true);
   const [professorError, setProfessorError] = useState<string | null>(null);
+  
+  const [selectedLevel, setSelectedLevel] = useState<string>('all');
+
+  const activeAcademicYearDetails = useMemo(() => {
+    if (!selectedAcademicYearId) return null;
+    return allAcademicYears.find(year => String(year.id) === selectedAcademicYearId);
+  }, [selectedAcademicYearId, allAcademicYears]);
 
   const filteredProfessorClasses = useMemo(
     () => professorClasses.filter(cls => cls.annee_scolaire_id === activeAcademicYearDetails?.id),
@@ -199,26 +212,137 @@ export function Dashboard() {
     return professorStudentTrackingData.filter(student => student.className === selectedClass.nom);
   }, [selectedClassId, professorStudentTrackingData, filteredProfessorClasses]);
 
+    const translateNiveau = useCallback((niveauToTranslate: string) => {
+    if (!niveauToTranslate) return t.common.unknown;
+    const lowerNiveau = niveauToTranslate.toLowerCase();
+    switch (lowerNiveau) {
+     // case 'primaire': return t.schoolManagement.levels.primary;
+      case 'collège':
+      case 'college': return t.schoolManagement.levels.middle;
+      case 'lycée':
+      case 'lycee': return t.schoolManagement.levels.high;
+      default: return niveauToTranslate;
+    }
+  }, [t]);
+
+  const calculateStudentSubjectAverageForTerm = useCallback((
+    studentId: number,
+    subjectId: number,
+    termId: number,
+    academicYearId: number,
+    allNotesForYear: NoteApiData[],
+    allEvalsForYear: EvaluationApiData[],
+    allTermsForAcademicYear: TrimestreData[]
+  ): number => {
+    const currentTermObj = allTermsForAcademicYear.find(t => t.id === termId);
+    if (!currentTermObj) return 0;
+
+    let currentTrimestreNumero = 0;
+    if (currentTermObj.nom.toLowerCase().includes("trimestre 1") || currentTermObj.nom.includes("1")) currentTrimestreNumero = 1;
+    else if (currentTermObj.nom.toLowerCase().includes("trimestre 2") || currentTermObj.nom.includes("2")) currentTrimestreNumero = 2;
+    else if (currentTermObj.nom.toLowerCase().includes("trimestre 3") || currentTermObj.nom.includes("3")) currentTrimestreNumero = 3;
+    if (currentTrimestreNumero === 0) return 0;
+
+    const studentNotesForSubjectCurrentTerm = allNotesForYear.filter(note =>
+      (note.etudiant?.id === studentId || note.etudiant_id === studentId) &&
+      note.evaluation?.matiere?.id === subjectId &&
+      note.evaluation?.trimestre?.id === termId
+    );
+
+    let totalPointsDevoirsCurrentTerm = 0;
+    let countDevoirsCurrentTerm = 0;
+    let compositionNoteValueCurrentTerm: number | null = null;
+
+    studentNotesForSubjectCurrentTerm.forEach(note => {
+      const evalType = note.evaluation?.type?.toLowerCase() || "";
+      if (evalType.includes("devoir")) {
+        totalPointsDevoirsCurrentTerm += note.note;
+        countDevoirsCurrentTerm++;
+      } else if (evalType.includes("composition") || evalType.includes("compo")) {
+        compositionNoteValueCurrentTerm = note.note;
+      }
+    });
+
+    const avgDevoirsCurrentTerm = countDevoirsCurrentTerm > 0 ? totalPointsDevoirsCurrentTerm / countDevoirsCurrentTerm : 0;
+    let compoT1Note: number | null = null;
+    let compoT2Note: number | null = null;
+
+    if (currentTrimestreNumero === 2 || currentTrimestreNumero === 3) {
+      const trimestre1Obj = allTermsForAcademicYear.find(t => (t.nom.toLowerCase().includes("trimestre 1") || t.nom.includes("1")) && t.anneeScolaire?.id === academicYearId);
+      if (trimestre1Obj) {
+        const compoT1Eval = allEvalsForYear.find(e => e.matiere?.id === subjectId && e.trimestre?.id === trimestre1Obj.id && (e.type?.toLowerCase().includes("composition") || e.type?.toLowerCase().includes("compo")) && e.classe?.annee_scolaire_id === academicYearId);
+        if (compoT1Eval) {
+          const noteT1 = allNotesForYear.find(n => (n.etudiant?.id === studentId || n.etudiant_id === studentId) && n.evaluation?.id === compoT1Eval.id);
+          compoT1Note = noteT1 ? noteT1.note : null;
+        }
+      }
+    }
+
+    if (currentTrimestreNumero === 3) {
+      const trimestre2Obj = allTermsForAcademicYear.find(t => (t.nom.toLowerCase().includes("trimestre 2") || t.nom.includes("2")) && t.anneeScolaire?.id === academicYearId);
+      if (trimestre2Obj) {
+        const compoT2Eval = allEvalsForYear.find(e => e.matiere?.id === subjectId && e.trimestre?.id === trimestre2Obj.id && (e.type?.toLowerCase().includes("composition") || e.type?.toLowerCase().includes("compo")) && e.classe?.annee_scolaire_id === academicYearId);
+        if (compoT2Eval) {
+          const noteT2 = allNotesForYear.find(n => (n.etudiant?.id === studentId || n.etudiant_id === studentId) && n.evaluation?.id === compoT2Eval.id);
+          compoT2Note = noteT2 ? noteT2.note : null;
+        }
+      }
+    }
+
+    let moyenneMatiere = 0;
+    if (currentTrimestreNumero === 1) {
+      let somme = 0;
+      let poids = 0;
+      if (countDevoirsCurrentTerm > 0) { somme += avgDevoirsCurrentTerm * 3; poids += 3; }
+      if (compositionNoteValueCurrentTerm !== null) { somme += compositionNoteValueCurrentTerm; poids += 1; }
+      moyenneMatiere = poids > 0 ? somme / poids : 0;
+    } else if (currentTrimestreNumero === 2) {
+      let somme = 0;
+      let poids = 0;
+      if (countDevoirsCurrentTerm > 0) { somme += avgDevoirsCurrentTerm * 3; poids += 3; }
+      if (compositionNoteValueCurrentTerm !== null) { somme += compositionNoteValueCurrentTerm * 2; poids += 2; }
+      if (compoT1Note !== null) { somme += compoT1Note; poids += 1; }
+      moyenneMatiere = poids > 0 ? somme / poids : 0;
+    } else if (currentTrimestreNumero === 3) {
+      let somme = 0;
+      let poids = 0;
+      if (countDevoirsCurrentTerm > 0) { somme += avgDevoirsCurrentTerm * 3; poids += 3; }
+      if (compositionNoteValueCurrentTerm !== null) { somme += compositionNoteValueCurrentTerm * 3; poids += 3; }
+      if (compoT1Note !== null) { somme += compoT1Note; poids += 1; }
+      if (compoT2Note !== null) { somme += compoT2Note * 2; poids += 2; }
+      moyenneMatiere = poids > 0 ? somme / poids : 0;
+    }
+
+    return parseFloat(moyenneMatiere.toFixed(2));
+  }, []);
+
   useEffect(() => {
     const fetchInitialConfig = async () => {
+      setLoadingAdminData(true);
       try {
-        const configRes = await apiClient.get<ConfigurationApiData>('/configuration');
-        let activeAnneeId: number | undefined;
-        if (Array.isArray(configRes.data) && configRes.data.length > 0) {
-          activeAnneeId = configRes.data[0].annee_academique_active_id || configRes.data[0].annee_scolaire?.id;
-        } else if (configRes.data && !Array.isArray(configRes.data)) {
-          activeAnneeId = configRes.data.annee_academique_active_id || configRes.data.annee_scolaire?.id;
+        const [yearsRes, configRes] = await Promise.all([
+          apiClient.get<AnneeAcademiqueDetails[]>('/annees-academiques'),
+          apiClient.get<ConfigurationApiData>('/configuration').catch(() => null)
+        ]);
+
+        const allYears = yearsRes.data;
+        setAllAcademicYears(allYears);
+
+        let activeYearId: number | undefined;
+        if (configRes?.data) {
+          const configData = Array.isArray(configRes.data) ? configRes.data[0] : configRes.data;
+          activeYearId = configData?.annee_academique_active_id || configData?.annee_scolaire?.id;
         }
 
-        if (activeAnneeId) {
-          const yearDetailsRes = await apiClient.get<AnneeAcademiqueDetails>(`/annees-academiques/${activeAnneeId}`);
-          setActiveAcademicYearDetails(yearDetailsRes.data);
-
-          const trimestersRes = await apiClient.get<TrimestreData[]>(`/trimestres?anneeScolaireId=${activeAnneeId}`);
-          setAllTrimesters(trimestersRes.data);
+        if (activeYearId && allYears.some(y => y.id === activeYearId)) {
+          setSelectedAcademicYearId(String(activeYearId));
+        } else if (allYears.length > 0) {
+          const sortedYears = [...allYears].sort((a, b) => new Date(b.date_debut).getTime() - new Date(a.date_debut).getTime());
+          setSelectedAcademicYearId(String(sortedYears[0].id));
         } else {
-          console.warn("No active academic year found in configuration.");
+          setAdminError(t.dashboard.errorNoYear);
         }
+
       } catch (err) {
         console.error("Error fetching initial config:", err);
       }
@@ -226,8 +350,27 @@ export function Dashboard() {
     fetchInitialConfig();
   }, []);
 
+  const studentDistributionByLevelData = useMemo((): StudentDistributionChartItem[] => {
+    if (loadingAdminData || allInscriptions.length === 0) return [];
+
+    const distribution: { [key: string]: number } = {};
+
+    allInscriptions.forEach(inscription => {
+        if (inscription.utilisateur?.role === 'eleve' && inscription.classe?.niveau) {
+            const niveau = translateNiveau(inscription.classe.niveau);
+            distribution[niveau] = (distribution[niveau] || 0) + 1;
+        }
+    });
+
+    return Object.entries(distribution).map(([name, value]) => ({
+        name,
+        élèves: value,
+    }));
+}, [allInscriptions, loadingAdminData, translateNiveau]);
+
+
   useEffect(() => {
-    if (user?.role !== 'admin' || !activeAcademicYearDetails) {
+    if (user?.role !== 'admin' || !selectedAcademicYearId || !activeAcademicYearDetails) {
       setLoadingAdminData(false);
       return;
     }
@@ -235,166 +378,34 @@ export function Dashboard() {
     const fetchAdminData = async () => {
       setLoadingAdminData(true);
       setAdminError(null);
+      const yearId = parseInt(selectedAcademicYearId);
       try {
-        const [usersRes, classesRes, inscriptionsRes, affectationsRes, notesRes, evaluationsRes, coefficientsRes, matieresRes] = await Promise.all([
+        const [usersRes, classesRes, inscriptionsRes, affectationsRes] = await Promise.all([
           apiClient.get<UserData[]>('/users'),
           apiClient.get<ClasseData[]>('/classes'),
-          apiClient.get<InscriptionData[]>(`/inscriptions?anneeScolaireId=${activeAcademicYearDetails.id}&_expand=classe&_expand=utilisateur`),
-          apiClient.get<AffectationData[]>(`/affectations?annee_scolaire_id=${activeAcademicYearDetails.id}&_expand=professeur`),
-          apiClient.get<NoteApiData[]>('/notes?_expand=evaluation'),
-          apiClient.get<EvaluationApiData[]>(`/evaluations?anneeScolaire.id=${activeAcademicYearDetails.id}`),
-          apiClient.get<Coefficient[]>('/coefficientclasse'),
-          apiClient.get<MatiereApiData[]>('/matieres'),
+          apiClient.get<InscriptionData[]>(`/inscriptions?anneeScolaireId=${yearId}&_expand=classe&_expand=utilisateur`),
+          apiClient.get<AffectationData[]>(`/affectations?annee_scolaire_id=${yearId}&_expand=professeur`)
         ]);
 
         const allUsers = usersRes.data;
         const allClasses = classesRes.data;
-        const allInscriptions = inscriptionsRes.data;
+        setAllInscriptions(inscriptionsRes.data);
         const allAffectations = affectationsRes.data;
-        const allNotes = notesRes.data;
-        const allEvaluations = evaluationsRes.data;
-        const allCoefficients = coefficientsRes.data;
-        const allMatieres = matieresRes.data;
 
-        const classesForCurrentYear = allClasses.filter(cls => cls.annee_scolaire_id === activeAcademicYearDetails.id);
+        const classesForCurrentYear = allClasses.filter(cls => cls.annee_scolaire_id === yearId);
         setAllAdminClasses(classesForCurrentYear);
 
-        let filteredInscriptions = allInscriptions;
-        let filteredAffectations = allAffectations;
-        let studentsToEvaluate = allInscriptions.filter(insc => insc.utilisateur?.role === 'eleve');
-
-        if (selectedAdminClassId !== 'all') {
-          const selectedClassIdNum = parseInt(selectedAdminClassId);
-          filteredInscriptions = allInscriptions.filter(insc => insc.classeId === selectedClassIdNum);
-          filteredAffectations = allAffectations.filter(aff => aff.classe.id === selectedClassIdNum);
-          studentsToEvaluate = studentsToEvaluate.filter(insc => insc.classeId === selectedClassIdNum);
-        }
+        let filteredInscriptions = inscriptionsRes.data;
+        let filteredAffectations = allAffectations; // The API call already filters by year
 
         const totalStudents = new Set(filteredInscriptions.filter(insc => insc.utilisateur?.role === 'eleve').map(insc => insc.utilisateurId)).size;
         const totalProfessors = new Set(filteredAffectations.map(aff => aff.professeur.id)).size;
         const totalClassesForYear = classesForCurrentYear.length;
 
-        let successfulStudents = 0;
-        const studentsWithFinalGrade = [];
-
-        const termEvaluationMap: { [key: number]: { devoir1: string, devoir2: string, composition: string } } = {};
-        const trimestersByName: { [key: string]: TrimestreData | undefined } = {};
-        allTrimesters.forEach(t => {
-          trimestersByName[t.nom] = t;
-          if (t.nom.includes('Trimestre')) {
-            const termNum = parseInt(t.nom.replace('Trimestre ', ''));
-            if (termNum === 1) termEvaluationMap[t.id] = { devoir1: 'Devoir 1', devoir2: 'Devoir 2', composition: 'Composition 1' };
-            if (termNum === 2) termEvaluationMap[t.id] = { devoir1: 'Devoir 3', devoir2: 'Devoir 4', composition: 'Composition 2' };
-            if (termNum === 3) termEvaluationMap[t.id] = { devoir1: 'Devoir 5', devoir2: 'Devoir 6', composition: 'Composition 3' };
-          }
-        });
-
-        for (const studentInscription of studentsToEvaluate) {
-          if (!studentInscription.utilisateur) continue;
-
-          const studentId = studentInscription.utilisateur.id;
-          const studentClassId = studentInscription.classeId;
-
-          const generalAveragesData: { [key: string]: { totalWeightedScore: number; totalCoefficient: number } } = {
-            'Trimestre 3': { totalWeightedScore: 0, totalCoefficient: 0 },
-          };
-
-          const classSubjects = allCoefficients
-            .filter(c => c.classe_id === studentClassId)
-            .map(c => allMatieres.find(m => m.id === c.matiere_id))
-            .filter((m): m is MatiereApiData => !!m);
-
-          for (const matiere of classSubjects) {
-            const matiereId = matiere.id;
-            const matiereCoefficient = allCoefficients.find(c => c.classe_id === studentClassId && c.matiere_id === matiereId)?.coefficient || 1;
-
-            const studentNotesForSubject = allNotes.filter(note => {
-              const evalId = note.evaluation?.id || note.evaluationId;
-              const evaluation = allEvaluations.find(e => e.id === evalId);
-              return (
-                (note.etudiant_id === studentId || note.etudiant?.id === studentId) &&
-                evaluation?.matiere?.id === matiereId
-              );
-            });
-
-            const term1Obj = trimestersByName['Trimestre 1'];
-            const term2Obj = trimestersByName['Trimestre 2'];
-
-            const compoT1NoteObj = studentNotesForSubject.find(n => {
-              const evalId = n.evaluation?.id || n.evaluationId;
-              const evaluation = allEvaluations.find(e => e.id === evalId);
-              return term1Obj && evaluation?.trimestreId === term1Obj.id && evaluation?.type === termEvaluationMap[term1Obj.id]?.composition;
-            });
-            const compoT1Note = compoT1NoteObj ? compoT1NoteObj.note : null;
-
-            const compoT2NoteObj = studentNotesForSubject.find(n => {
-              const evalId = n.evaluation?.id || n.evaluationId;
-              const evaluation = allEvaluations.find(e => e.id === evalId);
-              return term2Obj && evaluation?.trimestreId === term2Obj.id && evaluation?.type === termEvaluationMap[term2Obj.id]?.composition;
-            });
-            const compoT2Note = compoT2NoteObj ? compoT2NoteObj.note : null;
-
-            const trimester = trimestersByName['Trimestre 3'];
-            if (trimester) {
-              const trimesterId = trimester.id;
-              const termEvalTypes = termEvaluationMap[trimesterId];
-              if (termEvalTypes) {
-                const notesForTrimester = studentNotesForSubject.filter(note => {
-                  const evalId = note.evaluation?.id || note.evaluationId;
-                  const evaluation = allEvaluations.find(e => e.id === evalId);
-                  return evaluation?.trimestreId === trimesterId || evaluation?.trimestre_id === trimesterId;
-                });
-
-                let devoir1Note: number | null = null;
-                let devoir2Note: number | null = null;
-                let compositionNote: number | null = null;
-
-                notesForTrimester.forEach(note => {
-                  const evalId = note.evaluation?.id || note.evaluationId;
-                  const evaluation = allEvaluations.find(e => e.id === evalId);
-                  const evalType = evaluation?.type;
-                  if (evalType === termEvalTypes.devoir1) devoir1Note = note.note;
-                  if (evalType === termEvalTypes.devoir2) devoir2Note = note.note;
-                  if (evalType === termEvalTypes.composition) compositionNote = note.note;
-                });
-
-                let subjectAverage: number | null = null;
-                if (devoir1Note !== null && devoir2Note !== null && compositionNote !== null) {
-                  const avgDevoirs = (devoir1Note + devoir2Note) / 2;
-                  if (compoT1Note !== null && compoT2Note !== null) {
-                    subjectAverage = (avgDevoirs * 3 + compositionNote + compoT1Note + compoT2Note) / 6;
-                  }
-                }
-
-                if (subjectAverage !== null) {
-                  generalAveragesData['Trimestre 3'].totalWeightedScore += subjectAverage * matiereCoefficient;
-                  generalAveragesData['Trimestre 3'].totalCoefficient += matiereCoefficient;
-                }
-              }
-            }
-          }
-
-          const averageT3 = generalAveragesData['Trimestre 3'].totalCoefficient > 0
-            ? generalAveragesData['Trimestre 3'].totalWeightedScore / generalAveragesData['Trimestre 3'].totalCoefficient
-            : null;
-
-          if (averageT3 !== null) {
-            studentsWithFinalGrade.push(averageT3);
-            if (averageT3 >= 10) {
-              successfulStudents++;
-            }
-          }
-        }
-
-        const successRate = studentsWithFinalGrade.length > 0
-          ? (successfulStudents / studentsWithFinalGrade.length) * 100
-          : 0;
-
         setAdminStats([
           { name:  t.dashboard.stats.students, value: totalStudents, icon: Users, color: 'bg-blue-500' },
           { name: t.dashboard.stats.professors, value: totalProfessors, icon: BookOpen, color: 'bg-green-500' },
           { name: t.dashboard.stats.totalClasses, value: totalClassesForYear, icon: GraduationCap, color: 'bg-purple-500' },
-          { name: t.dashboard.stats.successRate, value: `${successRate.toFixed(0)}%`, icon: TrendingUp, color: 'bg-orange-500' }
         ]);
 
       } catch (err) {
@@ -405,7 +416,25 @@ export function Dashboard() {
       }
     };
     fetchAdminData();
-  }, [user?.role, activeAcademicYearDetails, allTrimesters, selectedAdminClassId, t]);
+  }, [user?.role, selectedAcademicYearId, activeAcademicYearDetails, t]);
+
+  // Fetch trimesters when the academic year changes, as it's needed by both admin and professor logic
+  useEffect(() => {
+    if (!selectedAcademicYearId) return;
+    const yearId = parseInt(selectedAcademicYearId);
+
+    const fetchTrimestersForYear = async () => {
+      try {
+        const trimestersRes = await apiClient.get<TrimestreData[]>(`/trimestres?anneeScolaireId=${yearId}`);
+        setAllTrimesters(trimestersRes.data);
+      } catch (err) {
+        console.error("Error fetching trimesters:", err);
+      }
+    };
+
+    fetchTrimestersForYear();
+  }, [selectedAcademicYearId]);
+
 
   useEffect(() => {
     if (user?.role !== 'professeur' || !user?.id || !activeAcademicYearDetails) {
@@ -481,8 +510,13 @@ export function Dashboard() {
   }, [selectedClassId, professorInscriptions, professorEmploiDuTemps, loadingProfessorData, fr]);
 
   useEffect(() => {
-    if (user?.role !== 'professeur' || !user?.id || !activeAcademicYearDetails || allTrimesters.length === 0) {
-      setProfessorStudentTrackingData([]);
+ if (user?.role !== 'professeur' || !user?.id || !activeAcademicYearDetails) {
+      setLoadingTrackingData(false);
+            setProfessorStudentTrackingData([]);
+      return;
+    }
+        if (allTrimesters.length === 0) {
+      setLoadingTrackingData(true); // Waiting for trimesters to load
       return;
     }
 
@@ -610,32 +644,28 @@ export function Dashboard() {
                 if (evalType === termEvalTypes.composition) compositionNote = note.note;
               });
 
-              let subjectAverage: number | null = null;
-              if (devoir1Note !== null && devoir2Note !== null && compositionNote !== null) {
-                const avgDevoirs = (devoir1Note + devoir2Note) / 2;
-                const currentTrimestreNumero = parseInt(trimester.nom.replace('Trimestre ', ''));
+              const devoirs = [devoir1Note, devoir2Note].filter(n => n !== null) as number[];
+              const avgDevoirs = devoirs.length > 0 ? devoirs.reduce((a, b) => a + b, 0) / devoirs.length : null;
+              const currentTrimestreNumero = parseInt(trimester.nom.replace('Trimestre ', ''));
 
-                if (currentTrimestreNumero === 1) {
-                  subjectAverage = (avgDevoirs * 3 + compositionNote) / 4;
-                } else if (currentTrimestreNumero === 2) {
-                  let somme = 0;
-                  let poids = 0;
-                  if (devoir1Note !== null && devoir2Note !== null) {
-                    const avgDevoirs = (devoir1Note + devoir2Note) / 2;
-                    somme += avgDevoirs * 3;
-                    poids += 3;
-                  }
+              let somme = 0;
+              let poids = 0;
+
+              if (currentTrimestreNumero === 1) {
+                  if (avgDevoirs !== null) { somme += avgDevoirs * 3; poids += 3; }
+                  if (compositionNote !== null) { somme += compositionNote; poids += 1; }
+              } else if (currentTrimestreNumero === 2) {
+                  if (avgDevoirs !== null) { somme += avgDevoirs * 3; poids += 3; }
                   if (compositionNote !== null) { somme += compositionNote * 2; poids += 2; }
                   if (compoT1Note !== null) { somme += compoT1Note; poids += 1; }
-                  subjectAverage = poids > 0 ? somme / poids : null;
-
-                } else if (currentTrimestreNumero === 3) {
-                  if (compoT1Note !== null && compoT2Note !== null) {
-                    subjectAverage = (avgDevoirs * 3 + compositionNote + compoT1Note + compoT2Note) / 6;
-                  }
-                }
+              } else if (currentTrimestreNumero === 3) {
+                  if (avgDevoirs !== null) { somme += avgDevoirs * 3; poids += 3; }
+                  if (compositionNote !== null) { somme += compositionNote * 3; poids += 3; }
+                  if (compoT1Note !== null) { somme += compoT1Note; poids += 1; }
+                  if (compoT2Note !== null) { somme += compoT2Note * 2; poids += 2; }
               }
 
+              const subjectAverage = poids > 0 ? somme / poids : null;
               if (subjectAverage !== null) {
                 generalAveragesData[trimester.nom].totalWeightedScore += subjectAverage * matiereCoefficient;
                 generalAveragesData[trimester.nom].totalCoefficient += matiereCoefficient;
@@ -910,36 +940,20 @@ export function Dashboard() {
       case 'admin':
         return (
           <>
-            <div className="flex flex-col sm:flex-row sm:items-end gap-4 mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-end gap-4 mb-6 w-full md:w-1/2">
               <div className="flex flex-col flex-1 min-w-[180px]">
                 <label className="text-sm font-medium mb-1 text-gray-700">{ t.common.schoolYear}</label>
-                <Select value={activeAcademicYearDetails?.libelle || ''} disabled>
+                <Select value={selectedAcademicYearId} onValueChange={setSelectedAcademicYearId}>
                   <SelectTrigger className="w-full">
                     <div className="flex items-center gap-2">
                       <CalendarIcon className="h-4 w-4" />
-                      <SelectValue placeholder={ t.common.schoolYear} />
+                      <SelectValue placeholder={t.common.selectAYear} />
                     </div>
                   </SelectTrigger>
                   <SelectContent>
-                    {activeAcademicYearDetails && (
-                      <SelectItem value={activeAcademicYearDetails.libelle}>
-                        {activeAcademicYearDetails.libelle}
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col flex-1 min-w-[180px]">
-                <label className="text-sm font-medium mb-1 text-gray-700">{t.common.class}</label>
-                <Select value={selectedAdminClassId} onValueChange={setSelectedAdminClassId}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={t.common.allClasses} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t.common.allClasses}</SelectItem>
-                    {allAdminClasses.map(cls => (
-                      <SelectItem key={cls.id} value={cls.id.toString()}>
-                        {cls.nom}
+                    {allAcademicYears.map(year => (
+                      <SelectItem key={year.id} value={String(year.id)}>
+                        {year.libelle}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -959,7 +973,7 @@ export function Dashboard() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
                   {adminStats.map((stat) => {
                     const Icon = stat.icon;
                     return (
@@ -981,6 +995,25 @@ export function Dashboard() {
                     );
                   })}
                 </div>
+                <div className="grid grid-cols-1 gap-6">
+                  <Card className="dark:bg-gray-800">
+                    <CardHeader>
+                      <CardTitle className="dark:text-white">{t.statistics.charts.studentDistribution}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="h-80">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={studentDistributionByLevelData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis allowDecimals={false} />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="élèves" fill="#3b82f6" name={t.common.students} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </div>
               </>
             )}
           </>
@@ -992,19 +1025,19 @@ export function Dashboard() {
             <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <h2 className="text-xl font-semibold">{t.dashboard.professor.overview}</h2>
               <div className="flex gap-4">
-                <Select value={activeAcademicYearDetails?.libelle || ''} disabled>
+                <Select value={selectedAcademicYearId} onValueChange={setSelectedAcademicYearId}>
                   <SelectTrigger className="w-[180px]">
                     <div className="flex items-center gap-2">
                       <CalendarIcon className="h-4 w-4" />
-                      <SelectValue placeholder={t.common.schoolYear} />
+                      <SelectValue placeholder={t.common.selectAYear} />
                     </div>
                   </SelectTrigger>
                   <SelectContent>
-                    {activeAcademicYearDetails && (
-                      <SelectItem value={activeAcademicYearDetails.libelle}>
-                        {activeAcademicYearDetails.libelle}
+                    {allAcademicYears.map(year => (
+                      <SelectItem key={year.id} value={String(year.id)}>
+                        {year.libelle}
                       </SelectItem>
-                    )}
+                    ))}
                   </SelectContent>
                 </Select>
                 <Select value={selectedClassId} onValueChange={setSelectedClassId}>

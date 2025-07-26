@@ -1,24 +1,28 @@
 import {
   Injectable,
   NotFoundException,
+  BadRequestException,
+  ForbiddenException,
   Scope,
   Inject,
+  Logger,
   UnauthorizedException,
-  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, FindOptionsWhere } from 'typeorm';
 import { Inscription } from './inscription.entity';
 import { CreateInscriptionDto } from './dto/create-inscription.dto';
-import { User } from '../users/user.entity';
+import { User, UserRole } from '../users/user.entity';
 import { Classe } from '../classe/classe.entity';
 import { anneescolaire } from '../annee-academique/annee-academique.entity';
-import { UserRole } from '../users/user.entity';
+import { UtilisateurBloc } from '../users/utilisateur-bloc.entity';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
-import { UtilisateurBloc } from '../users/utilisateur-bloc.entity';
+
+@Injectable()
 @Injectable({ scope: Scope.REQUEST })
 export class InscriptionService {
+  private readonly logger = new Logger(InscriptionService.name);
   constructor(
     @InjectRepository(Inscription)
     private readonly inscriptionRepository: Repository<Inscription>,
@@ -34,47 +38,70 @@ export class InscriptionService {
 
     @InjectRepository(UtilisateurBloc)
     private readonly utilisateurBlocRepository: Repository<UtilisateurBloc>,
-
     @Inject(REQUEST) private readonly request: Request,
   ) {}
 
   private getBlocId(): number | null {
     const user = this.request.user as any;
-    if (!user || !user.blocId) {
-      // Pour les rôles comme superadmin ou parent qui n'ont pas de blocId,
-      // on retourne null au lieu de lancer une erreur.
-      return null;
+
+    if (user && user.blocId) {
+      return user.blocId;
     }
-    return user.blocId;
+
+    const queryBlocId = this.request.query.blocId;
+    if (queryBlocId && !isNaN(parseInt(queryBlocId as string, 10))) {
+      return parseInt(queryBlocId as string, 10);
+    }
+
+    this.logger.warn(`[getBlocId] Aucun blocId trouvé pour l'utilisateur ${user?.email}.`);
+    return null;
+  }
+
+  private async verifyParentAccess(eleveId: number): Promise<void> {
+    const user = this.request.user as any;
+    if (user.role !== 'parent') {
+      return;
+    }
+
+    const parentId = user.id;
+    const student = await this.userRepository.findOne({
+      where: { id: eleveId },
+    });
+
+    if (!student || student.parentId !== parentId) {
+      throw new ForbiddenException("Accès non autorisé aux données de cet élève.");
+    }
   }
 
   async create(data: CreateInscriptionDto): Promise<Inscription> {
     const utilisateur = await this.userRepository.findOne({ where: { id: data.utilisateur_id } });
     if (!utilisateur) throw new NotFoundException('Utilisateur non trouvé');
 
-    const classe = await this.classeRepository.findOne({ where: { id: data.classe_id } });
-    if (!classe) throw new NotFoundException('Classe non trouvée');
+    const adminBlocId = this.getBlocId();
+    if (adminBlocId === null) {
+      throw new UnauthorizedException("Action non autorisée en dehors du contexte d'un bloc.");
+    }
+
+    // Vérification de sécurité : la classe doit appartenir au bloc de l'admin
+    const classe = await this.classeRepository.findOne({ where: { id: data.classe_id, blocId: adminBlocId } });
+    if (!classe) {
+      throw new ForbiddenException(`La classe avec l'ID ${data.classe_id} n'existe pas dans votre établissement.`);
+    }
 
     const annee_scolaire = await this.anneeScolaireRepository.findOne({ where: { id: data.annee_scolaire_id } });
     if (!annee_scolaire) throw new NotFoundException('Année scolaire non trouvée');
-
-    if (!classe.blocId) {
-      throw new ConflictException(
-        `La classe '${classe.nom}' n'est associée à aucun bloc. Inscription impossible.`,
-      );
-    }
 
     const inscription = this.inscriptionRepository.create({
       utilisateurId: utilisateur.id,
       classeId: classe.id,
       anneeScolaireId: annee_scolaire.id,
       actif: data.actif ?? true,
-      blocId: classe.blocId, // Assigner automatiquement le bloc de la classe
+      blocId: classe.blocId,
     });
 
     const savedInscription = await this.inscriptionRepository.save(inscription);
 
-    // **NOUVELLE LOGIQUE : Donner à l'utilisateur l'accès au bloc**
+    // Donner à l'utilisateur l'accès au bloc de la classe
     const existingAccess = await this.utilisateurBlocRepository.findOne({
       where: {
         utilisateur: { id: utilisateur.id },
@@ -89,54 +116,46 @@ export class InscriptionService {
       });
       await this.utilisateurBlocRepository.save(newAccess);
     }
-    // **FIN DE LA NOUVELLE LOGIQUE**
 
-    // Re-fetch avec les relations pour retourner l'objet complet
     return this.findOne(savedInscription.id);
   }
 
-  async findAll(filters?: { utilisateurId?: number; classeId?: number; anneeScolaireId?: number }): Promise<Inscription[]> {
+  async findAll(
+    filters?: { utilisateurId?: number; classeId?: number; anneeScolaireId?: number },
+  ): Promise<Inscription[]> {
     const blocId = this.getBlocId();
-    if (blocId === null) {
-      return []; // Retourne une liste vide si aucun bloc n'est sélectionné
+    if (!blocId) {
+      this.logger.warn("[findAll] Aucun blocId fourni, retour d'une liste vide.");
+      return [];
     }
-    const queryBuilder = this.inscriptionRepository
+
+    if (filters?.utilisateurId) {
+      await this.verifyParentAccess(filters.utilisateurId);
+    }
+
+    const where: FindOptionsWhere<Inscription> = { actif: true, blocId };
+
+    if (filters?.utilisateurId) where.utilisateurId = filters.utilisateurId;
+    if (filters?.classeId) where.classeId = filters.classeId;
+    if (filters?.anneeScolaireId) where.anneeScolaireId = filters.anneeScolaireId;
+
+    return this.inscriptionRepository
       .createQueryBuilder('inscription')
       .leftJoinAndSelect("inscription.utilisateur", "utilisateur")
       .leftJoinAndSelect("inscription.classe", "classe")
       .leftJoinAndSelect("inscription.annee_scolaire", "annee_scolaire")
-      .where('inscription.actif = :actif', { actif: 1 })
-      .andWhere('inscription.blocId = :blocId', { blocId }); // FILTRE PAR BLOC
-
-
-    if (filters?.utilisateurId) {
-       // Filtre directement sur la colonne utilisateurId de l'entité Inscription
-      queryBuilder.andWhere("inscription.utilisateurId = :utilisateurId", { utilisateurId: filters.utilisateurId });
-    } else {
-      // Si aucun utilisateurId spécifique n'est fourni, filtre par rôle sur l'entité User jointe
-      queryBuilder.andWhere("utilisateur.role = :role", { role: UserRole.ETUDIANT });
-    }
-
-    if (filters?.classeId) {
-     // Filtre directement sur la colonne classeId de l'entité Inscription
-      queryBuilder.andWhere("inscription.classeId = :classeId", { classeId: filters.classeId });
-    }
-    if (filters?.anneeScolaireId) {
-     // Filtre directement sur la colonne anneeScolaireId de l'entité Inscription
-      queryBuilder.andWhere("inscription.anneeScolaireId = :anneeScolaireId", { anneeScolaireId: filters.anneeScolaireId });
-    }
-
-        return queryBuilder.getMany();
-
+      .where(where)
+      .getMany();
   }
 
   async update(id: number, updateDto: Partial<CreateInscriptionDto>): Promise<Inscription> {
     const blocId = this.getBlocId();
     if (blocId === null) {
-      throw new NotFoundException(`Inscription avec l'ID ${id} introuvable car aucun bloc n'est sélectionné.`);
+      throw new UnauthorizedException("Action non autorisée en dehors du contexte d'un bloc.");
     }
+
     const inscription = await this.inscriptionRepository.findOne({
-      where: { id, blocId }, // Vérifie que l'inscription est dans le bon bloc
+      where: { id, blocId },
       relations: ['utilisateur', 'classe', 'annee_scolaire'],
     });
 
@@ -155,16 +174,11 @@ export class InscriptionService {
     }
 
     if (updateDto.classe_id) {
-      const classe = await this.classeRepository.findOne({ where: { id: updateDto.classe_id } });
+      const classe = await this.classeRepository.findOne({ where: { id: updateDto.classe_id, blocId: blocId } });
       if (!classe) throw new NotFoundException('Classe non trouvée');
-      if (classe.blocId !== blocId) {
-        throw new ConflictException(
-          "Impossible de déplacer une inscription vers une classe d'un autre bloc.",
-        );
-      }
       inscription.classe = classe;
       inscription.classeId = classe.id;
-      inscription.blocId = classe.blocId; // Mettre à jour le blocId si la classe change
+      inscription.blocId = classe.blocId;
     }
 
     if (updateDto.annee_scolaire_id) {
@@ -176,7 +190,6 @@ export class InscriptionService {
       inscription.anneeScolaireId = annee_scolaire.id;
     }
 
-    // Mettre à jour le statut actif si fourni
     if (updateDto.actif !== undefined) {
       inscription.actif = updateDto.actif;
     }
@@ -187,10 +200,10 @@ export class InscriptionService {
   async findOne(id: number): Promise<Inscription> {
     const blocId = this.getBlocId();
     if (blocId === null) {
-      throw new NotFoundException(`Inscription avec l'ID ${id} introuvable car aucun bloc n'est sélectionné.`);
+      throw new NotFoundException(`Inscription avec l'ID ${id} non trouvée car aucun bloc n'est sélectionné.`);
     }
     const inscription = await this.inscriptionRepository.findOne({
-      where: { id, blocId }, // Vérifie que l'inscription est dans le bon bloc
+      where: { id, blocId },
       relations: ['utilisateur', 'classe', 'annee_scolaire'],
     });
 
@@ -200,12 +213,22 @@ export class InscriptionService {
       );
     }
 
+    if (inscription.utilisateurId) {
+      await this.verifyParentAccess(inscription.utilisateurId);
+    }
+
     return inscription;
   }
 
   async remove(id: number): Promise<void> {
-    // findOne vérifie déjà que l'inscription appartient au bloc de l'utilisateur
-    await this.findOne(id);
-    await this.inscriptionRepository.delete(id);
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      throw new UnauthorizedException("Action non autorisée en dehors du contexte d'un bloc.");
+    }
+    await this.findOne(id); // This performs the security check and ensures the inscription exists in the bloc.
+    const result = await this.inscriptionRepository.delete({ id, blocId });
+    if (result.affected === 0) {
+      throw new NotFoundException(`Inscription avec l'ID ${id} non trouvée dans ce bloc.`);
+    }
   }
 }

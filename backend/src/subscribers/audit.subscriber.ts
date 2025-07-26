@@ -45,7 +45,7 @@ export class AuditSubscriber implements EntitySubscriberInterface {
   private getUserId(): number | null {
     const namespace = getNamespace('request');
     if (namespace && namespace.get('user')) {
-      return namespace.get('user').id;
+      return namespace.get('user').userId;
     }
     return null;
   }
@@ -58,6 +58,15 @@ export class AuditSubscriber implements EntitySubscriberInterface {
       return `${user.prenom} ${user.nom}`;
     }
     return 'Système';
+  }
+
+  // Récupérer l'ID du bloc depuis le contexte CLS
+  private getBlocId(): number | null {
+    const namespace = getNamespace('request');
+    if (namespace && namespace.get('user')) {
+      return namespace.get('user').blocId;
+    }
+    return null;
   }
 
   // Générer une description lisible de l'entité (nom, titre, libelle, etc.)
@@ -78,7 +87,8 @@ export class AuditSubscriber implements EntitySubscriberInterface {
     if (!this.isEntityAudited(event.metadata.target)) return;
 
     const userId = this.getUserId();
-    if (!userId) return;
+    const blocId = this.getBlocId();
+    if (!userId || !blocId) return;
 
     if (!event.entity) return;
 
@@ -88,6 +98,7 @@ export class AuditSubscriber implements EntitySubscriberInterface {
 
     await this.auditLogService.logAction({
       userId,
+      blocId,
       action: 'CREATE',
       entite: entityName,
       entiteId: event.entity.id,
@@ -100,7 +111,8 @@ export class AuditSubscriber implements EntitySubscriberInterface {
     if (!this.isEntityAudited(event.metadata.target)) return;
 
     const userId = this.getUserId();
-    if (!userId) return;
+    const blocId = this.getBlocId();
+    if (!userId || !blocId) return;
 
     if (!event.entity || !event.databaseEntity) return;
 
@@ -110,6 +122,7 @@ export class AuditSubscriber implements EntitySubscriberInterface {
 
     await this.auditLogService.logAction({
       userId,
+      blocId,
       action: 'UPDATE',
       entite: entityName,
       entiteId: event.databaseEntity.id,
@@ -122,7 +135,8 @@ export class AuditSubscriber implements EntitySubscriberInterface {
     if (!this.isEntityAudited(event.metadata.target)) return;
 
     const userId = this.getUserId();
-    if (!userId) return;
+    const blocId = this.getBlocId();
+    if (!userId || !blocId) return;
 
     if (!event.entity) return;
 
@@ -132,6 +146,7 @@ export class AuditSubscriber implements EntitySubscriberInterface {
 
     await this.auditLogService.logAction({
       userId,
+      blocId,
       action: 'DELETE',
       entite: entityName,
       entiteId: event.entity.id,

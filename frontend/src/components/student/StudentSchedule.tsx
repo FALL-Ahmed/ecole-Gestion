@@ -40,6 +40,7 @@ import {
   startOfDay,
   endOfDay,
   isWithinInterval,
+  getDay,
 } from 'date-fns';
 import { fr, ar } from 'date-fns/locale';
 import { useAuth } from '@/contexts/AuthContext';
@@ -128,6 +129,7 @@ type DisplayCourse = {
 
 interface StudentScheduleProps {
   userId?: number;
+  blocId?: number;
 }
 
 type WeeklySchedule = {
@@ -248,7 +250,7 @@ const EmptySlot: React.FC = () => {
   );
 };
 
-export function StudentSchedule({ userId }: StudentScheduleProps) {
+export function StudentSchedule({ userId, blocId }: StudentScheduleProps) {
   const { t, language } = useLanguage();
   const currentLocale = language === 'ar' ? ar : fr;
   const isRTL = language === 'ar';
@@ -369,20 +371,28 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
       start: currentWeekStart,
       end: endOfWeek(currentWeekStart, { weekStartsOn: 1 }),
     }).map(date => {
-      const dayKey = format(date, 'EEEE').toLowerCase() as 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday';
+      // Utiliser getDay() pour un index indépendant de la locale (0=Dim, 1=Lun, ...)
+      const dayIndex = getDay(date);
+      const englishDayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const dayNameCapitalized = englishDayNames[dayIndex]; // C'est maintenant toujours le nom anglais, ex: "Monday"
+      
+      // Utiliser format() avec la locale actuelle pour l'affichage uniquement
+      const dayNameDisplay = format(date, 'EEEE', { locale: currentLocale });
+      const dayKey = dayNameCapitalized.toLowerCase() as 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday';
+
       const dayOrderMap: { [key: string]: number } = {
         'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3, 'friday': 4, 'saturday': 5,
       };
       return {
         date,
-        dayNameCapitalized: dayKey.charAt(0).toUpperCase() + dayKey.slice(1),
-        dayNameDisplay: t.schedule.days[dayKey] || dayKey,
+        dayNameCapitalized: dayNameCapitalized,
+        dayNameDisplay: t.schedule.days[dayKey] || dayNameDisplay,
         dayOrder: dayOrderMap[dayKey],
         isToday: isSameDay(date, new Date()),
       };
     }).filter(dayInfo => dayInfo.dayOrder !== undefined)
       .sort((a, b) => (isRTL ? b.dayOrder - a.dayOrder : a.dayOrder - b.dayOrder));
-  }, [currentWeekStart, t, isRTL]);
+  }, [currentWeekStart, t, isRTL, currentLocale]);
 
   const displayedWeekStart = useMemo(() => {
     const originalStart = currentWeekStart;
@@ -423,7 +433,9 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
       setLoading(true);
       setError(null);
       try {
-        const configRes = await apiClient.get('/configuration');
+        const apiParams = blocId ? { params: { blocId } } : {};
+
+        const configRes = await apiClient.get('/configuration', apiParams);
         const configData: any | any[] = configRes.data;
         let activeAnneeId: number | undefined;
 
@@ -436,7 +448,7 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
         let anneePourRequete: AnneeAcademique | null = null;
 
         if (activeAnneeId) {
-          const anneeDetailsRes = await apiClient.get(`/annees-academiques/${activeAnneeId}`);
+          const anneeDetailsRes = await apiClient.get(`/annees-academiques/${activeAnneeId}`, apiParams);
           anneePourRequete = anneeDetailsRes.data;
         } else {
           toast({
@@ -444,7 +456,7 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
             description: t.common.missingConfig,
             variant: "default",
           });
-          const anneesRes = await apiClient.get('/annees-academiques');
+          const anneesRes = await apiClient.get('/annees-academiques', apiParams);
           const allAnnees: AnneeAcademique[] = anneesRes.data;
           anneePourRequete = allAnnees.find((an: AnneeAcademique) =>
             new Date() >= parseISO(an.date_debut) && new Date() <= parseISO(an.date_fin)
@@ -462,7 +474,7 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
         
         setCurrentAnneeAcademique(anneePourRequete);
 
-        const inscriptionsRes = await apiClient.get(`/inscriptions?utilisateurId=${studentId}&anneeScolaireId=${anneePourRequete.id}`);
+        const inscriptionsRes = await apiClient.get(`/inscriptions?utilisateurId=${studentId}&annee_scolaire_id=${anneePourRequete.id}`, apiParams);
         const studentInscriptions: Inscription[] = inscriptionsRes.data;
         
         const studentInscription = studentInscriptions.find(inscription => inscription.actif === true);
@@ -477,7 +489,7 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
         const anneeScolaireId = anneePourRequete.id;
 
         // Fetch affectations to get taught subjects
-        const affectationsRes = await apiClient.get(`/affectations?classe_id=${studentClassId}&annee_scolaire_id=${anneeScolaireId}`);
+        const affectationsRes = await apiClient.get(`/affectations?classe_id=${studentClassId}&annee_scolaire_id=${anneeScolaireId}`, apiParams);
         const affectations = affectationsRes.data;
         
         const taughtMatieresMap = new Map<number, Matiere>();
@@ -489,8 +501,8 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
         const taughtMatieres = Array.from(taughtMatieresMap.values());
 
         const [classesRes, usersRes] = await Promise.all([
-          apiClient.get('/classes'),
-          apiClient.get('/users'),
+          apiClient.get('/classes', apiParams),
+          apiClient.get('/users', apiParams),
         ]);
 
         setAllMatieres(taughtMatieres);
@@ -520,10 +532,12 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
     const weekStartDate = format(currentWeekStart, 'yyyy-MM-dd');
     const weekEndDate = format(currentWeekEnd, 'yyyy-MM-dd');
 
+    const apiParams = blocId ? { params: { blocId } } : {};
+
     try {
       const [scheduleRes, exceptionsRes] = await Promise.all([
-        apiClient.get(`/emploi-du-temps?classe_id=${studentClassId}&annee_academique_id=${currentAnneeAcademique.id}`),
-        apiClient.get(`/exception-emploi-du-temps?classe_id=${studentClassId}&start_date=${weekStartDate}&end_date=${weekEndDate}`),
+        apiClient.get(`/emploi-du-temps?classe_id=${studentClassId}&annee_academique_id=${currentAnneeAcademique.id}`, apiParams),
+        apiClient.get(`/exception-emploi-du-temps?classe_id=${studentClassId}&start_date=${weekStartDate}&end_date=${weekEndDate}`, apiParams),
       ]);
 
       setBaseScheduleEntries(scheduleRes.data);
@@ -541,7 +555,7 @@ export function StudentSchedule({ userId }: StudentScheduleProps) {
     } finally {
       setLoading(false);
     }
-  }, [studentClassId, currentAnneeAcademique, currentWeekStart, t]);
+  }, [studentClassId, currentAnneeAcademique, currentWeekStart, t, blocId]);
 
   useEffect(() => {
     fetchWeeklySchedule();

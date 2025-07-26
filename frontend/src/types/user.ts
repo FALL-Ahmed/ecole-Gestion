@@ -15,6 +15,8 @@ export interface User {
   actif: boolean;
   inscriptions?: Inscription[];
   parentEmail?: string;
+  accesBlocs?: AccesBloc[];
+
 }
 
 export interface Classe {
@@ -37,5 +39,11 @@ export interface Inscription {
   annee_scolaire: AnneeScolaire;
   date_inscription: string;
   actif: boolean;
+}
+
+export interface AccesBloc {
+  id: number;
+  blocId: number;
+  utilisateurId: number;
 }
 

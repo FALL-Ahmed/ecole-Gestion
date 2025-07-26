@@ -77,9 +77,10 @@ const initialAttendanceStats: AttendanceStats = {
 
 interface StudentAttendanceProps {
   userId?: number;
+  blocId?: number;
 }
 
-export function StudentAttendance({ userId }: StudentAttendanceProps) {
+export function StudentAttendance({ userId, blocId }: StudentAttendanceProps) {
   const { user } = useAuth();
   const { t, language } = useLanguage();
 
@@ -225,6 +226,10 @@ export function StudentAttendance({ userId }: StudentAttendanceProps) {
           date_fin: format(endDate, 'yyyy-MM-dd'),
         });
 
+        if (blocId) {
+          params.append('blocId', blocId.toString());
+        }
+
         const response = await apiClient.get(`/absences?${params.toString()}`);
         const data: AbsenceAPI[] = response.data || [];
 
@@ -288,7 +293,7 @@ export function StudentAttendance({ userId }: StudentAttendanceProps) {
     };
 
     fetchAbsences();
-  }, [studentId, activeSchoolYear, startDate, endDate, t, dateLocale, translateSubject]);
+  }, [studentId, blocId, activeSchoolYear, startDate, endDate, t, dateLocale, translateSubject]);
 
   const currentYearName = activeSchoolYear?.libelle || t.common.loading;
   const currentTermName = trimestres.find(t => t.id.toString() === selectedTermId)?.nom || t.studentAttendance.fullYear;

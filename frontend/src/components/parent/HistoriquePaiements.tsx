@@ -45,9 +45,14 @@ const HistoriquePaiements: React.FC = () => {
     const fetchHistorique = async () => {
       setIsLoading(true);
       setError(null);
+      const selectedChildDetails = children.find(c => c.id === selectedChild);
+      if (!selectedChildDetails) {
+        setIsLoading(false);
+        return;
+      }
       try {
         const response = await api.get(`/paiements/historique/eleve/${selectedChild}`, {
-          params: { anneeScolaireId: anneeScolaire.id },
+          params: { anneeScolaireId: anneeScolaire.id, blocId: selectedChildDetails.blocId },
         });
         setPaiements(response.data);
       } catch (err) {
@@ -59,7 +64,7 @@ const HistoriquePaiements: React.FC = () => {
     };
 
     fetchHistorique();
-  }, [selectedChild, anneeScolaire, t]);
+  }, [selectedChild, anneeScolaire, t, children]);
 
   const filteredPaiements = useMemo(() => {
     if (statusFilter === 'all') {

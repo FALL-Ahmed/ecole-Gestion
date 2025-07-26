@@ -1,28 +1,73 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Scope, Inject, UnauthorizedException, Logger, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Paiement, StatutPaiement } from './paiements.entity';
 import { Inscription } from '../inscription/inscription.entity';
 import { FindPaiementsQueryDto } from './dto/find-paiements-query.dto';
 import { EnregistrerPaiementDto } from './dto/enregistrer-paiement.dto';
-import { UserRole } from '../users/user.entity';
-@Injectable()
+import { User, UserRole } from '../users/user.entity';
+import { REQUEST } from '@nestjs/core';
+import { Request } from 'express';
+
+@Injectable({ scope: Scope.REQUEST })
 export class PaiementService {
+  private readonly logger = new Logger(PaiementService.name);
+
   constructor(
     @InjectRepository(Paiement)
     private readonly paiementRepository: Repository<Paiement>,
     @InjectRepository(Inscription)
     private readonly inscriptionRepository: Repository<Inscription>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    @Inject(REQUEST) private readonly request: Request,
   ) {}
+
+  private getBlocId(): number | null {
+    const user = this.request.user as any;
+
+    if (user && user.blocId) {
+      return user.blocId;
+    }
+
+    const queryBlocId = this.request.query.blocId;
+    if (queryBlocId && !isNaN(parseInt(queryBlocId as string, 10))) {
+      return parseInt(queryBlocId as string, 10);
+    }
+
+    this.logger.warn(`[getBlocId] Aucun blocId trouvé pour l'utilisateur ${user?.email}.`);
+    return null;
+  }
+
+  private async verifyParentAccess(eleveId: number): Promise<void> {
+    const user = this.request.user as any;
+
+    // This check is only relevant for parents. Admins/profs are scoped by blocId.
+    if (user.role !== 'parent') {
+      return;
+    }
+
+    const parentId = user.id;
+    const student = await this.userRepository.findOne({
+      where: { id: eleveId },
+    });
+
+    if (!student || student.parentId !== parentId) {
+      throw new ForbiddenException("Accès non autorisé aux données de cet élève.");
+    }
+  }
 
   async findAllByClasse(query: FindPaiementsQueryDto): Promise<any[]> {
     const { classeId, anneeScolaireId } = query;
+    const blocId = this.getBlocId();
+    if (blocId === null) return [];
 
     const inscriptions = await this.inscriptionRepository.find({
       where: {
         classe: { id: +classeId },
         annee_scolaire: { id: +anneeScolaireId },
         utilisateur: { role: UserRole.ETUDIANT },
+        blocId: blocId, // Security check
       },
       select: ['utilisateurId'],
     });
@@ -37,6 +82,7 @@ export class PaiementService {
       where: {
         eleveId: In(eleveIds),
         anneeScolaireId: +anneeScolaireId,
+        blocId: blocId, // Security check
       },
     });
 
@@ -52,9 +98,13 @@ async getPaymentStatus(eleveId: number, mois: string): Promise<{
   paiement?: Paiement;
   montantRestant?: number;
 }> {
+  const blocId = this.getBlocId();
+  if (blocId === null) {
+    throw new UnauthorizedException("Action non autorisée en dehors du contexte d'un bloc.");
+  }
   // Cherche un paiement existant
   const paiement = await this.paiementRepository.findOne({
-    where: { eleveId, mois },
+    where: { eleveId, mois, blocId },
     relations: ['eleve']
   });
 
@@ -73,9 +123,13 @@ async getPaymentStatus(eleveId: number, mois: string): Promise<{
 }
 async updatePaiement(id: number, dto: EnregistrerPaiementDto): Promise<Paiement> {
   const { eleveId, anneeScolaireId, mois, montantVerse, montantOfficiel } = dto;
+  const blocId = this.getBlocId();
+  if (blocId === null) {
+    throw new UnauthorizedException("Action non autorisée en dehors du contexte d'un bloc.");
+  }
   
   const paiement = await this.paiementRepository.findOne({
-    where: { id }
+    where: { id, blocId } // Security check
   });
 
   if (!paiement) {
@@ -112,8 +166,13 @@ async updatePaiement(id: number, dto: EnregistrerPaiementDto): Promise<Paiement>
 
 // Dans paiements.service.ts
 async getEleveInfo(eleveId: number) {
+  const blocId = this.getBlocId();
+  if (blocId === null) {
+    return null;
+  }
   const inscription = await this.inscriptionRepository.findOne({
-    where: { utilisateurId: eleveId },
+    // Find the active inscription for the student in the current bloc
+    where: { utilisateurId: eleveId, blocId: blocId, actif: true },
     relations: ['utilisateur', 'classe']
   });
 
@@ -131,9 +190,14 @@ async getEleveInfo(eleveId: number) {
 
   async enregistrerPaiement(dto: EnregistrerPaiementDto): Promise<Paiement> {
     const { eleveId, anneeScolaireId, mois, montantVerse, montantOfficiel } = dto;
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      throw new UnauthorizedException("Action non autorisée en dehors du contexte d'un bloc.");
+    }
 
     let paiement = await this.paiementRepository.findOne({
-      where: { eleveId, anneeScolaireId, mois },
+      // Security check
+      where: { eleveId, anneeScolaireId, mois, blocId },
     });
 
     if (!paiement) {
@@ -149,6 +213,7 @@ async getEleveInfo(eleveId: number) {
         montantAttendu: montantOfficiel,
         montantPaye: 0,
         statut: StatutPaiement.NON_PAYE,
+        blocId: blocId, // Enforce blocId
       });
     }
 
@@ -184,10 +249,18 @@ async getEleveInfo(eleveId: number) {
     eleveId: number,
     anneeScolaireId: number,
   ): Promise<Paiement[]> {
+    const blocId = this.getBlocId();
+    if (blocId === null) {
+      return [];
+    }
+
+    await this.verifyParentAccess(eleveId);
+
     return this.paiementRepository.find({
       where: {
         eleveId: eleveId,
         anneeScolaireId: anneeScolaireId,
+        blocId: blocId, // Security check
       },
       order: {
         createdAt: 'ASC',

@@ -667,10 +667,13 @@ const isRTL = language === 'ar';
                       <Calendar
                         mode="single"
                         selected={sanctionDate}
-onSelect={(date) => {
-                          setSanctionDate(date);
-                          setIsDatePickerOpen(false);
-                        }}                        initialFocus
+                        onSelect={(date) => {
+                          if (date) {
+                            setSanctionDate(date);
+                            setIsDatePickerOpen(false);
+                          }
+                        }}
+                        initialFocus
                         locale={dateFnsLocale}
                       />
                     </PopoverContent>

@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
-interface Child {
+export interface Child {
   id: number;
   prenom: string;
   nom: string;
@@ -25,6 +25,7 @@ interface Child {
     id: number;
     nom: string;
   };
+  blocId: number;
   photoUrl?: string; // Champ optionnel pour la photo
 }
 

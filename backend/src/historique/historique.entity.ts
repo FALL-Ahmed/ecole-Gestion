@@ -39,4 +39,7 @@ export class AuditLog {
 
   @Column({ type: 'text' })
   description: string;
+
+  @Column({ nullable: true, comment: "ID du bloc où l'action a eu lieu" })
+  blocId: number;
 }

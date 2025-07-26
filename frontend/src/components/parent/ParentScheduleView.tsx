@@ -63,11 +63,14 @@ export function ParentScheduleView() {
 
       <ChildSelector children={children} selectedChild={selectedChild} onChildChange={setSelectedChild} />
 
-      {selectedChild && (
-        <div className="mt-6">
-          <StudentSchedule key={selectedChild} userId={selectedChild} />
-        </div>
-      )}
+      {selectedChild && (() => {
+        const selectedChildDetails = children.find(c => c.id === selectedChild);
+        return selectedChildDetails ? (
+          <div className="mt-6">
+            <StudentSchedule key={selectedChild} userId={selectedChild} blocId={selectedChildDetails.blocId} />
+          </div>
+        ) : null;
+      })()}
     </div>
   );
 }

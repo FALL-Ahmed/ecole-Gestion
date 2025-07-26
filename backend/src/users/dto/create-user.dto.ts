@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsOptional, IsString, MaxLength, IsBoolean } from 'class-validator';
+import { IsEmail, IsEnum, IsOptional, IsString, MaxLength, IsBoolean, IsArray, IsNumber } from 'class-validator';
 import { UserRole, Genre } from '../user.entity';
 
 export class CreateUserDto {
@@ -46,4 +46,13 @@ export class CreateUserDto {
   @IsOptional()
   @IsBoolean()
   actif?: boolean;
+
+  @IsArray()
+  @IsOptional()
+  @IsNumber({}, { each: true })
+  blocIds?: number[];
+
+  @IsOptional()
+  @IsEmail()
+  parentEmail?: string;
 }
